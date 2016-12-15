@@ -3,7 +3,7 @@ import logging
 
 import os.path
 
-from driftconfig.relib import TableStore
+from driftconfig.relib import TableStore, create_backend
 from driftconfig.backends import FileBackend, S3Backend, RedisBackend
 from driftconfig.config import get_drift_table_store
 
@@ -28,8 +28,8 @@ config_path = os.path.join(os.path.expanduser("~"), '.drift', 'config')
 print "config_path is", config_path
 
 # Set up backends. One on local hard drive, one on S3 and one in Redis
-local_store = FileBackend(config_path)
-s3_store = S3Backend('relib-test', 'drift-config', 'eu-west-1')
+s3_store = S3Backend('relib-test', 'directive-games', 'eu-west-1')
+s3_store = create_backend('s3://relib-test/directive-games')
 redis_store = RedisBackend()
 
 # Create an empty config
@@ -52,6 +52,7 @@ if 0:
 #s3_store.save(ts)
 
 # Chuck in some data
+ts.get_table('domain').add({'domain_name': 'dgnorth', 'display_name': 'Directive Games North', 'config_store': 's3://relib-test/directive-games?region=eu-west-1'})
 ts.get_table('organizations').add({'organization_name': 'directivegames', 'display_name': 'Directive Games', })
 ts.get_table('tiers').add({'tier_name': 'LIVENORTH', 'organization_name': 'directivegames', 'is_live': True})
 ts.get_table('tiers').add({'tier_name': 'DEVNORTH', 'organization_name': 'directivegames', 'is_live': False})
@@ -79,11 +80,24 @@ for tenant_name in [
     ts.get_table('tenants').add({'tier_name': 'DEVNORTH', 'deployable_name': 'drift-base', 'tenant_name': tenant_name,})
 
 # Store locally and cache in Redis
+domain_name = ts.get_table('domain')['domain_name']
+print "DOMAIN NAME IS", domain_name
+local_store = create_backend('file://./~/.drift/config/' + domain_name)
+print "LOCAL STORE BACKEND IS", local_store, local_store.get_url()
+
+
 ts.save_to_backend(local_store)
 
-#ts.save_to_backend(s3_store)
+ts.save_to_backend(s3_store)
 #redis_store.save(ts)
 
 ts = TableStore(local_store)
 print "whee got ts", ts
 
+'''
+TODO: unit test failed testing:
+ - default values were overriding actual input, not vice versa. its fixed though.
+ - remove() function not tested.
+ - backend url functionality not tested.
+ -
+'''

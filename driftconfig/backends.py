@@ -5,21 +5,41 @@ ReLib Backends
 import logging
 import os
 import StringIO
+from urlparse import urlparse
 
-from .relib import Backend, BackendError
+from .relib import Backend, BackendError, register
 
 log = logging.getLogger(__name__)
 
 
+@register
 class S3Backend(Backend):
     """
     S3 backend for TableStore.
     """
+
+    __scheme__ = 's3'
+
     def __init__(self, bucket_name, folder_name, region_name=None):
         import boto3
         self.s3_client = boto3.client('s3', region_name=region_name)
         self.bucket_name = bucket_name
         self.folder_name = folder_name
+        self.region_name = region_name
+
+    @classmethod
+    def create_from_url_parts(cls, parts, query):
+        if 'region' in query:
+            region_name = query['region'][0]
+        else:
+            region_name = None
+        return cls(bucket_name=parts.hostname, folder_name=parts.path, region_name=region_name)
+
+    def get_url(self):
+        url = 's3://{}/{}'.format(self.bucket_name, self.folder_name)
+        if self.region_name:
+            url += '?region=' + self.region_name
+        return url
 
     def __str__(self):
         return "S3Backend's3://{}/{}'".format(self.bucket_name, self.folder_name)
@@ -46,7 +66,10 @@ class S3Backend(Backend):
         return f.getvalue()
 
 
+@register
 class RedisBackend(Backend):
+
+    __scheme__ = 'redis'
 
     def __init__(self, host=None, port=None, db=None, prefix=None, expire_sec=None):
         import redis
@@ -63,6 +86,13 @@ class RedisBackend(Backend):
         )
 
         self.host, self.port, self.db = host, port, db
+
+    @classmethod
+    def create_from_url_parts(cls, parts, query):
+        db = int(parts.path) if parts.path else None
+        prefix = query['prefix'][0] if 'prefix' in query else None
+        expire_sec = query['expire_sec'][0] if 'expire_sec' in query else None
+        return cls(host=parts.hostname, port=parts.port, db=db, prefix=prefix, expire_sec=expire_sec)
 
     def __str__(self):
         return "RedisBackend'{}:{}#{}'".format(self.host, self.port, self.db)
@@ -87,13 +117,31 @@ class RedisBackend(Backend):
         return data
 
 
+@register
 class FileBackend(Backend):
 
+    __scheme__ = 'file'
+
     def __init__(self, folder_name):
-        folder_name = folder_name.replace('~', os.path.expanduser("~"))
+        if '~' in folder_name:
+            # Expand user and trim whatever was in front of the ~ char.
+            folder_name = os.path.expanduser('~') + folder_name.split('~', 1)[1]
+
+        folder_name = folder_name.replace('/', os.sep)  # Adjust to Windows platform mainly
+
         if not os.path.exists(folder_name):
             os.makedirs(folder_name)
         self.folder_name = folder_name
+
+    @classmethod
+    def create_from_url_parts(cls, parts, query):
+        return cls(folder_name=parts.path)
+
+    def get_url(self):
+        path = self.folder_name
+        path = path.replace(os.path.expanduser('~'), '~')
+        path = path.replace('\\', '/')  # De-Windowize, if needed
+        return path
 
     def __str__(self):
         return "FileBackend'{}'".format(self.folder_name)
@@ -121,8 +169,10 @@ class FileBackend(Backend):
             return f.read()
 
 
+@register
 class MemoryBackend(Backend):
 
+    __scheme__ = 'memory'
     archive = {}
 
     def __init__(self, folder_name):
@@ -130,6 +180,13 @@ class MemoryBackend(Backend):
 
     def __del__(self):
         del MemoryBackend.archive[self.folder_name]
+
+    @classmethod
+    def create_from_url_parts(cls, parts, query):
+        return cls(folder_name=parts.path)
+
+    def get_url(self):
+        return 'memory://' + self.folder_name
 
     def __str__(self):
         return "MemoryBackend'{}'".format(self.folder_name)

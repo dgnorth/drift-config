@@ -12,6 +12,7 @@ import json
 import re
 import collections
 import copy
+from urlparse import urlparse, parse_qs
 
 from schemautil import check_schema
 
@@ -86,7 +87,7 @@ class Table(object):
 
         return canonicalized
 
-    def check_row(self, row):
+    def _check_row(self, row):
         # Make sure 'row' contains primary key and unique key fields and does not violate any
         # constraints thereof.
         # For convenience, the function returns the canonicalized primary key for the row.
@@ -154,8 +155,12 @@ class Table(object):
         Primary key fields and unique constraint fields may not be removed or altered
         without compromising relational integrity. Any other modification is fair game though.
         """
-        row.update(copy.deepcopy(self._default_values))
-        row_key = self.check_row(row)
+        # Apply default values
+        target_row = copy.deepcopy(self._default_values)
+        target_row.update(row)
+        row = target_row
+
+        row_key = self._check_row(row)
         self._rows[row_key] = row
         return row
 
@@ -165,6 +170,13 @@ class Table(object):
         'primary_key' is a dict containing all the fields that make up the primary key.
         """
         return self._rows.get(self._canonicalize_key(primary_key))
+
+    def remove(self, primary_key):
+        """
+        Remove row from table identified by 'primary_key'.
+        """
+
+        del self._rows[self._canonicalize_key(primary_key)]
 
     def add_primary_key(self, primary_key_fields):
         """
@@ -295,28 +307,8 @@ class Table(object):
             file_name += '.' + self._canonicalize_key(row, use_group_by=True)
 
         file_name += '.json'
+
         return file_name
-
-
-
-
-
-        if row:
-            unique = '.' + self._canonicalize_key(row, use_group_by=True)
-        else:
-            unique = ''
-
-        if self._subfolder:
-            prefix = self._subfolder + '/'
-        else:
-            prefix = ''
-
-        if is_index_file:
-            table_name = '#.' + self._table_name
-        else:
-            table_name = self._table_name
-
-        return '{}{}{}.json'.format(prefix, table_name, unique)
 
     def get_foreign_row(self, primary_key, table_name, foreign_key_fields=None, _row=None):
         """
@@ -425,6 +417,50 @@ class Table(object):
                         self.add(row)
 
 
+class SingleRowTable(Table):
+    """
+    A "single row" table, or simply a Json document.
+
+    Just like a table but doesn't have the concept of a primary key, and is serialized
+    out with a dict as root object, as opposed to a list, like with the Table object.
+    """
+
+    def __init__(self, table_name, table_store=None):
+        super(SingleRowTable, self).__init__(table_name, table_store)
+        #self.add({})
+        #print "YUES NOW I HAVE STUFF", self._rows
+        #print "becuzse dufalt il velus s", self._default_values
+
+    def _canonicalize_key(self, primary_key, use_group_by=False):
+        return ''
+
+    def get(self):
+        if self._rows:
+            return self._rows.values()[0]
+
+    def __getitem__(self, key):
+        """Convenience operator to access properties of a single row."""
+        return self.get()[key]
+
+    def set_row_as_file(self, use_subfolder=None, subfolder_name=None, group_by=None):
+        raise TableError("Single row table ")
+
+    def save(self, save_data):
+        """
+        Save document.
+        """
+        doc = self.get() or {}
+        save_data(self.get_filename(), json.dumps(doc, indent=4))
+
+    def load(self, fetch_from_storage):
+        """
+        Load document data.
+        """
+        data = fetch_from_storage(self.get_filename())
+        doc = json.loads(data)
+        self.add(doc)
+
+
 class TableStoreEncoder(json.JSONEncoder):
     """
     The TableStore and Table class can be encoded 'verbatim' except that
@@ -440,7 +476,7 @@ class TableStoreEncoder(json.JSONEncoder):
             tmp, obj._rows = obj._rows, {}  # Remove rows temporarily
             tmp2, obj._table_store = obj._table_store, None  # Remove circular depency temporarily
             try:
-                return obj.__dict__.copy()
+                return {'class': obj.__class__.__name__, 'dict': obj.__dict__.copy()}
             finally:
                 obj._rows = tmp
                 obj._table_store = tmp2
@@ -466,8 +502,12 @@ class TableStore(object):
     def __str__(self):
         return 'TableStore(Origin: {}. Tables: {})'.format(self._origin, len(self._tables))
 
-    def add_table(self, table_name):
-        table = Table(table_name, self)
+    def add_table(self, table_name, single_row=False):
+        if single_row:
+            cls = SingleRowTable
+        else:
+            cls = Table
+        table = cls(table_name, self)
         self._tables[table_name] = table
         return table
 
@@ -492,9 +532,15 @@ class TableStore(object):
         """
         data = json.loads(definition)
         self.__dict__.update(data)
-        for table_name, table_dict in self._tables.iteritems():
-            table = Table(table_name, self)
-            table.__dict__.update(table_dict)
+        for table_name, table_data in self._tables.iteritems():
+            if table_data['class'] == 'Table':
+                cls = Table
+            elif table_data['class'] == 'SingleRowTable':
+                cls = SingleRowTable
+            else:
+                raise RuntimeError("Unknown table class '{}'".format(table_data['class']))
+            table = cls(table_name, self)
+            table.__dict__.update(table_data['dict'])
             table._table_store = self
             self._tables[table_name] = table
 
@@ -527,6 +573,9 @@ class Backend(object):
     """
     Backend is used to serialize table definition and data.
     """
+
+    schemes = {}  # Backend registry using url scheme as key.
+
     def start_batch(self):
         pass
 
@@ -541,3 +590,17 @@ class Backend(object):
 
     def on_progress(self, message):
         log.info(message)
+
+
+def create_backend(url):
+    parts = urlparse(url)
+    query = parse_qs(parts.query)
+    if parts.scheme in Backend.schemes:
+        return Backend.schemes[parts.scheme].create_from_url_parts(parts, query)
+    else:
+        raise RuntimeError("No backend class registered to handle '{}'".format(url))
+
+def register(cls):
+    """Decorator to register Backend class for a particular URL scheme."""
+    Backend.schemes[cls.__scheme__] = cls
+    return cls

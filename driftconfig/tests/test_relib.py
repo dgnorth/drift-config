@@ -186,7 +186,7 @@ class TestRelib(unittest.TestCase):
 
         self.assertIn("No foreign key relationship found", str(context.exception))
 
-        # Test combined keys
+        # Test combined keys and single row table.
         table3 = ts.add_table('table3')
         table3.add_primary_key('pk_field1,pk_field2')
         table3.add_unique_constraint('unique_field1,unique_field2')
@@ -211,6 +211,36 @@ class TestRelib(unittest.TestCase):
         # Test foreign key violation.
         with self.assertRaises(ConstraintError) as context:
             row2 = table3.add({
+                'pk_field1': 3, 'pk_field2': 'x',
+                'unique_field1': 'u3', 'unique_field2': 'x',
+                'foreign_field1': 'bork', 'foreign_field2': 'x',
+            })
+
+        self.assertIn("Foreign key record not found", str(context.exception))
+
+
+        # Test all cases with a single row table
+        single = ts.add_table('single', single_row=True)
+        #single.add_primary_key('pk_field1,pk_field2')
+        single.add_unique_constraint('unique_field1,unique_field2')
+
+        # Test foreign key relationship on own table, and with different ordered field names.
+        single.add_foreign_key('foreign_field1,foreign_field2', 'table3', 'unique_field2,unique_field1')
+
+        # Test doc insert and remove
+        doc = single.add({'pk_field1': 1, 'pk_field2': 'x', 'unique_field1': 'u1', 'unique_field2': 'x'})
+        single.remove(doc)
+
+        # Test foreign key. Link to self.
+        doc = single.add({
+            'pk_field1': 1, 'pk_field2': 'x',
+            'unique_field1': 'u2', 'unique_field2': 'x',
+            'foreign_field1': 'u1', 'foreign_field2': 'x',
+        })
+
+        # Test foreign key violation.
+        with self.assertRaises(ConstraintError) as context:
+            doc = single.add({
                 'pk_field1': 3, 'pk_field2': 'x',
                 'unique_field1': 'u3', 'unique_field2': 'x',
                 'foreign_field1': 'bork', 'foreign_field2': 'x',
@@ -250,6 +280,25 @@ class TestRelib(unittest.TestCase):
         # Define a default value for the required property and make sure we pass.
         table.add_default_values({'a_pattern': 'some-value'})
         table.add({'id': 123})
+
+        # Test schema on document
+        single = ts.add_table('single', single_row=True)
+        single.add_schema({
+            'type': 'object',
+            'properties': {
+                'a_string': {'type': 'string'},
+                'a_pattern': {'pattern': r'^([a-z\d-]){1,25}$'},
+            },
+            'required': ['a_pattern'],
+        })
+        doc = single.add({'a_string': 'aaa', 'a_pattern': 'abc'})
+
+        # Check 'pattern' rule.
+        with self.assertRaises(jsonschema.ValidationError) as context:
+            doc = single.add({'a_pattern': 'not conforming'})
+
+        self.assertIn("'not conforming' does not match", str(context.exception))
+
 
     def test_serialization_filenames(self):
         table = Table('test_filename')
@@ -356,6 +405,14 @@ class TestRelib(unittest.TestCase):
         #self.maxDiff = 100000
         #self.assertDictEqual(ts.get_table('continents').__dict__, new_ts.get_table('continents').__dict__)
 
+    def test_single_row_table(self):
+        ts = make_store(populate=True)
+        srt = ts.add_table('doc_test', single_row=True)
+        doc = srt.add({'field1': 'something'})
+        doc['field1']
+
+
+
     def run_backend_test(self, backend, show_progress=False):
 
         def on_progress(msg):
@@ -387,7 +444,7 @@ class TestRelib(unittest.TestCase):
         backend = S3Backend('relib-test', 'first_attempt', 'eu-west-1')
         self.run_backend_test(backend, show_progress=True)
 
-    #@unittest.skip("Redis test is really suited for systems test and not unit test")
+    @unittest.skip("Redis test is really suited for systems test and not unit test")
     def test_redis_backend(self):
         from driftconfig.backends import RedisBackend
         backend = RedisBackend()

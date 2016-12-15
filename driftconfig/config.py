@@ -178,6 +178,17 @@ def get_drift_table_store():
     # RULE: pk='tier_name'='LIVENORTH', role['liveops', 'admin', 'service']
 
     ts = TableStore()
+    domain = ts.add_table('domain', single_row=True)
+    domain.add_schema({
+        'type': 'object',
+        'properties': {
+            'domain_name': {'type': 'string'},
+            'display_name': {'type': 'string'},
+            'config_store': {'type': 'string'},
+        },
+        'required': ['domain_name', 'config_store'],
+    })
+
     organizations = ts.add_table('organizations')
     organizations.add_primary_key('organization_name')
     organizations.add_schema({
@@ -226,9 +237,10 @@ def get_drift_table_store():
         'type': 'object',
         'properties': {
             'description': {'type': 'string'},
-            'state': {'type': {'enum': ['initializing', 'active', 'disabled', 'deleted']}},
+            'state': {'enum': ['initializing', 'active', 'disabled', 'deleted']},
         },
     })
+    tenants.add_default_values({'state': 'initializing'})
 
     products = ts.add_table('products')
     products.add_primary_key('organization_name,product_name')
@@ -297,7 +309,7 @@ class ConfigSession(object):
     def __init__(self):
         self.redis_store = RedisBackend(expire_sec=53)
         self.s3_store = S3Backend('relib-test', 'kaleo-web-1', 'eu-west-1')
-        self.file_store = FileBackend()
+        #self.file_store = FileBackend()
         self.refresh()
 
     def refresh(self):
