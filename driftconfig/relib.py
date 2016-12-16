@@ -427,9 +427,6 @@ class SingleRowTable(Table):
 
     def __init__(self, table_name, table_store=None):
         super(SingleRowTable, self).__init__(table_name, table_store)
-        #self.add({})
-        #print "YUES NOW I HAVE STUFF", self._rows
-        #print "becuzse dufalt il velus s", self._default_values
 
     def _canonicalize_key(self, primary_key, use_group_by=False):
         return ''
@@ -599,6 +596,9 @@ def create_backend(url):
         return Backend.schemes[parts.scheme].create_from_url_parts(parts, query)
     else:
         raise RuntimeError("No backend class registered to handle '{}'".format(url))
+
+def get_store_from_url(url):
+    return TableStore(create_backend(url))
 
 def register(cls):
     """Decorator to register Backend class for a particular URL scheme."""
