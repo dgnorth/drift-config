@@ -136,7 +136,8 @@ class FileBackend(Backend):
     @classmethod
     def create_from_url_parts(cls, parts, query):
         # combine host and path into one
-        return cls(folder_name=parts.hostname + parts.path)
+        hostname = parts.hostname or ''  # Change None to '' if needed.
+        return cls(folder_name=hostname + parts.path)
 
     def get_url(self):
         path = self.folder_name

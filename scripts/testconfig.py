@@ -70,11 +70,18 @@ ts.get_table('deployables').add({'organization_name': 'directivegames', 'deploya
 ts.get_table('deployables').add({'organization_name': 'directivegames', 'deployable_name': 'kaleometrics', 'display_name': 'Kaleo Metrics', })
 
 # Configure LIVENORTH
+from datetime import datetime
 for tenant_name in [
     'superkaiju', 'superkaiju-test', 'loadout', 'loadout-test', 'default-livenorth',
     'themachines', 'themachines-test', 'themacines-test2', 'nonnib-livenorth',
 ]:
-    ts.get_table('tenant_names').add({'tenant_name': tenant_name})
+    ts.get_table('tenant_names').add({
+        'tenant_name': tenant_name,
+        'organization_name': 'directivegames', 'product_name': 'superkaiju',
+        'reserved_at': datetime.utcnow().isoformat(),
+        'reserved_by': 'prezidentbongo',
+
+    })
     ts.get_table('tenants').add({'tier_name': 'LIVENORTH', 'deployable_name': 'drift-base', 'tenant_name': tenant_name,})
     ts.get_table('tenants').add({'tier_name': 'LIVENORTH', 'deployable_name': 'themachines-backend', 'tenant_name': tenant_name,})
     ts.get_table('tenants').add({'tier_name': 'DEVNORTH', 'deployable_name': 'drift-base', 'tenant_name': tenant_name,})

@@ -100,7 +100,7 @@ class Table(object):
                 search_criteria = {k: row[k] for k in c['fields']}
                 found = self.find(search_criteria)
                 if len(found):
-                    raise ConstraintError("Unique constraint violation on {}.".format(search_criteria))
+                    raise ConstraintError("Unique constraint violation on {} because of {}.".format(search_criteria, found))
             elif c['type'] == 'foreign_key':
                 # Verify foreign row reference, if set.
                 if set(c['foreign_key_fields']).issubset(row):
@@ -597,8 +597,10 @@ def create_backend(url):
     else:
         raise RuntimeError("No backend class registered to handle '{}'".format(url))
 
+
 def get_store_from_url(url):
     return TableStore(create_backend(url))
+
 
 def register(cls):
     """Decorator to register Backend class for a particular URL scheme."""

@@ -198,6 +198,22 @@ def get_drift_table_store():
         },
     })
 
+    products = ts.add_table('products')
+    products.add_primary_key('organization_name,product_name')
+    products.add_foreign_key('organization_name', 'organizations')
+
+    tenant_names = ts.add_table('tenant_names')
+    tenant_names.add_primary_key('tenant_name')
+    tenant_names.add_foreign_key('organization_name,product_name', 'products')
+    tenant_names.add_schema({
+        'type': 'object',
+        'properties': {
+            'reserved_at': {'format': 'date-time'},
+            'reserved_by': {'type': 'string'},
+        },
+        'required': ['organization_name', 'product_name'],
+    })
+
     tiers = ts.add_table('tiers')
     tiers.add_primary_key('tier_name')
     tiers.add_foreign_key('organization_name', 'organizations')
@@ -224,9 +240,6 @@ def get_drift_table_store():
     })
     deployables.add_default_values({'is_active': False})
 
-    tenant_names = ts.add_table('tenant_names')
-    tenant_names.add_primary_key('tenant_name')
-
     tenants = ts.add_table('tenants')
     tenants.add_primary_key('tier_name,deployable_name,tenant_name')
     tenants.set_row_as_file(use_subfolder=True, group_by='tier_name,tenant_name')
@@ -241,11 +254,6 @@ def get_drift_table_store():
         },
     })
     tenants.add_default_values({'state': 'initializing'})
-
-    products = ts.add_table('products')
-    products.add_primary_key('organization_name,product_name')
-    products.add_foreign_key('organization_name', 'organizations')
-    products.set_row_as_file(use_subfolder=True, group_by='product_name')
 
     public_keys = ts.add_table('public-keys')
     public_keys.set_row_as_file(use_subfolder=True, subfolder_name='authentication')
