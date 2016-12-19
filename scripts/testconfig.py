@@ -52,7 +52,7 @@ if 0:
 #s3_store.save(ts)
 
 # Chuck in some data
-ts.get_table('domain').add({'domain_name': 'dgnorth', 'display_name': 'Directive Games North', 'config_store': 's3://relib-test/directive-games?region=eu-west-1'})
+ts.get_table('domain').add({'domain_name': 'dgnorth', 'display_name': 'Directive Games North', 'origin': 's3://relib-test/directive-games?region=eu-west-1'})
 ts.get_table('organizations').add({'organization_name': 'directivegames', 'display_name': 'Directive Games', })
 ts.get_table('tiers').add({'tier_name': 'LIVENORTH', 'organization_name': 'directivegames', 'is_live': True})
 ts.get_table('tiers').add({'tier_name': 'DEVNORTH', 'organization_name': 'directivegames', 'is_live': False})

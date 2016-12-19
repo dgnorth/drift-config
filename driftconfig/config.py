@@ -184,9 +184,9 @@ def get_drift_table_store():
         'properties': {
             'domain_name': {'type': 'string'},
             'display_name': {'type': 'string'},
-            'config_store': {'type': 'string'},
+            'origin': {'type': 'string'},
         },
-        'required': ['domain_name', 'config_store'],
+        'required': ['domain_name', 'origin'],
     })
 
     organizations = ts.add_table('organizations')
