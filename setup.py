@@ -18,8 +18,15 @@ setup(
     url='https://github.com/dgnorth/drift-config',
     packages=['driftconfig'],
     description='Drift Configuration Management.',
+    install_requires=[
+        'click>=2.0',
+    ],
     classifiers=[
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python',
     ],
+    entry_points='''
+        [console_scripts]
+        driftconfig=driftconfig.cli:main
+    '''
 )
