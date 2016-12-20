@@ -147,9 +147,10 @@ aws commands extend service/deployable:
 
 '''
 import logging
+import os
+import os.path
 
-
-from driftconfig.relib import TableStore, BackendError
+from driftconfig.relib import TableStore, BackendError, get_store_from_url
 from driftconfig.backends import FileBackend, S3Backend, RedisBackend
 
 log = logging.getLogger(__name__)
@@ -208,6 +209,7 @@ def get_drift_table_store():
     tenant_names.add_schema({
         'type': 'object',
         'properties': {
+            'tenant_name': {'pattern': r'^([a-z-]){3,20}$'},
             'reserved_at': {'format': 'date-time'},
             'reserved_by': {'type': 'string'},
         },
@@ -347,6 +349,23 @@ class ConfigSession(object):
 
     def get_all_tenant_names(self):
         return [t['tenant_name'] for t in self['tenant_names'].find()]
+
+
+def get_domains():
+    """Return all config domains stored on local disk."""
+    config_folder = os.path.join(os.path.expanduser('~'), '.drift', 'config')
+    domains = {}
+    for dir_name in os.listdir(config_folder):
+        path = os.path.join(config_folder, dir_name)
+        if os.path.isdir(path):
+            try:
+                ts = get_store_from_url('file://' + path)
+            except Exception as e:
+                print "Note: '{}' is not a config folder, or is corrupt. ({}).".format(path, e)
+                continue
+            domain = ts.get_table('domain')
+            domains[domain['domain_name']] = {'path': path, 'table_store': ts}
+    return domains
 
 
 CREATEDB = 0

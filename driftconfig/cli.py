@@ -8,7 +8,7 @@ import json
 import getpass
 
 from driftconfig.relib import create_backend, get_store_from_url
-from driftconfig.config import get_drift_table_store
+from driftconfig.config import get_drift_table_store, get_domains
 
 
 def get_options(parser):
@@ -126,22 +126,6 @@ def init_command(args):
     print "Config stored at: ", local_store
 
 
-def _get_domains():
-    """Return all config domains stored on local disk."""
-    config_folder = os.path.join(os.path.expanduser('~'), '.drift', 'config')
-    domains = {}
-    for dir_name in os.listdir(config_folder):
-        path = os.path.join(config_folder, dir_name)
-        if os.path.isdir(path):
-            try:
-                ts = get_store_from_url('file://' + path)
-            except Exception as e:
-                print "Note: '{}' is not a config folder, or is corrupt. ({}).".format(path, e)
-                continue
-            domain = ts.get_table('domain')
-            domains[domain['domain_name']] = {'path': path, 'table_store': ts}
-    return domains
-
 def _format_domain_info(domain_info):
     domain = domain_info['table_store'].get_table('domain')
     return "{}: \"{}\" at '{}'. Origin: '{}'".format(
@@ -150,7 +134,7 @@ def _format_domain_info(domain_info):
 
 def list_command(args):
     # Enumerate subfolders at ~/.drift/config and see what's there
-    for d in _get_domains().values():
+    for d in get_domains().values():
         print _format_domain_info(d)
 
 
@@ -160,8 +144,7 @@ def pull_command(args):
     else:
         _pull_command(args)
 
-def _pull_command(args):
-    for domain_name, domain_info in _get_domains().items():
+    for domain_name, domain_info in get_domains().items():
         if args.domain and args.domain != domain_name:
             continue
         origin = domain_info['table_store'].get_table('domain')['origin']
@@ -194,7 +177,7 @@ def pull_config_loop(args):
 
 
 def push_command(args):
-    domain_info = _get_domains().get(args.domain)
+    domain_info = get_domains().get(args.domain)
     if not domain_info:
         print "Can't push '{}'.".format(args.domain)
         sys.exit(1)
@@ -202,14 +185,14 @@ def push_command(args):
     ts = domain_info['table_store']
     origin = ts.get_table('domain')['origin']
     print "Pushing local config to source", origin
-    source_store = create_backend(origin)
-    ts.save_to_backend(source_store)
+    origin_backend = create_backend(origin)
+    ts.save_to_backend(origin_backend)
     print "Config pushed."
 
 
 def create_command(args):
 
-    domain_info = _get_domains().get(args.domain)
+    domain_info = get_domains().get(args.domain)
     if domain_info:
         print "The domain name specified is taken:"
         print _format_domain_info(domain_info)
@@ -238,7 +221,7 @@ def addtenant_command(args):
     print "  Product:     ", args.product
     print "  Deployables: ", args.deployables
 
-    domain_info = _get_domains().get(args.domain)
+    domain_info = get_domains().get(args.domain)
     if not domain_info:
         print "The domain '{}'' is not found locally. Run 'init' to fetch it.".format(args.domain)
         sys.exit(1)
