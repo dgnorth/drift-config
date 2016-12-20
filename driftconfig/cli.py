@@ -2,7 +2,8 @@
 import os
 import os.path
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
+import time
 import json
 import getpass
 
@@ -40,6 +41,12 @@ def get_options(parser):
         help='Pull config.',
         description="Pull latest configuration from source."
     )
+    p.add_argument(
+        '--loop',
+        action='store_true',
+        help='pull config continuously for 1 minute.'
+    )
+
     p.add_argument(
         'domain',
         action='store', nargs='?',
@@ -148,7 +155,12 @@ def list_command(args):
 
 
 def pull_command(args):
+    if args.loop:
+        pull_config_loop(args)
+    else:
+        _pull_command(args)
 
+def _pull_command(args):
     for domain_name, domain_info in _get_domains().items():
         if args.domain and args.domain != domain_name:
             continue
@@ -158,6 +170,27 @@ def pull_command(args):
         local_store = create_backend('file://' + domain_info['path'])
         ts.save_to_backend(local_store)
         print "Config saved at", domain_info['path']
+
+
+def now():
+    return datetime.utcnow()
+
+sleep_time = 10
+run_time = 50
+
+start_time = now()
+end_time = start_time + timedelta(seconds=run_time)
+
+def pull_config_loop(args):
+    print "Starting the pull config loop"
+    while now() < end_time:
+        st = time.time()
+        _pull_command(args)
+        diff = time.time()-st
+        this_sleep_time = max(sleep_time-diff, 0)
+        print "Waiting for %.1f sec" % this_sleep_time
+        time.sleep(this_sleep_time)
+    print "Completed in %.1f sec" % (now()-start_time).total_seconds()
 
 
 def push_command(args):
