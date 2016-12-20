@@ -8,8 +8,8 @@ import logging
 
 from flask import _app_ctx_stack, current_app
 from flask import _app_ctx_stack as stack
-from driftconfig.relib import get_store_from_url, create_backend
-
+from driftconfig.relib import get_store_from_url, create_backend, copy_table_store
+from driftconfig.config import get_domains
 
 
 log = logging.getLogger(__name__)
@@ -23,7 +23,6 @@ class FlaskRelib(object):
 
     def init_app(self, app):
         app.extensions['relib'] = self
-        app.before_request(self._before_request)
 
     def refresh(self):
         """Invalidate Redis cache, if in use, and fetch new config from source."""
@@ -31,10 +30,12 @@ class FlaskRelib(object):
         if ctx is not None and hasattr(ctx, 'table_store'):
             delattr(ctx, 'table_store')
 
-    def save(self, table_store):
-        """Save 'table_store' to source."""
-        b = create_backend(current_app.config.get('RELIB_CONFIG_URL'))
-        table_store.save(b)
+    def save(self, table_store=None):
+        """Save 'table_store' to source. If 'table_store' is not specified, the default one is used."""
+        table_store = table_store or self.table_store
+        origin = table_store.get_table('domain')['origin']
+        origin_backend = create_backend(origin)
+        table_store.save_to_backend(origin_backend)
         self.refresh()
 
     @property
@@ -42,16 +43,21 @@ class FlaskRelib(object):
         ctx = stack.top
         if ctx is not None:
             if not hasattr(ctx, 'table_store'):
-                url = current_app.config.get('RELIB_CONFIG_URL')
-                ctx.table_store = get_store_from_url(url)
+                ctx.table_store = self._get_table_store()
             return ctx.table_store
 
-    def _before_request(self):
-        '''
-        Bla
-        '''
-        pass
-        #print "GHOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOORK YESYESYEYSEYSE"
-        #ctx = _app_ctx_stack.top
-        ##if ctx is not None:
-            #ctx.table_store = self._table_store
+    def _get_table_store(self):
+        if 'DRIFT_CONFIG_URL' not in current_app.config:
+            domains = get_domains()
+            if len(domains) != 1:
+                raise RuntimeError("'DRIFT_CONFIG_URL' not in app.config and no single "
+                                   "candidate found in ~/.drift/config")
+            domain = domains.values()[0]
+            return domain['table_store']
+        else:
+            url = current_app['DRIFT_CONFIG_URL']
+            return get_store_from_url(url)
+
+    def get_copy(self):
+        """"Return a copy of current table store. Good for editing."""
+        return copy_table_store(self.table_store)
