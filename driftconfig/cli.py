@@ -2,6 +2,9 @@
 import os
 import os.path
 import sys
+from datetime import datetime
+import json
+import getpass
 
 from driftconfig.relib import create_backend, get_store_from_url
 from driftconfig.config import get_drift_table_store
@@ -71,6 +74,40 @@ def get_options(parser):
         action='store', help="The name of the domain owner or organization."
     )
 
+    p = subparsers.add_parser(
+        'addtenant',
+        help='Add a new tenant',
+    )
+    p.add_argument(
+        'domain',
+    )
+    p.add_argument(
+        '-n', '--name',
+        required=True, help="Short name to identify the tenant.",
+    )
+    p.add_argument(
+        '-t', '--tier',
+        required=True, help="The name of the tier."
+    )
+    p.add_argument(
+        '-o', '--organization',
+        required=True, help="The name of the organization."
+    )
+    p.add_argument(
+        '-p', '--product',
+        required=True, help="The name of the product."
+    )
+    p.add_argument(
+        '--preview',
+        action='store_true',
+        help="Preview the action."
+    )
+    p.add_argument(
+        '-d', '--deployables',
+        nargs='*',
+        help="One or more deployables to create the tenant on."
+    )
+
 
 def init_command(args):
     print "Initializing config from", args.source
@@ -98,12 +135,16 @@ def _get_domains():
             domains[domain['domain_name']] = {'path': path, 'table_store': ts}
     return domains
 
+def _format_domain_info(domain_info):
+    domain = domain_info['table_store'].get_table('domain')
+    return "{}: \"{}\" at '{}'. Origin: '{}'".format(
+        domain['domain_name'], domain['display_name'], domain_info['path'], domain['origin'])
+
 
 def list_command(args):
     # Enumerate subfolders at ~/.drift/config and see what's there
     for d in _get_domains().values():
-        domain = d['table_store'].get_table('domain')
-        print "{}: \"{}\" at {}".format(domain['domain_name'], domain['display_name'], domain['origin'])
+        print _format_domain_info(d)
 
 
 def pull_command(args):
@@ -138,8 +179,7 @@ def create_command(args):
     domain_info = _get_domains().get(args.domain)
     if domain_info:
         print "The domain name specified is taken:"
-        domain = domain_info['table_store'].get_table('domain')
-        print "{}: \"{}\" at {}".format(domain['domain_name'], domain['display_name'], domain['origin'])
+        print _format_domain_info(domain_info)
         sys.exit(1)
 
     # Get empty table store for Drift.
@@ -153,6 +193,56 @@ def create_command(args):
     ts.save_to_backend(local_store)
     print "New config for '{}' saved to {}.".format(args.domain, domain_folder)
     print "You can modify the files now before pushing it to source."
+
+
+def addtenant_command(args):
+
+    print "Adding a new tenant."
+    print "  Domain:      ", args.domain
+    print "  Tenant:      ", args.name
+    print "  Tier:        ", args.tier
+    print "  Organization:", args.organization
+    print "  Product:     ", args.product
+    print "  Deployables: ", args.deployables
+
+    domain_info = _get_domains().get(args.domain)
+    if not domain_info:
+        print "The domain '{}'' is not found locally. Run 'init' to fetch it.".format(args.domain)
+        sys.exit(1)
+
+    print _format_domain_info(domain_info)
+
+    ts = domain_info['table_store']
+    row = ts.get_table('tenant_names').add({
+        'tenant_name': args.name,
+        'organization_name': args.organization,
+        'product_name': args.product,
+        'reserved_by': getpass.getuser(),
+        'reserved_at': datetime.utcnow().isoformat(),
+    })
+
+    print "\nNew tenant record:\n", json.dumps(row, indent=4)
+
+    if args.deployables:
+        print "Associating with deployables:"
+        tenants = ts.get_table('tenants')
+        for deployable_name in args.deployables:
+            row = tenants.add({
+                'tier_name': args.tier,
+                'tenant_name': args.name,
+                'deployable_name': deployable_name
+            })
+            print json.dumps(row, indent=4)
+
+    if args.preview:
+        print "Previewing only. Exiting now."
+        sys.exit(0)
+
+    # Save it locally
+    local_store = create_backend('file://~/.drift/config/' + args.domain)
+    ts.save_to_backend(local_store)
+    print "Changes to config saved at {}.".format(local_store)
+    print "Remember to push changes to persist them."
 
 
 def run_command(args):
