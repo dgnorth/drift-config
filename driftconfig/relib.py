@@ -76,8 +76,8 @@ class Table(object):
         fields = self._group_by_fields if use_group_by else self._pk_fields
 
         if not set(fields).issubset(set(primary_key.keys())):
-            raise TableError("Can't make primary key. Need {} but got {}.".format(
-                fields, primary_key.keys()))
+            raise TableError("For table '{}', can't make primary key. Need {} but got {}.".format(
+                self._table_name, fields, primary_key.keys()))
 
         canonicalized = '.'.join([str(primary_key[k]) for k in fields if k in primary_key])
 
@@ -496,7 +496,9 @@ class TableStore(object):
         that backend.
         """
         self._tables = collections.OrderedDict()
+        self._tableorder = []  # Table order, because of DAG
         self._origin = 'clean'
+        _add_metatable(self)
         if backend:
             self.load_from_backend(backend)
 
@@ -524,6 +526,7 @@ class TableStore(object):
         Returns the definition of this table store as well as all its tables as a Json
         doc.
         """
+        self._tableorder = self._tables.keys()
         return json.dumps(self, indent=4, cls=TableStoreEncoder)
 
     def init_from_definition(self, definition):
@@ -533,6 +536,12 @@ class TableStore(object):
         """
         data = json.loads(definition)
         self.__dict__.update(data)
+        # HACK: Maintaint proper DAG order of tables. It gets screwed up during jsoning.
+        tables = self._tables
+        self._tables = collections.OrderedDict()
+        for table_name in self._tableorder:
+            self._tables[table_name] = tables[table_name]
+
         for table_name, table_data in self._tables.iteritems():
             if table_data['class'] == 'Table':
                 cls = Table
@@ -570,6 +579,22 @@ class TableStore(object):
                 table.load(backend.load_data)
 
 
+def _add_metatable(ts):
+    """Add table to contain TableStore meta info."""
+    return
+    meta = ts.add_table('tsmeta', single_row=True, system_table=True)
+    meta._table_name = '#tsmeta'  # Get around table name pattern check.
+
+    meta.add_schema({
+        'type': 'object',
+        'properties': {
+            'created_on': {'format': 'date-time'},
+            'last_modified': {'type': 'string'},
+            'origin': {'type': 'string'},
+        },
+        'required': ['domain_name', 'origin'],
+    })
+
 class Backend(object):
     """
     Backend is used to serialize table definition and data.
@@ -604,6 +629,13 @@ def create_backend(url):
 
 def get_store_from_url(url):
     return TableStore(create_backend(url))
+
+
+def copy_table_store(table_store):
+    """"Returns a stand-alone copy of 'table_store'."""
+    backend = create_backend('memory')
+    table_store.save_to_backend(backend)
+    return TableStore(backend)
 
 
 def register(cls):
