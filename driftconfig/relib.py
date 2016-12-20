@@ -106,8 +106,8 @@ class Table(object):
                 if set(c['foreign_key_fields']).issubset(row):
                     foreign_row = self.get_foreign_row(None, c['table'], c['foreign_key_fields'], _row=row)
                     if len(foreign_row) < 1:
-                        raise ConstraintError("Foreign key record not found {}.".format(
-                            {k: row[k] for k in c['foreign_key_fields']}))
+                        raise ConstraintError("Foreign key record in '{}' not found {}.".format(
+                            c['table'], {k: row[k] for k in c['foreign_key_fields']}))
 
         # Check Json schema format compliance
         check_schema(row, self._schema, "Adding row to {}".format(self))
@@ -139,7 +139,7 @@ class Table(object):
 
         return rows
 
-    def add(self, row):
+    def add(self, row, check_only=False):
         """
         Add a row to the table.
         'row' is a dict.
@@ -154,6 +154,9 @@ class Table(object):
         object after it's added to the table is acceptable under certain restrictions.
         Primary key fields and unique constraint fields may not be removed or altered
         without compromising relational integrity. Any other modification is fair game though.
+
+        If 'check_only' is True, then the row is only checked for validation but not
+        added to the table.
         """
         # Apply default values
         target_row = copy.deepcopy(self._default_values)
@@ -161,7 +164,8 @@ class Table(object):
         row = target_row
 
         row_key = self._check_row(row)
-        self._rows[row_key] = row
+        if not check_only:
+            self._rows[row_key] = row
         return row
 
     def get(self, primary_key):
@@ -586,7 +590,7 @@ class Backend(object):
         pass
 
     def on_progress(self, message):
-        log.info(message)
+        log.debug(message)
 
 
 def create_backend(url):

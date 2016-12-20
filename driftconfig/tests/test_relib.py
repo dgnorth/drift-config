@@ -10,6 +10,10 @@ from driftconfig.relib import TableStore, Table, TableError, ConstraintError, Ba
 from driftconfig.backends import FileBackend
 
 
+# TODO:
+# - test 'check_only' in Table.add().
+
+
 class TestBackend(Backend):
     """Wrap a dict as a Backend for TableStore."""
     def __init__(self, storage):
