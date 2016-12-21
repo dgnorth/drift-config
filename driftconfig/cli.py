@@ -144,6 +144,7 @@ def pull_command(args):
     else:
         _pull_command(args)
 
+def _pull_command(args):
     for domain_name, domain_info in get_domains().items():
         if args.domain and args.domain != domain_name:
             continue
