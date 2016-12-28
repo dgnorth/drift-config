@@ -416,7 +416,11 @@ class Table(object):
                 for group_key in key_groups.values():
                     file_name = self.get_filename(row=group_key)
                     data = fetch_from_storage(file_name)
-                    rows = json.loads(data)
+                    try:
+                        rows = json.loads(data)
+                    except Exception as e:
+                        print "Error loading", file_name
+                        raise
                     for row in rows:
                         self.add(row)
 
