@@ -52,7 +52,7 @@ if 0:
 #s3_store.save(ts)
 
 # Chuck in some data
-ts.get_table('domain').add({'domain_name': 'dgnorth', 'display_name': 'Directive Games North', 'origin': 's3://relib-test/directive-games?region=eu-west-1'})
+ts.get_table('domain').add({'domain_name': 'dgnorth', 'display_name': 'Directive Games North', 'origin': 's3://relib-test/directive-games-v2'})
 ts.get_table('organizations').add({'organization_name': 'directivegames', 'display_name': 'Directive Games', })
 ts.get_table('tiers').add({'tier_name': 'LIVENORTH', 'organization_name': 'directivegames', 'is_live': True})
 ts.get_table('tiers').add({'tier_name': 'DEVNORTH', 'organization_name': 'directivegames', 'is_live': False})
@@ -60,14 +60,18 @@ ts.get_table('tiers').add({'tier_name': 'DEVEAST', 'organization_name': 'directi
 
 ts.get_table('products').add({'product_name': 'superkaiju', 'organization_name': 'directivegames'})
 
-ts.get_table('deployables').add({'organization_name': 'directivegames', 'deployable_name': 'drift-base', 'display_name': 'Drift Core Services', 'is_active': True, })
-ts.get_table('deployables').add({'organization_name': 'directivegames', 'deployable_name': 'vignettes', 'display_name': 'Vignettes', })
-ts.get_table('deployables').add({'organization_name': 'directivegames', 'deployable_name': 'game-server', 'display_name': 'Game Server Management', })
-ts.get_table('deployables').add({'organization_name': 'directivegames', 'deployable_name': 'themachines-backend', 'display_name': 'The Machines Services', 'is_active': True, })
-ts.get_table('deployables').add({'organization_name': 'directivegames', 'deployable_name': 'themachines-admin', 'display_name': 'The Machines Admin Web', })
-ts.get_table('deployables').add({'organization_name': 'directivegames', 'deployable_name': 'kaleo-web', 'display_name': 'Kaleo Web', })
-ts.get_table('deployables').add({'organization_name': 'directivegames', 'deployable_name': 'kards-backend', 'display_name': 'Kards Services', })
-ts.get_table('deployables').add({'organization_name': 'directivegames', 'deployable_name': 'kaleometrics', 'display_name': 'Kaleo Metrics', })
+ts.get_table('deployable_names').add({'tier_name': 'LIVENORTH', 'deployable_name': 'drift-base', 'display_name': 'Drift Core Services', })
+ts.get_table('deployable_names').add({'tier_name': 'LIVENORTH', 'deployable_name': 'vignettes', 'display_name': 'Vignettes', })
+ts.get_table('deployable_names').add({'tier_name': 'LIVENORTH', 'deployable_name': 'game-server', 'display_name': 'Game Server Management', })
+ts.get_table('deployable_names').add({'tier_name': 'LIVENORTH', 'deployable_name': 'themachines-backend', 'display_name': 'The Machines Services', })
+ts.get_table('deployable_names').add({'tier_name': 'LIVENORTH', 'deployable_name': 'themachines-admin', 'display_name': 'The Machines Admin Web', })
+ts.get_table('deployable_names').add({'tier_name': 'LIVENORTH', 'deployable_name': 'kaleo-web', 'display_name': 'Kaleo Web', })
+ts.get_table('deployable_names').add({'tier_name': 'LIVENORTH', 'deployable_name': 'kards-backend', 'display_name': 'Kards Services', })
+ts.get_table('deployable_names').add({'tier_name': 'LIVENORTH', 'deployable_name': 'kaleometrics', 'display_name': 'Kaleo Metrics', })
+
+ts.get_table('deployables').add({'tier_name': 'LIVENORTH', 'deployable_name': 'drift-base', 'is_active': True, })
+ts.get_table('deployables').add({'tier_name': 'LIVENORTH', 'deployable_name': 'themachines-backend', 'is_active': True, })
+
 
 # Configure LIVENORTH
 from datetime import datetime

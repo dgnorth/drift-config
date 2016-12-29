@@ -209,7 +209,7 @@ def get_drift_table_store():
     tenant_names.add_schema({
         'type': 'object',
         'properties': {
-            'tenant_name': {'pattern': r'^([a-z-]){3,20}$'},
+            'tenant_name': {'pattern': r'^([a-z0-9-]){3,20}$'},
             'reserved_at': {'format': 'date-time'},
             'reserved_by': {'type': 'string'},
         },
@@ -229,16 +229,28 @@ def get_drift_table_store():
     })
     tiers.add_default_values({'is_live': True})
 
+    deployable_names = ts.add_table('deployable_names')
+    deployable_names.add_primary_key('deployable_name')
+    deployable_names.add_schema({
+        'type': 'object',
+        'properties': {
+            'deployable_name': {'pattern': r'^([a-z-]){3,20}$'},
+            'display_name': {'type': 'string'},
+            'description': {'type': 'string'},
+        },
+        'required': ['display_name'],
+    })
+
     deployables = ts.add_table('deployables')
-    deployables.add_primary_key('deployable_name')
-    deployables.add_foreign_key('organization_name', 'organizations')
+    deployables.add_primary_key('tier_name,deployable_name')
+    deployables.add_foreign_key('tier_name', 'tiers')
+    deployables.add_foreign_key('deployable_name', 'deployable_names')
     deployables.add_schema({
         'type': 'object',
         'properties': {
-            'display_name': {'type': 'string'},
             'is_active': {'type': 'boolean'},
         },
-        'required': ['display_name', 'is_active'],
+        'required': ['is_active'],
     })
     deployables.add_default_values({'is_active': False})
 
@@ -246,7 +258,7 @@ def get_drift_table_store():
     tenants.add_primary_key('tier_name,deployable_name,tenant_name')
     tenants.set_row_as_file(use_subfolder=True, group_by='tier_name,tenant_name')
     tenants.add_foreign_key('tier_name', 'tiers')
-    tenants.add_foreign_key('deployable_name', 'deployables')
+    tenants.add_foreign_key('deployable_name', 'deployable_names')
     tenants.add_foreign_key('tenant_name', 'tenant_names')
     tenants.add_schema({
         'type': 'object',
@@ -261,7 +273,7 @@ def get_drift_table_store():
     public_keys.set_row_as_file(use_subfolder=True, subfolder_name='authentication')
     public_keys.add_primary_key('tier_name,deployable_name')
     public_keys.add_foreign_key('tier_name', 'tiers')
-    public_keys.add_foreign_key('deployable_name', 'deployables')
+    public_keys.add_foreign_key('deployable_name', 'deployable_names')
     public_keys.add_schema({
         'type': 'object',
         'properties': {
@@ -281,7 +293,7 @@ def get_drift_table_store():
     platforms.set_row_as_file(use_subfolder=True, subfolder_name='authentication')
     platforms.add_primary_key('tier_name,deployable_name,tenant_name')
     platforms.add_foreign_key('tier_name', 'tiers')
-    platforms.add_foreign_key('deployable_name', 'deployables')
+    platforms.add_foreign_key('deployable_name', 'deployable_names')
     platforms.add_foreign_key('tier_name,deployable_name,tenant_name', 'tenants')
     platforms.add_schema({
         'type': 'object',
