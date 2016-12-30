@@ -93,7 +93,7 @@ class Table(object):
         # For convenience, the function returns the canonicalized primary key for the row.
         for c in self._constraints:
             if c['type'] in ['primary_key', 'unique'] and not set(c['fields']).issubset(row):
-                raise ConstraintError("Row violates constraint {}".format(c))
+                raise ConstraintError("In table '{}', row violates constraint {}: {}".format(self._table_name, c, row))
 
             if c['type'] == 'unique':
                 # Check for duplicates
@@ -390,7 +390,11 @@ class Table(object):
         """
         if not self._group_by_fields:
             data = fetch_from_storage(self.get_filename())
-            rows = json.loads(data)
+            try:
+                rows = json.loads(data)
+            except Exception:
+                print "Error parsing json file", self.get_filename()
+                raise
             for row in rows:
                 self.add(row)
         else:
@@ -418,8 +422,8 @@ class Table(object):
                     data = fetch_from_storage(file_name)
                     try:
                         rows = json.loads(data)
-                    except Exception as e:
-                        print "Error loading", file_name
+                    except Exception:
+                        print "Error parsing json file", file_name
                         raise
                     for row in rows:
                         self.add(row)
@@ -569,18 +573,19 @@ class TableStore(object):
             table.save(backend.save_data)
         backend.commit_batch()
 
-    def load_from_backend(self, backend, definition_only=False):
+    def load_from_backend(self, backend, skip_definition=False):
         """
         Initialize this table store using data from 'backend'.
-        If 'definition_only' is True, only the table defintions are loaded but not
-        the table rows themselves.
+        If 'skip_definition' is True, the current definition in the
+        TableStore object is used, instead of the one stored in the
+        backend.
         """
         definition = backend.load_data(self.TS_DEF_FILENAME)
-        self.init_from_definition(definition)
+        if not skip_definition:
+            self.init_from_definition(definition)
         self._origin = str(backend)
-        if not definition_only:
-            for table in self._tables.values():
-                table.load(backend.load_data)
+        for table in self._tables.values():
+            table.load(backend.load_data)
 
 
 def _add_metatable(ts):

@@ -363,7 +363,7 @@ class ConfigSession(object):
         return [t['tenant_name'] for t in self['tenant_names'].find()]
 
 
-def get_domains():
+def get_domains(skip_errors=False):
     """Return all config domains stored on local disk."""
     config_folder = os.path.join(os.path.expanduser('~'), '.drift', 'config')
     domains = {}
@@ -373,8 +373,11 @@ def get_domains():
             try:
                 ts = get_store_from_url('file://' + path)
             except Exception as e:
-                print "Note: '{}' is not a config folder, or is corrupt. ({}).".format(path, e)
-                continue
+                if skip_errors:
+                    print "Note: '{}' is not a config folder, or is corrupt. ({}).".format(path, e)
+                    continue
+                else:
+                    raise
             domain = ts.get_table('domain')
             domains[domain['domain_name']] = {'path': path, 'table_store': ts}
     return domains

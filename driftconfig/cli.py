@@ -9,6 +9,7 @@ import getpass
 
 from driftconfig.relib import create_backend, get_store_from_url
 from driftconfig.config import get_drift_table_store, get_domains
+from driftconfig.backends import FileBackend
 
 
 def get_options(parser):
@@ -46,10 +47,19 @@ def get_options(parser):
         action='store_true',
         help='pull config continuously for 1 minute.'
     )
-
     p.add_argument(
         'domain',
         action='store', nargs='?',
+    )
+
+    p = subparsers.add_parser(
+        'migrate',
+        help='Migrate config.',
+        description="Migrate config to latest definition of TableStore."
+    )
+    p.add_argument(
+        'domain',
+        action='store',
     )
 
     p = subparsers.add_parser(
@@ -154,6 +164,30 @@ def _pull_command(args):
         local_store = create_backend('file://' + domain_info['path'])
         ts.save_to_backend(local_store)
         print "Config saved at", domain_info['path']
+
+
+def migrate_command(args):
+    print "Migrating '{}'".format(args.domain)
+    path = os.path.expanduser('~') + '/.drift/config/' + args.domain
+    if not os.path.exists(path):
+        print "Path not found:", path
+        sys.exit(1)
+
+    ts = get_drift_table_store()
+
+    class PatchBackend(FileBackend):
+        def load_data(self, file_name):
+            path_name = self.get_filename(file_name)
+            if not os.path.exists(path_name):
+                # Attempt to create it just-in-time as a table with zero rows
+                with open(path_name, 'w') as f:
+                    f.write('[]\n')
+            return super(PatchBackend, self).load_data(file_name)
+
+    local_store = PatchBackend(path)
+    ts.load_from_backend(local_store, skip_definition=True)
+    print "Done."
+
 
 
 def now():
