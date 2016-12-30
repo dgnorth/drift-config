@@ -186,8 +186,8 @@ def migrate_command(args):
 
     local_store = PatchBackend(path)
     ts.load_from_backend(local_store, skip_definition=True)
+    ts.save_to_backend(local_store)
     print "Done."
-
 
 
 def now():
