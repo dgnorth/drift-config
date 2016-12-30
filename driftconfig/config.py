@@ -199,13 +199,9 @@ def get_drift_table_store():
         },
     })
 
-    products = ts.add_table('products')
-    products.add_primary_key('organization_name,product_name')
-    products.add_foreign_key('organization_name', 'organizations')
-
     tenant_names = ts.add_table('tenant_names')
     tenant_names.add_primary_key('tenant_name')
-    tenant_names.add_foreign_key('organization_name,product_name', 'products')
+    tenant_names.add_foreign_key('organization_name', 'organizations')
     tenant_names.add_schema({
         'type': 'object',
         'properties': {
@@ -213,7 +209,7 @@ def get_drift_table_store():
             'reserved_at': {'format': 'date-time'},
             'reserved_by': {'type': 'string'},
         },
-        'required': ['organization_name', 'product_name'],
+        'required': ['organization_name'],
     })
 
     tiers = ts.add_table('tiers')
