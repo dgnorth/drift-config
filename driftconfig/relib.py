@@ -338,7 +338,16 @@ class Table(object):
         return foreign_table.find(search_criteria)
 
     def save(self, save_data):
-        return self._save_table_data(save_data)
+        cs = self._save_table_data(save_data)
+        meta = self._table_store.meta.get()
+        table_meta = self._table_store.get_table_metadata(self._table_name)
+        if table_meta['md5'] != cs:
+            # Update 'last_modified' time on both the table and the table store.
+            table_meta['md5'] = cs
+            table_meta['last_modified'] = datetime.utcnow().isoformat() + 'Z'
+            # Update table store timestamp if it's a user table
+            if not self._is_system_table:
+                meta['last_modified'] = datetime.utcnow().isoformat() + 'Z'
 
     def load(self, fetch_from_storage):
         return self._load_table_data(fetch_from_storage)
@@ -397,13 +406,9 @@ class Table(object):
             rows = [orderly_row(row) for row in rows]
             save_data_check(self.get_filename(), json.dumps(rows, indent=4))
 
-        # Update checksum and last modified in meta
         cs = checksum.hexdigest()
-        meta = self._table_store.meta.get()
-        if meta['md5'].get(self._table_name) != cs:
-            meta['md5'][self._table_name] = cs
-            ####last_modified = datetime.datetime.strptime(self._table_store.meta['last_modified'], '%Y-%m-%dT%H:%M:%S.%fZ')
-            meta['last_modified'] = datetime.utcnow().isoformat() + 'Z'
+        return cs
+
 
     def _load_table_data(self, fetch_from_storage):
         """
@@ -518,7 +523,12 @@ class SingleRowTable(Table):
         Save document.
         """
         doc = self.get() or {}
-        save_data(self.get_filename(), json.dumps(doc, indent=4))
+        data = json.dumps(doc, indent=4)
+        save_data(self.get_filename(), data)
+
+        checksum = hashlib.sha256()
+        checksum.update(data)
+        return checksum.hexdigest()
 
     def _load_table_data(self, fetch_from_storage):
         """
@@ -640,10 +650,20 @@ class TableStore(object):
         backend.save_data(self.TS_DEF_FILENAME, self.get_definition())
 
         # Save system tables last, as they contain info gotten from this serialization
-        for system_table in [False, True]:
-            for table in self._tables.values():
-                if table._is_system_table == system_table:
-                    table.save(backend.save_data)
+        last_modified = self.meta['last_modified']
+        user_tables = [table for table in self._tables.values() if not table._is_system_table]
+        system_tables = [table for table in self._tables.values() if table._is_system_table]
+
+        for table in user_tables:
+            table.save(backend.save_data)
+
+        # If something changed, bump the version
+        if last_modified != self.meta['last_modified']:
+            self.meta.get()['version'] += 1
+
+        for table in system_tables:
+            table.save(backend.save_data)
+
         backend.commit_batch()
 
     def load_from_backend(self, backend, skip_definition=False):
@@ -660,6 +680,22 @@ class TableStore(object):
         for table in self._tables.values():
             table.load(backend.load_data)
 
+    def get_table_metadata(self, table_name):
+        for table_meta in self.meta['tables']:
+            if table_meta['table_name'] == table_name:
+                return table_meta
+        table_meta = {
+            'table_name': table_name,
+            'md5': '',
+            'last_modified': '',
+        }
+        self.meta['tables'].append(table_meta)
+        return table_meta
+
+    def refresh_metadata(self):
+        """Helper function to refresh local meta data."""
+        b = create_backend('memory://_TMP')
+        self.save_to_backend(b)
 
     def _add_metatable(self):
         """Add table to contain TableStore meta info."""
@@ -672,11 +708,25 @@ class TableStore(object):
                 'created_on': {'format': 'date-time'},
                 'last_modified': {'format': 'date-time'},
                 'origin': {'type': 'string'},
-                'md5': {},  # Dict of table: md5 checksum
+                'version': {'type': 'integer'},
+
+                'tables': {'type': 'array', 'items': {
+                    'type': 'object',
+                    'properties': {
+                        'table_name': {'type': 'string'},
+                        'md5': {'type': 'string'},
+                        'last_modified': {'format': 'date-time'},
+                    },
+                }},
             },
             #'required': ['domain_name', 'origin'],
         })
-        meta.add_default_values({'created_on': '@@utcnow', 'md5': {}})
+        meta.add_default_values({
+            'created_on': '@@utcnow',
+            'last_modified': '@@utcnow',
+            'version': 1,
+            'tables': [],
+        })
 
 
 class Backend(object):

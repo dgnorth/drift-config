@@ -180,6 +180,7 @@ class MemoryBackend(Backend):
 
     def __init__(self, folder_name):
         self.folder_name = folder_name
+        MemoryBackend.archive[folder_name] = {}
 
     def __del__(self):
         del MemoryBackend.archive[self.folder_name]
@@ -195,7 +196,7 @@ class MemoryBackend(Backend):
         return "MemoryBackend'{}'".format(self.folder_name)
 
     def save_data(self, file_name, data):
-        MemoryBackend.archive[self.folder_name].setdefault({})[file_name] = data
+        MemoryBackend.archive[self.folder_name][file_name] = data
 
     def load_data(self, file_name):
         return MemoryBackend.archive[self.folder_name][file_name]

@@ -92,6 +92,16 @@ def get_options(parser):
     )
 
     p = subparsers.add_parser(
+        'diff',
+        help='Diff origin.',
+        description="Diff local config to origin."
+    )
+    p.add_argument(
+        'domain',
+        action='store', help="Short name to identify the domain or owner of the config.",
+    )
+
+    p = subparsers.add_parser(
         'addtenant',
         help='Add a new tenant',
     )
@@ -244,6 +254,74 @@ def create_command(args):
     ts.save_to_backend(local_store)
     print "New config for '{}' saved to {}.".format(args.domain, domain_folder)
     print "You can modify the files now before pushing it to source."
+
+
+def diff_command(args):
+    try:
+        from jsondiff import diff
+    except ImportError as e:
+        diff = None
+        print "Can't import jsondiff' library:", e
+        print "To get diffs, run this: pip install jsondiff"
+
+    domain_info = get_domains().get(args.domain)
+    ts_local = domain_info['table_store']
+    print 'lksdjf ', domain_info['path']
+    local_backend = create_backend('file://~/.drift/config/' + args.domain)
+    ts_local.save_to_backend(local_backend)
+    #ts_local.refresh_metadata()
+
+    origin = ts_local.get_table('domain')['origin']
+
+    print "Diffing local '{}' to origin at {}".format(args.domain, origin)
+    ts_origin = get_store_from_url(origin)
+
+    def timediff_is_older(t1, t2):
+        """Returns the time diff sans secs, and if 't1' is older than 't2'."""
+        t1 = datetime.strptime(t1, '%Y-%m-%dT%H:%M:%S.%fZ')
+        t2 = datetime.strptime(t2, '%Y-%m-%dT%H:%M:%S.%fZ')
+        if t1 < t2:
+            return str(t2 - t1).split('.', 1)[0], True
+        else:
+            return str(t1 - t2).split('.', 1)[0], False
+
+    ts_local_meta, ts_origin_meta = ts_local.meta, ts_origin.meta
+    if ts_local_meta['last_modified'] == ts_origin_meta['last_modified']:
+        print "No difference between table stores. Last modified:", ts_local_meta['last_modified']
+    else:
+        td, is_older = timediff_is_older(ts_local_meta['last_modified'], ts_origin_meta['last_modified'])
+        if is_older:
+            print "The origin table store is newer by", td
+        else:
+            print "Your local table store is newer by", td
+
+    print ""
+
+    for table_name in ts_local.tables:
+        t1, t2 = ts_local.get_table(table_name), ts_origin.get_table(table_name)
+        print "Comparing  ", table_name,
+        t1_meta, t2_meta = ts_local.get_table_metadata(table_name), ts_origin.get_table_metadata(table_name)
+        if t1_meta['md5'] != t2_meta['md5']:
+            print "\n\tChecksums differ, {}... != {}...".format(t1_meta['md5'][:5], t2_meta['md5'][:5])
+        if t1_meta['last_modified'] != t2_meta['last_modified']:
+            print "\tLast modified date differ, {} != {}".format(t1_meta['last_modified'], t2_meta['last_modified'])
+            td, is_older = timediff_is_older(t1_meta['last_modified'], t2_meta['last_modified'])
+            if is_older:
+                print "\tThe origin is newer by", td
+            else:
+                print "\tYour local copy is newer by", td
+
+        if t1_meta['md5'] != t2_meta['md5']:
+            if diff:
+                print diff(t2.find(), t1.find(), syntax='symmetric')
+                print ""
+
+        if t1_meta['md5'] == t2_meta['md5'] and t1_meta['last_modified'] == t2_meta['last_modified']:
+            print "OK"
+        else:
+            print ""
+
+    print "Done."
 
 
 def addtenant_command(args):
