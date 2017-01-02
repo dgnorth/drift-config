@@ -128,7 +128,7 @@ class TestRelib(unittest.TestCase):
         with self.assertRaises(TableError) as context:
             table1.get({'not_a_pk_field': 1})
 
-        self.assertIn("Can't make primary key", str(context.exception))
+        self.assertIn("can't make primary key", str(context.exception))
 
         # Test lookup using primary key
         self.assertIs(row1, table1.get({'pk_field': 1}))
@@ -177,7 +177,7 @@ class TestRelib(unittest.TestCase):
         with self.assertRaises(ConstraintError) as context:
             table1.add({'pk_field': 5, 'unique_field': 'iamunique5', 'tag': 'burgundy'})
 
-        self.assertIn("Foreign key record not found", str(context.exception))
+        self.assertIn("Foreign key record in 'table2' not found", str(context.exception))
 
         # Get foreign table row. Only 'blue' row is linked. The 'red' one is orphaned.
         self.assertEqual([], table1.get_foreign_row(row1, 'table2'))
@@ -220,7 +220,7 @@ class TestRelib(unittest.TestCase):
                 'foreign_field1': 'bork', 'foreign_field2': 'x',
             })
 
-        self.assertIn("Foreign key record not found", str(context.exception))
+        self.assertIn("Foreign key record in 'table3' not found", str(context.exception))
 
 
         # Test all cases with a single row table
@@ -250,7 +250,7 @@ class TestRelib(unittest.TestCase):
                 'foreign_field1': 'bork', 'foreign_field2': 'x',
             })
 
-        self.assertIn("Foreign key record not found", str(context.exception))
+        self.assertIn("Foreign key record in 'table3' not found", str(context.exception))
 
         # Clear table store
         ts.clear()
@@ -365,7 +365,7 @@ class TestRelib(unittest.TestCase):
             ts_check.load_from_backend(TestBackend(storage))
 
             # The original and the clone should be identical
-            for table_name in ts._tables:
+            for table_name in ts.tables:
                 self.assertEqual(ts.get_table(table_name)._rows, ts_check.get_table(table_name)._rows)
 
             # Serialize a single table and verify
@@ -434,12 +434,12 @@ class TestRelib(unittest.TestCase):
             ts_check.load_from_backend(backend)
 
             # The original and the clone should be identical
-            for table_name in ts._tables:
+            for table_name in ts.tables:
                 self.assertEqual(ts.get_table(table_name)._rows, ts_check.get_table(table_name)._rows)
 
             # Load it in clean
             ts_check = TableStore(backend)
-            for table_name in ts._tables:
+            for table_name in ts.tables:
                 self.assertEqual(ts.get_table(table_name)._rows, ts_check.get_table(table_name)._rows)
 
     @unittest.skip("S3 test is too slow for unit test")

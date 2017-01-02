@@ -13,6 +13,8 @@ import re
 import collections
 import copy
 from urlparse import urlparse, parse_qs
+import hashlib
+from datetime import datetime
 
 from schemautil import check_schema
 
@@ -43,7 +45,7 @@ class Table(object):
     def __init__(self, table_name, table_store=None):
 
         # Table name must be nicely formatted so we can use it in path names.
-        if not self.TABLENAME_REGEX.match(table_name):
+        if not table_name.startswith('#') and not self.TABLENAME_REGEX.match(table_name):
             raise TableError("Table name {!r} didn't match pattern '{}'.".format(
                 table_name, self.TABLENAME_REGEX.pattern))
 
@@ -56,6 +58,7 @@ class Table(object):
         self._table_store = table_store
         self._group_by_fields = None
         self._subfolder = None
+        self._is_system_table = False
 
     def __str__(self):
         return "Table('{}')".format(self._table_name)
@@ -159,7 +162,7 @@ class Table(object):
         added to the table.
         """
         # Apply default values
-        target_row = copy.deepcopy(self._default_values)
+        target_row = self._get_default_values()
         target_row.update(row)
         row = target_row
 
@@ -335,6 +338,12 @@ class Table(object):
         return foreign_table.find(search_criteria)
 
     def save(self, save_data):
+        return self._save_table_data(save_data)
+
+    def load(self, fetch_from_storage):
+        return self._load_table_data(fetch_from_storage)
+
+    def _save_table_data(self, save_data):
         """
         Save all table data.
 
@@ -356,12 +365,19 @@ class Table(object):
             d.update(row)  # Chuck in the rest
             return d
 
+        # Stub out the save_data() function so we can calculate a checksum.
+        checksum = hashlib.sha256()
+
+        def save_data_check(filename, data):
+            checksum.update(data)
+            return save_data(filename, data)
+
         if self._group_by_fields:
             row_per_file = self._group_by_fields == self._pk_fields
 
             if row_per_file:
                 for row in rows:
-                    save_data(self.get_filename(row), json.dumps(orderly_row(row), indent=4))
+                    save_data_check(self.get_filename(row), json.dumps(orderly_row(row), indent=4))
             else:
                 # Group one or more rows together for each file.
                 group = {}
@@ -370,18 +386,26 @@ class Table(object):
                     group.setdefault(key, []).append(orderly_row(row))
 
                 for rowset in group.values():
-                    save_data(self.get_filename(rowset[0]), json.dumps(rowset, indent=4))
+                    save_data_check(self.get_filename(rowset[0]), json.dumps(rowset, indent=4))
 
             # Add index so we can read it back in automatically
             index = [{k: row[k] for k in self._pk_fields} for row in rows]
-            save_data(self.get_filename(is_index_file=True), json.dumps(index, indent=4))
+            save_data_check(self.get_filename(is_index_file=True), json.dumps(index, indent=4))
 
         else:
             # Write out all rows as a list
             rows = [orderly_row(row) for row in rows]
-            save_data(self.get_filename(), json.dumps(rows, indent=4))
+            save_data_check(self.get_filename(), json.dumps(rows, indent=4))
 
-    def load(self, fetch_from_storage):
+        # Update checksum and last modified in meta
+        cs = checksum.hexdigest()
+        meta = self._table_store.meta.get()
+        if meta['md5'].get(self._table_name) != cs:
+            meta['md5'][self._table_name] = cs
+            ####last_modified = datetime.datetime.strptime(self._table_store.meta['last_modified'], '%Y-%m-%dT%H:%M:%S.%fZ')
+            meta['last_modified'] = datetime.utcnow().isoformat() + 'Z'
+
+    def _load_table_data(self, fetch_from_storage):
         """
         Load table data.
 
@@ -428,6 +452,21 @@ class Table(object):
                     for row in rows:
                         self.add(row)
 
+    def _get_default_values(self):
+        """
+        Return a dict of default values for this table. Dynamic values are calculated.
+        """
+        # TODO: Move this to a utility
+
+        d = copy.deepcopy(self._default_values)
+        for k, v in d.items():
+            if isinstance(v, basestring) and v.startswith('@@'):
+                if v == '@@utcnow':
+                    d[k] = datetime.utcnow().isoformat() + 'Z'
+                else:
+                    log.warning("Unknown dynamic default value '{}' defined in table '{}'".format(k, self._table_name))
+        return d
+
 
 class SingleRowTable(Table):
     """
@@ -439,6 +478,7 @@ class SingleRowTable(Table):
 
     def __init__(self, table_name, table_store=None):
         super(SingleRowTable, self).__init__(table_name, table_store)
+        self.add({})  # A single row table always has one, and only one row.
 
     def _canonicalize_key(self, primary_key, use_group_by=False):
         return ''
@@ -451,17 +491,36 @@ class SingleRowTable(Table):
         """Convenience operator to access properties of a single row."""
         return self.get()[key]
 
+    def add(self, row, check_only=False):
+        # Adding a row to a single row table essentially means overwrite whatever is
+        # in there. So let's remove the singleton record before adding this one if needed.
+        tmp = self.get()
+        self._rows.clear()
+        try:
+            return super(SingleRowTable, self).add(row, check_only)
+        finally:
+            if check_only:
+                self._rows.add(tmp)
+
     def set_row_as_file(self, use_subfolder=None, subfolder_name=None, group_by=None):
         raise TableError("Single row table ")
 
-    def save(self, save_data):
+    def add_default_values(self, default_values):
+        # As single row table always contains one row, we need to make re-add the
+        # default row now.
+        # TODO: Make table_add an atomic action. It's messy to do this post processing
+        # by hooking into various functions like this.
+        super(SingleRowTable, self).add_default_values(default_values)
+        self.add({})
+
+    def _save_table_data(self, save_data):
         """
         Save document.
         """
         doc = self.get() or {}
         save_data(self.get_filename(), json.dumps(doc, indent=4))
 
-    def load(self, fetch_from_storage):
+    def _load_table_data(self, fetch_from_storage):
         """
         Load document data.
         """
@@ -497,6 +556,7 @@ class TableStoreEncoder(json.JSONEncoder):
 class TableStore(object):
 
     TS_DEF_FILENAME = '#tsdef.json'
+    TS_META_TABLENAME = '#tsmeta'
 
     def __init__(self, backend=None):
         """
@@ -506,12 +566,22 @@ class TableStore(object):
         self._tables = collections.OrderedDict()
         self._tableorder = []  # Table order, because of DAG
         self._origin = 'clean'
-        _add_metatable(self)
+        self._add_metatable()
         if backend:
             self.load_from_backend(backend)
 
     def __str__(self):
         return 'TableStore(Origin: {}. Tables: {})'.format(self._origin, len(self._tables))
+
+    @property
+    def meta(self):
+        """The 'meta' table."""
+        return self.get_table(self.TS_META_TABLENAME)
+
+    @property
+    def tables(self):
+        """Dict of all tables, excluding system tables."""
+        return {tn: table for tn, table in self._tables.items() if not table._is_system_table}
 
     def add_table(self, table_name, single_row=False):
         if single_row:
@@ -569,8 +639,11 @@ class TableStore(object):
         backend.start_batch()
         backend.save_data(self.TS_DEF_FILENAME, self.get_definition())
 
-        for table in self._tables.values():
-            table.save(backend.save_data)
+        # Save system tables last, as they contain info gotten from this serialization
+        for system_table in [False, True]:
+            for table in self._tables.values():
+                if table._is_system_table == system_table:
+                    table.save(backend.save_data)
         backend.commit_batch()
 
     def load_from_backend(self, backend, skip_definition=False):
@@ -588,21 +661,23 @@ class TableStore(object):
             table.load(backend.load_data)
 
 
-def _add_metatable(ts):
-    """Add table to contain TableStore meta info."""
-    return
-    meta = ts.add_table('tsmeta', single_row=True, system_table=True)
-    meta._table_name = '#tsmeta'  # Get around table name pattern check.
+    def _add_metatable(self):
+        """Add table to contain TableStore meta info."""
+        meta = self.add_table(self.TS_META_TABLENAME, single_row=True)
+        meta._is_system_table = True
 
-    meta.add_schema({
-        'type': 'object',
-        'properties': {
-            'created_on': {'format': 'date-time'},
-            'last_modified': {'type': 'string'},
-            'origin': {'type': 'string'},
-        },
-        'required': ['domain_name', 'origin'],
-    })
+        meta.add_schema({
+            'type': 'object',
+            'properties': {
+                'created_on': {'format': 'date-time'},
+                'last_modified': {'format': 'date-time'},
+                'origin': {'type': 'string'},
+                'md5': {},  # Dict of table: md5 checksum
+            },
+            #'required': ['domain_name', 'origin'],
+        })
+        meta.add_default_values({'created_on': '@@utcnow', 'md5': {}})
+
 
 class Backend(object):
     """
@@ -612,7 +687,7 @@ class Backend(object):
     schemes = {}  # Backend registry using url scheme as key.
 
     def start_batch(self):
-        pass
+        self.md5 = {}
 
     def commit_batch(self):
         pass
