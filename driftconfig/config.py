@@ -37,6 +37,7 @@ domain (single row):
 
 organizations:
     organization_name       string, pk
+    short_name              string, required
     display_name: string
 
 
@@ -247,8 +248,11 @@ def get_drift_table_store():
     organizations.add_schema({
         'type': 'object',
         'properties': {
+            'organization_name': {'pattern': r'^([a-z0-9]){2,20}$'},
+            'short_name': {'pattern': r'^([a-z0-9]){2,20}$'},
             'display_name': {'type': 'string'},
         },
+        'required': ['short_name'],
     })
 
     tiers = ts.add_table('tiers')
