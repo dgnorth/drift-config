@@ -63,6 +63,10 @@ class Table(object):
     def __str__(self):
         return "Table('{}')".format(self._table_name)
 
+    @property
+    def name(self):
+        return self._table_name
+
     def _canonicalize_key(self, primary_key, use_group_by=False):
         """
         Return a canonical string representation of the primary key 'primary_key' using
@@ -254,7 +258,7 @@ class Table(object):
         """
         self._default_values = copy.deepcopy(default_values)
 
-    def set_row_as_file(self, use_subfolder=None, subfolder_name=None, group_by=None):
+    def set_row_as_file(self, subfolder_name=None, group_by=None):
         """
         When serializing the table, group rows together into separate files.
 
@@ -268,9 +272,8 @@ class Table(object):
         'group_by' is a comma separated list of primarky key field names to group rows by. If not set,
         all the primary key fields are used resulting in one file per row instance.
 
-        If 'use_subfolder' is True, all the row files will be placed in a subfolder with the same
-        name as this table or 'subfolder_name' if it's set. The filenames will still include the
-        table name. The default behavior is not to use subfolder.
+        If 'subfolder_name' is set, all the row files will be placed in a subfolder with that name.
+        The filenames will still include the table name. The default behavior is not to use subfolder.
         """
         if group_by:
             self._group_by_fields = group_by.split(',')
@@ -279,8 +282,7 @@ class Table(object):
         else:
             self._group_by_fields = self._pk_fields
 
-        if use_subfolder:
-            self._subfolder = subfolder_name or self._table_name
+        self._subfolder = subfolder_name
 
     def get_filename(self, row=None, is_index_file=None):
         """
