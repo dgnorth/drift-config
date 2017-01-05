@@ -29,29 +29,80 @@ deployable + autoscaling,release    = used by api-router configgenerator
 drift-config core tables:
 
 
+domain (single row):
+    domain_name             string, required
+    display_name            string
+    origin                  string, required
+
+
 organizations:
-    organization_name       string, unique
+    organization_name       string, pk
+    display_name: string
 
 
 tiers:
-    organization            fk->organizations
-    tier_name               string, unique
-    is_live                 bool
+    tier_name               string, pk
+    is_live                 boolean, default=true
+
+
+deployable_names:
+    deployable_name         string, pk
+    display_name            string, required
+    description             string
 
 
 deployables:
-    deployable_name         string, unique
-    organization            fk->organizations
+    tier_name               string, pk, fk->tiers
+    deployable_name         string, pk, fk->deployables
+    is_active               boolean, default=false
+
+
+products:
+    product_name            string, pk
+    organization_name       string, pk, fk->organizations
+
+
+tenant_names:
+    # a tenant name is unique across all tiers
+    tenant_name             string, pk
+    tier_name               fk->tiers
+    product_name            fk->products
+    reserved_at             date-time
+    reserved_by             date-time
 
 
 tenants:
-    # a tenant name is unique across all tiers
-    tenant_name             string, unique
-    tier                    fk->tiers
+    tier_name               string, pk, fk->tiers
+    deployable_name         string, pk, fk->deployables
+    tenant_name             string, pk, fk->tenants
+    state                   enum initializing|active|disabled|deleted, default=initializing
 
-    deployables
-        deployable_name         fk->deployables
+    meta
+        use_subfolder=true
+        group_by=tier_name,tenant_name
 
+
+public-keys:
+    tier_name               string, pk, fk->tiers
+    deployable_name         string, pk, fk->deployables
+    keys                    array
+
+    meta
+        subfolder_name=authentication
+
+
+platforms:
+    tier_name               string, pk, fk->tiers
+    deployable_name         string, pk, fk->deployables
+    tenant_name             string, pk, fk->tenants
+    providers               array
+
+    meta
+        subfolder_name=authentication
+
+
+
+******************************************************************
 
 authentication:
     tier                    fk->tiers
@@ -179,6 +230,7 @@ def get_drift_table_store():
     # RULE: pk='tier_name'='LIVENORTH', role['liveops', 'admin', 'service']
 
     ts = TableStore()
+
     domain = ts.add_table('domain', single_row=True)
     domain.add_schema({
         'type': 'object',
@@ -199,29 +251,15 @@ def get_drift_table_store():
         },
     })
 
-    tenant_names = ts.add_table('tenant_names')
-    tenant_names.add_primary_key('tenant_name')
-    tenant_names.add_foreign_key('organization_name', 'organizations')
-    tenant_names.add_schema({
-        'type': 'object',
-        'properties': {
-            'tenant_name': {'pattern': r'^([a-z0-9-]){3,20}$'},
-            'reserved_at': {'format': 'date-time'},
-            'reserved_by': {'type': 'string'},
-        },
-        'required': ['organization_name'],
-    })
-
     tiers = ts.add_table('tiers')
     tiers.add_primary_key('tier_name')
-    tiers.add_foreign_key('organization_name', 'organizations')
     tiers.add_schema({
         'type': 'object',
         'properties': {
             'tier_name': {'pattern': r'^([A-Z]){3,20}$'},
             'is_live': {'type': 'boolean'},
         },
-        'required': ['organization_name', 'is_live'],
+        'required': ['is_live'],
     })
     tiers.add_default_values({'is_live': True})
 
@@ -250,9 +288,32 @@ def get_drift_table_store():
     })
     deployables.add_default_values({'is_active': False})
 
+    products = ts.add_table('products')
+    products.add_primary_key('organization_name,product_name')
+    products.add_foreign_key('organization_name', 'organizations')
+    products.add_schema({
+        'type': 'object',
+        'properties': {
+            'product_name': {'pattern': r'^([a-z0-9-]){3,35}$'},
+        },
+    })
+
+    tenant_names = ts.add_table('tenant_names')
+    tenant_names.add_primary_key('tenant_name')
+    tenant_names.add_foreign_key('organization_name,product_name', 'products')
+    tenant_names.add_schema({
+        'type': 'object',
+        'properties': {
+            'tenant_name': {'pattern': r'^([a-z0-9-]){3,20}$'},
+            'reserved_at': {'format': 'date-time'},
+            'reserved_by': {'type': 'string'},
+        },
+        'required': ['organization_name', 'product_name'],
+    })
+
     tenants = ts.add_table('tenants')
     tenants.add_primary_key('tier_name,deployable_name,tenant_name')
-    tenants.set_row_as_file(use_subfolder=True, group_by='tier_name,tenant_name')
+    tenants.set_row_as_file(subfolder_name=tenants.name, group_by='tier_name,tenant_name')
     tenants.add_foreign_key('tier_name', 'tiers')
     tenants.add_foreign_key('deployable_name', 'deployable_names')
     tenants.add_foreign_key('tenant_name', 'tenant_names')
@@ -266,7 +327,7 @@ def get_drift_table_store():
     tenants.add_default_values({'state': 'initializing'})
 
     public_keys = ts.add_table('public-keys')
-    public_keys.set_row_as_file(use_subfolder=True, subfolder_name='authentication')
+    public_keys.set_row_as_file(subfolder_name='authentication')
     public_keys.add_primary_key('tier_name,deployable_name')
     public_keys.add_foreign_key('tier_name', 'tiers')
     public_keys.add_foreign_key('deployable_name', 'deployable_names')
@@ -286,7 +347,7 @@ def get_drift_table_store():
     })
 
     platforms = ts.add_table('platforms')
-    platforms.set_row_as_file(use_subfolder=True, subfolder_name='authentication')
+    platforms.set_row_as_file(subfolder_name='authentication')
     platforms.add_primary_key('tier_name,deployable_name,tenant_name')
     platforms.add_foreign_key('tier_name', 'tiers')
     platforms.add_foreign_key('deployable_name', 'deployable_names')
