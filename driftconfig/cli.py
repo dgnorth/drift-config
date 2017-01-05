@@ -257,6 +257,30 @@ def create_command(args):
 
 
 def diff_command(args):
+    domain_info = get_domains().get(args.domain)
+    ts_local = domain_info['table_store']
+    origin = ts_local.get_table('domain')['origin']
+    print "Diffing local '{}' to origin at {}".format(args.domain, origin)
+    ts_origin = get_store_from_url(origin)
+    report = diff_table_stores(ts_local, ts_origin)
+
+    if 'last_modified' in report:
+        print "No difference between table stores. Last modified:", report['last_modified']
+    else:
+        td, is_older, m1, m2 = report['last_modified_diff']
+        if is_older:
+            print "The origin table store is newer by", td
+        else:
+            print "Your local table store is newer by", td
+        print m1
+        print m2
+    print ""
+
+
+def diff_table_stores(ts1, ts2):
+
+    report = {}
+
     try:
         from jsondiff import diff
     except ImportError as e:
@@ -264,17 +288,9 @@ def diff_command(args):
         print "Can't import jsondiff' library:", e
         print "To get diffs, run this: pip install jsondiff"
 
-    domain_info = get_domains().get(args.domain)
-    ts_local = domain_info['table_store']
-    print 'lksdjf ', domain_info['path']
-    local_backend = create_backend('file://~/.drift/config/' + args.domain)
-    ts_local.save_to_backend(local_backend)
-    #ts_local.refresh_metadata()
-
-    origin = ts_local.get_table('domain')['origin']
-
-    print "Diffing local '{}' to origin at {}".format(args.domain, origin)
-    ts_origin = get_store_from_url(origin)
+    # Just to keep things fresh, refresh both table stores
+    ts1.refresh_metadata()
+    ts2.refresh_metadata()
 
     def timediff_is_older(t1, t2):
         """Returns the time diff sans secs, and if 't1' is older than 't2'."""
@@ -285,43 +301,41 @@ def diff_command(args):
         else:
             return str(t1 - t2).split('.', 1)[0], False
 
-    ts_local_meta, ts_origin_meta = ts_local.meta, ts_origin.meta
-    if ts_local_meta['last_modified'] == ts_origin_meta['last_modified']:
-        print "No difference between table stores. Last modified:", ts_local_meta['last_modified']
+    if ts1.meta['last_modified'] == ts2.meta['last_modified']:
+        report['last_modified'] = ts1.meta['last_modified']
     else:
-        td, is_older = timediff_is_older(ts_local_meta['last_modified'], ts_origin_meta['last_modified'])
-        if is_older:
-            print "The origin table store is newer by", td
-        else:
-            print "Your local table store is newer by", td
+        td, is_older = timediff_is_older(ts1.meta['last_modified'], ts2.meta['last_modified'])
+        report['last_modified_diff'] = td, is_older, ts1.meta['last_modified'], ts2.meta['last_modified']
 
-    print ""
+    report['tables'] = {}
 
-    for table_name in ts_local.tables:
-        t1, t2 = ts_local.get_table(table_name), ts_origin.get_table(table_name)
-        print "Comparing  ", table_name,
-        t1_meta, t2_meta = ts_local.get_table_metadata(table_name), ts_origin.get_table_metadata(table_name)
-        if t1_meta['md5'] != t2_meta['md5']:
-            print "\n\tChecksums differ, {}... != {}...".format(t1_meta['md5'][:5], t2_meta['md5'][:5])
+    for table_name in ts1.tables:
+        table_diff = {}
+        report['tables'][table_name] = table_diff
+
+        try:
+            t1, t2 = ts1.get_table(table_name), ts2.get_table(table_name)
+        except KeyError as e:
+            print "Can't compare table '{}' as it's missing from origin.".format(table_name)
+            continue
+
+        t1_meta, t2_meta = ts1.get_table_metadata(table_name), ts2.get_table_metadata(table_name)
+        is_older = False
         if t1_meta['last_modified'] != t2_meta['last_modified']:
-            print "\tLast modified date differ, {} != {}".format(t1_meta['last_modified'], t2_meta['last_modified'])
             td, is_older = timediff_is_older(t1_meta['last_modified'], t2_meta['last_modified'])
-            if is_older:
-                print "\tThe origin is newer by", td
-            else:
-                print "\tYour local copy is newer by", td
+            table_diff['last_modified'] = td, is_older, t1_meta['last_modified'], t2_meta['last_modified']
 
         if t1_meta['md5'] != t2_meta['md5']:
+            diffdump = None
             if diff:
-                print diff(t2.find(), t1.find(), syntax='symmetric')
-                print ""
+                if is_older:
+                    diffdump = diff(t1.find(), t2.find(), syntax='symmetric', marshal=True)
+                else:
+                    diffdump = diff(t2.find(), t1.find(), syntax='symmetric', marshal=True)
 
-        if t1_meta['md5'] == t2_meta['md5'] and t1_meta['last_modified'] == t2_meta['last_modified']:
-            print "OK"
-        else:
-            print ""
+            table_diff['md5'] = diffdump, is_older, t1_meta['md5'], t2_meta['md5']
 
-    print "Done."
+    return report
 
 
 def addtenant_command(args):
