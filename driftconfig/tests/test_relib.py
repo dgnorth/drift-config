@@ -41,7 +41,7 @@ def make_store(populate, row_as_file=None):
     table2.add_foreign_key('continent_id', 'continents')
 
     if row_as_file:
-        table2.set_row_as_file(use_subfolder=True)
+        table2.set_row_as_file(subfolder_name=table2.name)
 
     if populate:
         # Not a complete list of continents and its countries.
@@ -342,7 +342,7 @@ class TestRelib(unittest.TestCase):
         self.assertEqual(filename, 'test_filename.first.second.json')
 
         # Check subfolder option
-        table.set_row_as_file(use_subfolder=True)
+        table.set_row_as_file(subfolder_name=table.name)
         filename = table.get_filename({'pk1': 'first', 'pk2': 'second'})
         self.assertEqual(filename, 'test_filename/test_filename.first.second.json')
 
