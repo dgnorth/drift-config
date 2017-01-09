@@ -39,7 +39,7 @@ class BackendError(RelibError):
 
 class Table(object):
 
-    TABLENAME_REGEX = re.compile(r"^([\w\d.-]){1,50}$")
+    TABLENAME_REGEX = re.compile(r"^([a-z\d.-]){1,50}$")
     PK_FIELDNAME_REGEX = re.compile(r"^([\w\d.-]){1,50}$")
 
     def __init__(self, table_name, table_store=None):
