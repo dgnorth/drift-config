@@ -79,7 +79,7 @@ for tenant_name in [
     'superkaiju', 'superkaiju-test', 'loadout', 'loadout-test', 'default-livenorth',
     'themachines', 'themachines-test', 'themacines-test2', 'nonnib-livenorth',
 ]:
-    ts.get_table('tenant_names').add({
+    ts.get_table('tenant-names').add({
         'tenant_name': tenant_name,
         'organization_name': 'directivegames', 'product_name': 'superkaiju',
         'reserved_at': datetime.utcnow().isoformat(),

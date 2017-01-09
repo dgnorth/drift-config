@@ -296,7 +296,7 @@ def addtenant_command(args):
     print _format_domain_info(domain_info)
 
     ts = domain_info['table_store']
-    row = ts.get_table('tenant_names').add({
+    row = ts.get_table('tenant-names').add({
         'tenant_name': args.name,
         'organization_name': args.organization,
         'product_name': args.product,
