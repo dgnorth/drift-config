@@ -46,10 +46,9 @@ tiers:
     is_live                 boolean, default=true
 
 
-deployable_names:
+deployable-names:
     deployable_name         string, pk
     display_name            string, required
-    description             string
 
 
 deployables:
@@ -63,7 +62,7 @@ products:
     organization_name       string, fk->organizations
 
 
-tenant_names:
+tenant-names:
     # a tenant name is unique across all tiers
     tenant_name             string, pk
     tier_name               string fk->tiers
@@ -109,17 +108,155 @@ platforms:
 
 api-router/
 
-api-:
+routing:
     tier_name               string, pk, fk->tiers
     deployable_name         string, pk, fk->deployables
-    api                     string
+    api                     string, required
     autoscaling             dict
     release_version         string
 
-    api_keys
-        api_key_name        string, unique
-        api_key_id          string
-        api_key_rules       dict
+
+keys:
+    api_key_name            string, pk
+    product_name            string, fk->products
+    in_use                  boolean, default=true, required
+    create_date             datetime, default=@@utcnow
+    user_name               string
+
+
+key-rules:
+    rule_name               string, pk
+    product_name            string, fk->products
+    rule_type               enum pass|redirect|reject, required, default=pass
+    reject:
+        status_code             integer
+        response_header         dict
+        response_body           dict
+    redirect:
+        tenant_name             string
+
+
+rule-assignments:
+    api_key_name            string, fk->api-keys
+    match_type              string, enum exact|partial
+    version_pattern         string
+    assignment_order        integer
+    rule_name               string, fk->api-key-rules
+
+    meta:
+        required=api_key_name, match_type, version_pattern, assignment_order
+
+
+
+NEW PRODUCT:
+1. add product: dg-superkaiju
+2. create tenant: dg-superkaiju
+3. create api key: dg-superkaiju-8928973
+4. create api keys for users: axl-8289374, matti-8237498, nonnib-8734234
+
+
+this rule is always in play:
+    organization for api key must match target organization.
+    if not, RETURN 403 forbidden, org_mismatch
+
+if no user rule specified, just let it slide.
+
+if rules, but no rule match: RETURN 403 forbidden, version_not_allowed
+
+RULES:
+    0.6.1-bad       return rule_upgrade_superkaiju
+
+    0.6.8           redirect rule_redirect_to_superkaiju_test
+
+    .*-dev          pass
+    .*-editor       pass
+    .*-test         pass
+    0.6.1-test      pass
+    0.6.5           pass
+
+    *               return rule_upgrade_superkaiju
+
+
+version pattern:
+    version from versions table (0.6.1, 0.6.5, 0.7.0, etc...)
+    OR
+    tag, which will be regex'd using find ("thetag", "dev", "editor", etc...)
+
+
+
+KALEO WEB UIX WUNDER:
+
+LIVENORTH SuperKaiju version rules:
+
+REJECT:  3xx and 4xx response
+    0.6.1-woohoo rule_message_to_woohoo
+    0.6.1-bad    rule_upgrade_client
+
+REDIRECT:
+    0.7.0   tenant_name=superkaiju-test
+
+PASS:
+    .*-dev
+    .*-editor
+    .*-test
+    0.6.*
+    0.6.1-test
+
+DEFAULT: rule_upgrade_superkaiju
+
+
+from ue4 github a pretty json is fetched containing all the client actions:
+
+actions:
+upgrade_client
+display_message
+
+
+
+pk=superkaiju,dg-superkaiju-F00BAA12
+version_pattern=*.-dev
+pass=true
+
+pk=superkaiju,dg-superkaiju-F00BAA12
+version_pattern=*.-editor
+pass=true
+
+pk=superkaiju,dg-superkaiju-F00BAA12
+version_pattern=0.6.1
+pass=true
+
+pk=superkaiju,dg-superkaiju-F00BAA12
+version_pattern=0.6.1-test
+pass=true
+
+pk=superkaiju,dg-superkaiju-F00BAA12
+version_pattern=*
+pass=false
+rule_name=pissoff
+
+
+
+
+
+
+UIX USE CASE:
+
+product page for SuperKaijuVR:
+
+Pick tier: LIVENORTH
+
+list of api keys:
+    dg-superkaiju-B00B135
+
+
+
+
+
+drift-base/
+
+client-versions:
+    product_name            string fk->products
+    release_version         string
 
 
 
@@ -281,7 +418,6 @@ def get_drift_table_store():
         'properties': {
             'deployable_name': {'pattern': r'^([a-z-]){3,20}$'},
             'display_name': {'type': 'string'},
-            'description': {'type': 'string'},
         },
         'required': ['display_name'],
     })
@@ -376,6 +512,117 @@ def get_drift_table_store():
             }},
         },
     })
+
+    
+    # API ROUTER STUFF - THIS SHOULDN'T REALLY BE IN THIS FILE HERE
+    '''
+    routing:
+        tier_name               string, pk, fk->tiers
+        deployable_name         string, pk, fk->deployables
+        api                     string, required
+        autoscaling             dict
+        release_version         string
+    '''
+    routing = ts.add_table('routing')
+    routing.set_subfolder_name('api-router')
+    routing.add_primary_key('tier_name,deployable_name')
+    routing.add_schema({'type': 'object', 'properties': {
+        'api': {'type': 'string'},
+        'autoscaling': {'type': 'object', 'properties': {
+            'min': {'type': 'integer'},
+            'max': {'type': 'integer'},
+            'desired': {'type': 'integer'},
+            'instance_type': {'type': 'string'},
+        }},
+        'release_version': {'type': 'string'},
+    }})
+
+
+    '''
+    keys:
+        api_key_name            string, pk
+        product_name            string, fk->products
+        in_use                  boolean, default=true, required
+        create_date             datetime, default=@@utcnow
+        user_name               string
+    '''
+    keys = ts.add_table('api-keys')
+    keys.set_subfolder_name('api-router')
+    keys.add_primary_key('api_key_name')
+    keys.add_foreign_key('product_name', 'products')
+    keys.add_schema({
+        'type': 'object', 
+        'properties': 
+        {
+            'in_use': {'type': 'boolean'},
+            'create_date': {'pattern': 'date-time'},
+            'user_name': {'type': 'string'},
+        },
+        'required': ['in_use'],
+    })
+    keys.add_default_values({'in_use': True, 'create_date': '@@utcnow'})
+
+    '''
+    key-rules:
+        rule_name               string, pk
+        product_name            string, fk->products
+        rule_type               enum pass|redirect|reject, required, default=pass
+        reject:
+            status_code             integer
+            response_header         dict
+            response_body           dict
+        redirect:
+            tenant_name             string
+    '''
+    keyrules = ts.add_table('api-key-rules')
+    keyrules.set_subfolder_name('api-router')
+    keyrules.add_primary_key('rule_name')
+    keyrules.add_foreign_key('product_name', 'products')
+    keyrules.add_schema({
+        'type': 'object', 
+        'properties': 
+        {
+            'rule_type': {'enum': ['pass', 'redirect', 'reject']},
+            'reject': {'type': 'object', 'properties': {
+                'status_code': {'type': 'integer'}, 
+                'response_header': {'type': 'object'}, 
+                'response_body': {'type': 'object'}, 
+            }},
+            'redirect': {'type': 'object', 'properties': {
+                'tenant_name': {'type': 'string'}, 
+            }},
+        },
+        'required': ['rule_type'],
+    })
+    keyrules.add_default_values({'rule_type': 'pass'})
+
+
+    '''
+    rule-assignments:
+        api_key_name            string, fk->api-keys
+        match_type              string, enum exact|partial
+        version_pattern         string
+        assignment_order        integer
+        rule_name               string, fk->api-key-rules
+
+        meta:
+            required=api_key_name, match_type, version_pattern, assignment_order
+    '''
+    ruleass = ts.add_table('api-key-rule-assignments')
+    ruleass.set_subfolder_name('api-router')
+    ruleass.add_primary_key('api_key_name,match_type,version_pattern,assignment_order')
+    ruleass.add_foreign_key('api_key_name', 'api-keys')
+    ruleass.add_foreign_key('rule_name', 'api-key-rules')
+    ruleass.add_schema({
+        'type': 'object', 
+        'properties': 
+        {
+            'match_type': {'enum': ['exact', 'partial']},
+            'version_pattern': {'type': 'string'},
+            'assignment_order': {'type': 'integer'},
+        },
+    })
+
 
     definition = ts.get_definition()
     new_ts = TableStore()
