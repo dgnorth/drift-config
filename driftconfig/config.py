@@ -38,7 +38,7 @@ domain (single row):
 organizations:
     organization_name       string, pk
     short_name              string, required
-    display_name: string
+    display_name:           string
 
 
 tiers:
@@ -59,17 +59,16 @@ deployables:
 
 products:
     product_name            string, pk
-    organization_name       string, fk->organizations
+    organization_name       string, fk->organizations, required
 
 
 tenant-names:
     # a tenant name is unique across all tiers
     tenant_name             string, pk
-    tier_name               string fk->tiers
-    product_name            string fk->products
-    organization_name       string fk->organizations
+    product_name            string, fk->products, required
+    organization_name       string, fk->organizations, required
     reserved_at             date-time
-    reserved_by             date-time
+    reserved_by             string
 
 
 tenants:
@@ -116,36 +115,32 @@ routing:
     release_version         string
 
 
-keys:
+api-keys:
     api_key_name            string, pk
-    product_name            string, fk->products
+    product_name            string, fk->products, required
     in_use                  boolean, default=true, required
     create_date             datetime, default=@@utcnow
     user_name               string
 
 
-key-rules:
+api-key-rules:
     rule_name               string, pk
-    product_name            string, fk->products
+    product_name            string, fk->products, required
     rule_type               enum pass|redirect|reject, required, default=pass
-    reject:
-        status_code             integer
-        response_header         dict
-        response_body           dict
+    response_header         dict
     redirect:
         tenant_name             string
+    reject:
+        status_code             integer
+        response_body           dict
 
 
-rule-assignments:
-    api_key_name            string, fk->api-keys
-    match_type              string, enum exact|partial
-    version_pattern         string
-    assignment_order        integer
+api-rule-assignments:
+    api_key_name            string, fk->api-keys, required
+    match_type              string, enum exact|partial, required
+    version_pattern         string, required
+    assignment_order        integer, required
     rule_name               string, fk->api-key-rules
-
-    meta:
-        required=api_key_name, match_type, version_pattern, assignment_order
-
 
 
 NEW PRODUCT:
@@ -443,6 +438,7 @@ def get_drift_table_store():
         'properties': {
             'product_name': {'pattern': r'^([a-z0-9-]){3,35}$'},
         },
+        'required': ['organization_name'],
     })
 
     tenant_names = ts.add_table('tenant-names')
@@ -456,7 +452,7 @@ def get_drift_table_store():
             'reserved_at': {'format': 'date-time'},
             'reserved_by': {'type': 'string'},
         },
-        'required': ['organization_name', 'product_name'],
+        'required': ['product_name', 'organization_name'],
     })
 
     tenants = ts.add_table('tenants')
@@ -539,9 +535,9 @@ def get_drift_table_store():
 
 
     '''
-    keys:
+    api-keys:
         api_key_name            string, pk
-        product_name            string, fk->products
+        product_name            string, fk->products, required
         in_use                  boolean, default=true, required
         create_date             datetime, default=@@utcnow
         user_name               string
@@ -555,24 +551,24 @@ def get_drift_table_store():
         'properties': 
         {
             'in_use': {'type': 'boolean'},
-            'create_date': {'pattern': 'date-time'},
+            'create_date': {'format': 'date-time'},
             'user_name': {'type': 'string'},
         },
-        'required': ['in_use'],
+        'required': ['product_name', 'in_use'],
     })
     keys.add_default_values({'in_use': True, 'create_date': '@@utcnow'})
 
     '''
-    key-rules:
+    api-key-rules:
         rule_name               string, pk
-        product_name            string, fk->products
+        product_name            string, fk->products, required
         rule_type               enum pass|redirect|reject, required, default=pass
-        reject:
-            status_code             integer
-            response_header         dict
-            response_body           dict
+        response_header         dict
         redirect:
             tenant_name             string
+        reject:
+            status_code             integer
+            response_body           dict
     '''
     keyrules = ts.add_table('api-key-rules')
     keyrules.set_subfolder_name('api-router')
@@ -583,32 +579,29 @@ def get_drift_table_store():
         'properties': 
         {
             'rule_type': {'enum': ['pass', 'redirect', 'reject']},
-            'reject': {'type': 'object', 'properties': {
-                'status_code': {'type': 'integer'}, 
-                'response_header': {'type': 'object'}, 
-                'response_body': {'type': 'object'}, 
-            }},
+            'response_header': {'type': 'object'}, 
             'redirect': {'type': 'object', 'properties': {
                 'tenant_name': {'type': 'string'}, 
             }},
+            'reject': {'type': 'object', 'properties': {
+                'status_code': {'type': 'integer'}, 
+                'response_body': {'type': 'object'}, 
+            }},
         },
-        'required': ['rule_type'],
+        'required': ['product_name', 'rule_type'],
     })
     keyrules.add_default_values({'rule_type': 'pass'})
 
 
     '''
-    rule-assignments:
-        api_key_name            string, fk->api-keys
-        match_type              string, enum exact|partial
-        version_pattern         string
-        assignment_order        integer
+    api-rule-assignments:
+        api_key_name            string, fk->api-keys, required
+        match_type              string, enum exact|partial, required
+        version_pattern         string, required
+        assignment_order        integer, required
         rule_name               string, fk->api-key-rules
-
-        meta:
-            required=api_key_name, match_type, version_pattern, assignment_order
     '''
-    ruleass = ts.add_table('api-key-rule-assignments')
+    ruleass = ts.add_table('api-rule-assignments')
     ruleass.set_subfolder_name('api-router')
     ruleass.add_primary_key('api_key_name,match_type,version_pattern,assignment_order')
     ruleass.add_foreign_key('api_key_name', 'api-keys')
@@ -621,6 +614,7 @@ def get_drift_table_store():
             'version_pattern': {'type': 'string'},
             'assignment_order': {'type': 'integer'},
         },
+        'requiredxxx': ['product_name', 'rule_type'],
     })
 
 
