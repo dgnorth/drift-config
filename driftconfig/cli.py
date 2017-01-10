@@ -191,6 +191,9 @@ def migrate_command(args):
             path_name = self.get_filename(file_name)
             if not os.path.exists(path_name):
                 # Attempt to create it just-in-time as a table with zero rows
+                head, tail = os.path.split(path_name)
+                if not os.path.exists(head):
+                    os.makedirs(head)
                 with open(path_name, 'w') as f:
                     f.write('[]\n')
             return super(PatchBackend, self).load_data(file_name)
