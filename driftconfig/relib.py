@@ -258,6 +258,10 @@ class Table(object):
         """
         self._default_values = copy.deepcopy(default_values)
 
+    def set_subfolder_name(self, subfolder_name):
+        """The table file or fileswill be placed in a subfolder called 'subfolder_name'."""
+        self._subfolder = subfolder_name
+
     def set_row_as_file(self, subfolder_name=None, group_by=None):
         """
         When serializing the table, group rows together into separate files.
