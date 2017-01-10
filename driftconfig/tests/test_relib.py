@@ -258,7 +258,7 @@ class TestRelib(unittest.TestCase):
     def test_schema(self):
         ts = TableStore()
 
-        table = ts.add_table('test_table')
+        table = ts.add_table('test-table')
         table.add_primary_key('id')
         table.add_schema({
             'type': 'object',
@@ -305,12 +305,12 @@ class TestRelib(unittest.TestCase):
 
 
     def test_serialization_filenames(self):
-        table = Table('test_filename')
+        table = Table('test-filename')
         table.add_primary_key('pk')
 
         # Basic filename check if table is written out as a whole
         filename = table.get_filename()
-        self.assertEqual(filename, 'test_filename.json')
+        self.assertEqual(filename, 'test-filename.json')
 
         # Set table to write out each row separately
         table.set_row_as_file()
@@ -323,11 +323,11 @@ class TestRelib(unittest.TestCase):
 
         # Do a couple of check now
         filename = table.get_filename({'pk': 'bob'})
-        self.assertEqual(filename, 'test_filename.bob.json')
+        self.assertEqual(filename, 'test-filename.bob.json')
         filename = table.get_filename({'pk': 10055})
-        self.assertEqual(filename, 'test_filename.10055.json')
+        self.assertEqual(filename, 'test-filename.10055.json')
 
-        table = Table('test_filename')
+        table = Table('test-filename')
         table.add_primary_key('pk1,pk2')
 
         # Make sure call fails as no set_row_as_file has been defined yet.
@@ -339,16 +339,16 @@ class TestRelib(unittest.TestCase):
         # Define row as file and test row filename creation.
         table.set_row_as_file()
         filename = table.get_filename({'pk1': 'first', 'pk2': 'second'})
-        self.assertEqual(filename, 'test_filename.first.second.json')
+        self.assertEqual(filename, 'test-filename.first.second.json')
 
         # Check subfolder option
         table.set_row_as_file(subfolder_name=table.name)
         filename = table.get_filename({'pk1': 'first', 'pk2': 'second'})
-        self.assertEqual(filename, 'test_filename/test_filename.first.second.json')
+        self.assertEqual(filename, 'test-filename/test-filename.first.second.json')
 
         # Check index file name
         filename = table.get_filename(is_index_file=True)
-        self.assertEqual(filename, 'test_filename/#.test_filename.json')
+        self.assertEqual(filename, 'test-filename/#.test-filename.json')
 
     def test_serialization(self):
         # Test serializing two tables which have master-detail relationship.
@@ -411,7 +411,7 @@ class TestRelib(unittest.TestCase):
 
     def test_single_row_table(self):
         ts = make_store(populate=True)
-        srt = ts.add_table('doc_test', single_row=True)
+        srt = ts.add_table('doc-test', single_row=True)
         doc = srt.add({'field1': 'something'})
         doc['field1']
 
