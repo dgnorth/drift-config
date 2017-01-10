@@ -67,7 +67,7 @@ tenant-names:
     tenant_name             string, pk
     product_name            string, fk->products, required
     organization_name       string, fk->organizations, required
-    reserved_at             date-time
+    reserved_at             date-time, default=@@utcnow
     reserved_by             string
 
 
@@ -454,6 +454,7 @@ def get_drift_table_store():
         },
         'required': ['product_name', 'organization_name'],
     })
+    tenant_names.add_default_values({'reserved_at': '@@utcnow'})
 
     tenants = ts.add_table('tenants')
     tenants.add_primary_key('tier_name,deployable_name,tenant_name')
