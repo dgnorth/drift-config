@@ -113,8 +113,8 @@ class Table(object):
                 if set(c['foreign_key_fields']).issubset(row):
                     foreign_row = self.get_foreign_row(None, c['table'], c['foreign_key_fields'], _row=row)
                     if len(foreign_row) < 1:
-                        raise ConstraintError("Foreign key record in '{}' not found {}.".format(
-                            c['table'], {k: row[k] for k in c['foreign_key_fields']}))
+                        raise ConstraintError("In table '{}', foreign key record in '{}' not found {}.\nRow data:\n{}".format(
+                            self.name, c['table'], {k: row[k] for k in c['foreign_key_fields']}, json.dumps(row, indent=4)))
 
         # Check Json schema format compliance
         check_schema(row, self._schema, "Adding row to {}".format(self))
@@ -186,7 +186,6 @@ class Table(object):
         """
         Remove row from table identified by 'primary_key'.
         """
-
         del self._rows[self._canonicalize_key(primary_key)]
 
     def add_primary_key(self, primary_key_fields):
@@ -773,7 +772,7 @@ def get_store_from_url(url):
 
 def copy_table_store(table_store):
     """"Returns a stand-alone copy of 'table_store'."""
-    backend = create_backend('memory')
+    backend = create_backend('memory://')
     table_store.save_to_backend(backend)
     return TableStore(backend)
 
