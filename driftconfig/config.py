@@ -449,7 +449,7 @@ def get_drift_table_store():
     tenant_names.add_schema({
         'type': 'object',
         'properties': {
-            'tenant_name': {'pattern': r'^([a-z0-9-]){3,20}$'},
+            'tenant_name': {'pattern': r'^([a-z0-9-]){3,30}$'},
             'reserved_at': {'format': 'date-time'},
             'reserved_by': {'type': 'string'},
         },
