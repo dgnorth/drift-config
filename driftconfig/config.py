@@ -120,7 +120,8 @@ api-keys:
     product_name            string, fk->products, required
     in_use                  boolean, default=true, required
     create_date             datetime, default=@@utcnow
-    user_name               string
+    key_type                enum product|custom, default=product, required
+    custom_data             string
 
 
 api-key-rules:
@@ -138,8 +139,8 @@ api-key-rules:
 api-rule-assignments:
     api_key_name            string, fk->api-keys, required
     match_type              string, enum exact|partial, required
-    version_pattern         string, required
     assignment_order        integer, required
+    version_patterns        array of string, required
     rule_name               string, fk->api-key-rules
 
 
@@ -510,7 +511,7 @@ def get_drift_table_store():
         },
     })
 
-    
+
     # API ROUTER STUFF - THIS SHOULDN'T REALLY BE IN THIS FILE HERE
     '''
     routing:
@@ -541,23 +542,25 @@ def get_drift_table_store():
         product_name            string, fk->products, required
         in_use                  boolean, default=true, required
         create_date             datetime, default=@@utcnow
-        user_name               string
+        key_type                enum product|custom, default=product, required
+        custom_data             string
     '''
     keys = ts.add_table('api-keys')
     keys.set_subfolder_name('api-router')
     keys.add_primary_key('api_key_name')
     keys.add_foreign_key('product_name', 'products')
     keys.add_schema({
-        'type': 'object', 
-        'properties': 
+        'type': 'object',
+        'properties':
         {
             'in_use': {'type': 'boolean'},
             'create_date': {'format': 'date-time'},
-            'user_name': {'type': 'string'},
+            'key_type': {'enum': ['product', 'custom']},
+            'custom_data': {'type': 'string'},
         },
-        'required': ['product_name', 'in_use'],
+        'required': ['product_name', 'in_use', 'key_type'],
     })
-    keys.add_default_values({'in_use': True, 'create_date': '@@utcnow'})
+    keys.add_default_values({'in_use': True, 'create_date': '@@utcnow', 'key_type': 'product'})
 
     '''
     api-key-rules:
@@ -576,17 +579,17 @@ def get_drift_table_store():
     keyrules.add_primary_key('rule_name')
     keyrules.add_foreign_key('product_name', 'products')
     keyrules.add_schema({
-        'type': 'object', 
-        'properties': 
+        'type': 'object',
+        'properties':
         {
             'rule_type': {'enum': ['pass', 'redirect', 'reject']},
-            'response_header': {'type': 'object'}, 
+            'response_header': {'type': 'object'},
             'redirect': {'type': 'object', 'properties': {
-                'tenant_name': {'type': 'string'}, 
+                'tenant_name': {'type': 'string'},
             }},
             'reject': {'type': 'object', 'properties': {
-                'status_code': {'type': 'integer'}, 
-                'response_body': {'type': 'object'}, 
+                'status_code': {'type': 'integer'},
+                'response_body': {'type': 'object'},
             }},
         },
         'required': ['product_name', 'rule_type'],
@@ -598,24 +601,24 @@ def get_drift_table_store():
     api-rule-assignments:
         api_key_name            string, fk->api-keys, required
         match_type              string, enum exact|partial, required
-        version_pattern         string, required
         assignment_order        integer, required
+        version_patterns        array of string, required
         rule_name               string, fk->api-key-rules
     '''
     ruleass = ts.add_table('api-rule-assignments')
     ruleass.set_subfolder_name('api-router')
-    ruleass.add_primary_key('api_key_name,match_type,version_pattern,assignment_order')
+    ruleass.add_primary_key('api_key_name,match_type,assignment_order')
     ruleass.add_foreign_key('api_key_name', 'api-keys')
     ruleass.add_foreign_key('rule_name', 'api-key-rules')
     ruleass.add_schema({
-        'type': 'object', 
-        'properties': 
+        'type': 'object',
+        'properties':
         {
             'match_type': {'enum': ['exact', 'partial']},
-            'version_pattern': {'type': 'string'},
             'assignment_order': {'type': 'integer'},
+            'version_patterns': {'type': 'array', 'items': {'type': 'string'}},
         },
-        'requiredxxx': ['product_name', 'rule_type'],
+        'required': ['version_patterns'],
     })
 
 
