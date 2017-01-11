@@ -16,13 +16,13 @@ log = logging.getLogger(__name__)
 def check_schema(json_object, schema, title=None):
     """Do json schema check on object and abort with 400 error if it fails."""
     try:
-        ###jsonschema.validate(json_object, schema, format_checker=jsonschema.FormatChecker())
-        jsonschema.validate(json_object, schema)
+        jsonschema.validate(json_object, schema, format_checker=jsonschema.FormatChecker())
+        ###jsonschema.validate(json_object, schema)
     except jsonschema.ValidationError as e:
         report = _generate_validation_error_report(e, json_object)
         if title:
             report = "Schema check failed: %s\n%s" % (title, report)
-        log.info("Schema validation failure\n%s", report)
+        e.message = report
         raise
 
 def _generate_validation_error_report(e, json_object):
@@ -84,7 +84,6 @@ def _generate_validation_error_report(e, json_object):
 
         s = "Error in line {}:\n".format(errline + 1)
         s += "\n".join(report)
-        s += "\n\n" + str(e)
     else:
         s = str(e)
 
