@@ -6,11 +6,14 @@ from datetime import datetime, timedelta
 import time
 import json
 import getpass
+import logging
 
 from driftconfig.relib import create_backend, get_store_from_url
 from driftconfig.config import get_drift_table_store, get_domains
 from driftconfig.backends import FileBackend
 from driftconfig.util import diff_table_stores
+
+log = logging.getLogger(__name__)
 
 
 def get_options(parser):
@@ -337,6 +340,7 @@ def run_command(args):
 
 
 def main(as_module=False):
+    logging.basicConfig(level='INFO')
     import argparse
     parser = argparse.ArgumentParser(description="")
     get_options(parser)
