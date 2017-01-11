@@ -94,7 +94,8 @@ class TestRelib(unittest.TestCase):
         ts.get_table('api-keys').add({
             'api_key_name': 'matti-555',
             'product_name': 'dg-unittest-product',
-            'user_name': 'matti',
+            'key_type': 'custom',
+            'custom_data': 'mr.bub',
             })
 
         ts.get_table('api-key-rules').add({
