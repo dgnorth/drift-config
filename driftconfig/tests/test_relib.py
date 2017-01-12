@@ -177,7 +177,7 @@ class TestRelib(unittest.TestCase):
         with self.assertRaises(ConstraintError) as context:
             table1.add({'pk_field': 5, 'unique_field': 'iamunique5', 'tag': 'burgundy'})
 
-        self.assertIn("Foreign key record in 'table2' not found", str(context.exception))
+        self.assertIn("foreign key record in 'table2' not found", str(context.exception))
 
         # Get foreign table row. Only 'blue' row is linked. The 'red' one is orphaned.
         self.assertEqual([], table1.get_foreign_row(row1, 'table2'))
@@ -220,7 +220,7 @@ class TestRelib(unittest.TestCase):
                 'foreign_field1': 'bork', 'foreign_field2': 'x',
             })
 
-        self.assertIn("Foreign key record in 'table3' not found", str(context.exception))
+        self.assertIn("foreign key record in 'table3' not found", str(context.exception))
 
 
         # Test all cases with a single row table
@@ -250,7 +250,7 @@ class TestRelib(unittest.TestCase):
                 'foreign_field1': 'bork', 'foreign_field2': 'x',
             })
 
-        self.assertIn("Foreign key record in 'table3' not found", str(context.exception))
+        self.assertIn("foreign key record in 'table3' not found", str(context.exception))
 
         # Clear table store
         ts.clear()
@@ -279,7 +279,7 @@ class TestRelib(unittest.TestCase):
         with self.assertRaises(jsonschema.ValidationError) as context:
             table.add({'id': 123, 'a_pattern': 'not conforming'})
 
-        self.assertIn("'not conforming' does not match", str(context.exception))
+        self.assertIn("Schema check failed", str(context.exception))
 
         # Define a default value for the required property and make sure we pass.
         table.add_default_values({'a_pattern': 'some-value'})
@@ -301,7 +301,7 @@ class TestRelib(unittest.TestCase):
         with self.assertRaises(jsonschema.ValidationError) as context:
             doc = single.add({'a_pattern': 'not conforming'})
 
-        self.assertIn("'not conforming' does not match", str(context.exception))
+        self.assertIn("Schema check failed", str(context.exception))
 
 
     def test_serialization_filenames(self):
