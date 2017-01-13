@@ -651,7 +651,7 @@ class TableStore(object):
         """
         Save this table store definition and table data to 'backend'.
         """
-        backend.start_batch()
+        backend.start_saving()
         backend.save_data(self.TS_DEF_FILENAME, self.get_definition())
 
         # Save system tables last, as they contain info gotten from this serialization
@@ -669,21 +669,31 @@ class TableStore(object):
         for table in system_tables:
             table.save(backend.save_data)
 
-        backend.commit_batch()
+        backend.done_saving()
 
-    def load_from_backend(self, backend, skip_definition=False):
+    def load_from_backend(self, backend, skip_definition=False, skip_for_version=None):
         """
         Initialize this table store using data from 'backend'.
         If 'skip_definition' is True, the current definition in the
         TableStore object is used, instead of the one stored in the
         backend.
+        If 'skip_for_version' is set, the function will skip loading
+        in from 'backend' if the other table store is at the same
+        version.
+
+        The function returns the version of the new table store.
         """
+        backend.start_loading()
         definition = backend.load_data(self.TS_DEF_FILENAME)
         if not skip_definition:
             self.init_from_definition(definition)
         self._origin = str(backend)
         for table in self._tables.values():
             table.load(backend.load_data)
+            if skip_for_version and skip_for_version == table.get()['version']:
+                break
+        backend.done_loading()
+        return self.meta.get()['version']
 
     def get_table_metadata(self, table_name):
         for table_meta in self.meta['tables']:
@@ -733,6 +743,19 @@ class TableStore(object):
             'tables': [],
         })
 
+    def reload_from_origin(self, origin):
+        my_version = self.meta.get()['version']
+        log.info("Reloading version %s from origin '%s'", my_version, origin)
+        new_ts = TableStore()
+        backend = create_backend(origin)
+        new_version = new_ts.load_from_backend(backend, skip_definition=True, skip_for_version=my_version)
+        if new_version == my_version:
+            log.info("Version at local and origin is same, %s.", my_version)
+            return self
+        else:
+            log.info("New version % loaded from origin.", new_version)
+            return new_ts
+
 
 class Backend(object):
     """
@@ -741,10 +764,16 @@ class Backend(object):
 
     schemes = {}  # Backend registry using url scheme as key.
 
-    def start_batch(self):
-        self.md5 = {}
+    def start_saving(self):
+        pass
 
-    def commit_batch(self):
+    def start_loading(self):
+        pass
+
+    def done_saving(self):
+        pass
+
+    def done_loading(self):
         pass
 
     def save_data(self, file_name, data):

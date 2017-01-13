@@ -24,6 +24,7 @@ def get_options(parser):
         dest="command",
     )
 
+    # 'init' command
     p = subparsers.add_parser(
         'init',
         help='Initialize configuration from a given source.',
@@ -35,12 +36,14 @@ def get_options(parser):
         action='store',
     )
 
+    # 'list' command
     p = subparsers.add_parser(
         'list',
         help='List locally stored configurations.',
         description="List out all configuration that are stored locally."
     )
 
+    # 'pull' command
     p = subparsers.add_parser(
         'pull',
         help='Pull config.',
@@ -52,10 +55,16 @@ def get_options(parser):
         help='pull config continuously for 1 minute.'
     )
     p.add_argument(
+        '--force',
+        action='store_true',
+        help='Force a pull from origin even though local version matches.'
+    )
+    p.add_argument(
         'domain',
         action='store', nargs='?',
     )
 
+    # 'migrate' command
     p = subparsers.add_parser(
         'migrate',
         help='Migrate config.',
@@ -66,6 +75,7 @@ def get_options(parser):
         action='store',
     )
 
+    # 'push' command
     p = subparsers.add_parser(
         'push',
         help='Push config.',
@@ -76,6 +86,7 @@ def get_options(parser):
         action='store',
     )
 
+    # 'create' command
     p = subparsers.add_parser(
         'create',
         help='Create a new config.',
@@ -95,6 +106,7 @@ def get_options(parser):
         action='store', help="The name of the domain owner or organization."
     )
 
+    # 'diff' command
     p = subparsers.add_parser(
         'diff',
         help='Diff origin.',
@@ -105,6 +117,7 @@ def get_options(parser):
         action='store', help="Short name to identify the domain or owner of the config.",
     )
 
+    # 'addtenant' command
     p = subparsers.add_parser(
         'addtenant',
         help='Add a new tenant',
@@ -172,9 +185,17 @@ def _pull_command(args):
     for domain_name, domain_info in get_domains().items():
         if args.domain and args.domain != domain_name:
             continue
+
         origin = domain_info['table_store'].get_table('domain')['origin']
-        print "Pulling '{}' from {}".format(domain_name, origin)
-        ts = get_store_from_url(origin)
+
+        if args.force:
+            print "Pulling with force '{}' from {}".format(domain_name, origin)
+            ts = get_store_from_url(origin)
+        else:
+            print "Pulling '{}' from {}".format(domain_name, origin)
+            ts = domain_info['table_store']
+            ts = ts.reload_from_origin(origin)
+
         local_store = create_backend('file://' + domain_info['path'])
         ts.save_to_backend(local_store)
         print "Config saved at", domain_info['path']
@@ -204,7 +225,6 @@ def migrate_command(args):
     local_store = PatchBackend(path)
     ts.load_from_backend(local_store, skip_definition=True)
     ts.save_to_backend(local_store)
-    print "Done."
 
 
 def now():
@@ -340,11 +360,15 @@ def run_command(args):
 
 
 def main(as_module=False):
-    logging.basicConfig(level='INFO')
     import argparse
     parser = argparse.ArgumentParser(description="")
+    parser.add_argument('--loglevel')
     get_options(parser)
     args = parser.parse_args()
+
+    if args.loglevel:
+        logging.basicConfig(level=args.loglevel)
+
     fn = globals()["{}_command".format(args.command.replace("-", "_"))]
     fn(args)
 
