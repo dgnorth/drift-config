@@ -125,8 +125,14 @@ api-keys:
 
 
 api-key-rules:
+    product_name            string, pk, fk->products, required
     rule_name               string, pk
-    product_name            string, fk->products, required
+
+    assignment_order        integer, required
+    match_type              string, enum exact|partial, required
+    version_patterns        array of string, required
+    is_active               boolean, required, default=true
+
     rule_type               enum pass|redirect|reject, required, default=pass
     response_header         dict
     redirect:
@@ -135,13 +141,14 @@ api-key-rules:
         status_code             integer
         response_body           dict
 
+# api-rule-assignments:
+#     product_name            string, pk, fk->products, required
+#     assignment_order        integer, pk, required
+#     match_type              string, pk, enum exact|partial, required
+#     version_patterns        array of string, required
+#     rule_name               string, fk->api-key-rules
 
-api-rule-assignments:
-    api_key_name            string, fk->api-keys, required
-    match_type              string, enum exact|partial, required
-    assignment_order        integer, required
-    version_patterns        array of string, required
-    rule_name               string, fk->api-key-rules
+
 
 
 NEW PRODUCT:
@@ -599,9 +606,9 @@ def get_drift_table_store():
 
     '''
     api-rule-assignments:
-        api_key_name            string, fk->api-keys, required
-        match_type              string, enum exact|partial, required
-        assignment_order        integer, required
+        api_key_name            string, pk, fk->api-keys, required
+        match_type              string, pk, enum exact|partial, required
+        assignment_order        integer, pk, required
         version_patterns        array of string, required
         rule_name               string, fk->api-key-rules
     '''
