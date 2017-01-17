@@ -6,6 +6,7 @@ import logging
 import os
 import StringIO
 from urlparse import urlparse
+import zipfile
 
 from .relib import Backend, BackendError, register
 
@@ -20,12 +21,13 @@ class S3Backend(Backend):
 
     __scheme__ = 's3'
 
-    def __init__(self, bucket_name, folder_name, region_name=None):
+    def __init__(self, bucket_name, folder_name, region_name=None, etag=None):
         import boto3
         self.s3_client = boto3.client('s3', region_name=region_name)
         self.bucket_name = bucket_name
         self.folder_name = folder_name
         self.region_name = region_name
+        self.etag = etag
 
     @classmethod
     def create_from_url_parts(cls, parts, query):
@@ -200,3 +202,34 @@ class MemoryBackend(Backend):
 
     def load_data(self, file_name):
         return MemoryBackend.archive[self.folder_name][file_name]
+
+
+class ZipEncoded(Backend):
+    """Aggregate class which serializes to and from a single zip file."""
+    def __init__(self, aggregate):
+        self.aggregate = aggregate
+
+    def start_saving(self):
+        self._fp = StringIO.StringIO()
+        self._zipfile = zipfile.ZipFile(self._fp, mode='w', compression=zipfile.ZIP_DEFLATED)
+
+    def done_saving(self):
+        self.aggregate.save_data("_zipped.zip", self._fp.getvalue())
+
+    def start_loading(self):
+        self._fp = StringIO.StringIO()
+        self._fp.write(self.aggregate.load_data("_zipped.zip"))
+        self._fp.seek(0)
+        self._zipfile = zipfile.ZipFile(self._fp)
+
+    def done_loading(self):
+        pass
+
+    def save_data(self, file_name, data):
+        self._zipfile.writestr(file_name, data)
+
+    def load_data(self, file_name):
+        self._zipfile.read(file_name)
+
+    def on_progress(self, message):
+        log.debug(message)
