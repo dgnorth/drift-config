@@ -8,7 +8,7 @@ import json
 import getpass
 import logging
 
-from driftconfig.relib import create_backend, get_store_from_url
+from driftconfig.relib import create_backend, get_store_from_url, push_to_origin, pull_from_origin
 from driftconfig.config import get_drift_table_store, get_domains
 from driftconfig.backends import FileBackend
 from driftconfig.util import diff_table_stores
@@ -84,6 +84,11 @@ def get_options(parser):
     p.add_argument(
         'domain',
         action='store',
+    )
+    p.add_argument(
+        '--force',
+        action='store_true',
+        help='Force a push to origin even though origin has changed.'
     )
 
     # 'create' command
@@ -186,19 +191,13 @@ def _pull_command(args):
         if args.domain and args.domain != domain_name:
             continue
 
-        origin = domain_info['table_store'].get_table('domain')['origin']
+        result = pull_from_origin('file://' + domain_info['path'], args.force)
 
-        if args.force:
-            print "Pulling with force '{}' from {}".format(domain_name, origin)
-            ts = get_store_from_url(origin)
+        if not result['pulled']:
+            print "Pull failed for", domain_name, ". Reason:", result['reason']
+            print "Use --force to force a pull."
         else:
-            print "Pulling '{}' from {}".format(domain_name, origin)
-            ts = domain_info['table_store']
-            ts = ts.reload_from_origin(origin)
-
-        local_store = create_backend('file://' + domain_info['path'])
-        ts.save_to_backend(local_store)
-        print "Config saved at", domain_info['path']
+            print "Config pulled. Reason: ", result['reason']
 
 
 def migrate_command(args):
@@ -257,9 +256,16 @@ def push_command(args):
     ts = domain_info['table_store']
     origin = ts.get_table('domain')['origin']
     print "Pushing local config to source", origin
-    origin_backend = create_backend(origin)
-    ts.save_to_backend(origin_backend)
-    print "Config pushed."
+    result = push_to_origin(ts, args.force)
+    if not result['pushed']:
+        print "Push failed. Reason:", result['reason']
+        print "Origin has changed. Use --force to force push."
+        if 'time_diff' in result:
+            print "Time diff", result['time_diff']
+    else:
+        print "Config pushed. Reason: ", result['reason']
+        local_store = create_backend('file://' + domain_info['path'])
+        ts.save_to_backend(local_store)
 
 
 def create_command(args):

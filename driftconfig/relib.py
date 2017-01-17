@@ -344,15 +344,11 @@ class Table(object):
 
     def save(self, save_data):
         cs = self._save_table_data(save_data)
-        meta = self._table_store.meta.get()
-        table_meta = self._table_store.get_table_metadata(self._table_name)
-        if table_meta['md5'] != cs:
-            # Update 'last_modified' time on both the table and the table store.
-            table_meta['md5'] = cs
-            table_meta['last_modified'] = datetime.utcnow().isoformat() + 'Z'
-            # Update table store timestamp if it's a user table
-            if not self._is_system_table:
-                meta['last_modified'] = datetime.utcnow().isoformat() + 'Z'
+        if not self._is_system_table:
+            table_meta = self._table_store.get_table_metadata(self._table_name)
+            if table_meta['md5'] != cs:
+                table_meta['md5'] = cs
+                table_meta['last_modified'] = datetime.utcnow().isoformat() + 'Z'
 
     def load(self, fetch_from_storage):
         return self._load_table_data(fetch_from_storage)
@@ -370,6 +366,8 @@ class Table(object):
         # Save the rows sorted on primary key.
         rows = [self._rows[k] for k in sorted(self._rows)]
 
+        # TODO: Sunset this, as json serialization is now using sort_keys=True to maintain
+        # consistent md5 checksums.
         def orderly_row(row):
             # Sort Json row object keys so that primary key fields come first, and in the order
             # they were originally defined.
@@ -391,7 +389,7 @@ class Table(object):
 
             if row_per_file:
                 for row in rows:
-                    save_data_check(self.get_filename(row), json.dumps(orderly_row(row), indent=4))
+                    save_data_check(self.get_filename(row), json.dumps(orderly_row(row), indent=4, sort_keys=True))
             else:
                 # Group one or more rows together for each file.
                 group = {}
@@ -400,16 +398,16 @@ class Table(object):
                     group.setdefault(key, []).append(orderly_row(row))
 
                 for rowset in group.values():
-                    save_data_check(self.get_filename(rowset[0]), json.dumps(rowset, indent=4))
+                    save_data_check(self.get_filename(rowset[0]), json.dumps(rowset, indent=4, sort_keys=True))
 
             # Add index so we can read it back in automatically
             index = [{k: row[k] for k in self._pk_fields} for row in rows]
-            save_data_check(self.get_filename(is_index_file=True), json.dumps(index, indent=4))
+            save_data_check(self.get_filename(is_index_file=True), json.dumps(index, indent=4, sort_keys=True))
 
         else:
             # Write out all rows as a list
             rows = [orderly_row(row) for row in rows]
-            save_data_check(self.get_filename(), json.dumps(rows, indent=4))
+            save_data_check(self.get_filename(), json.dumps(rows, indent=4, sort_keys=True))
 
         cs = checksum.hexdigest()
         return cs
@@ -528,7 +526,7 @@ class SingleRowTable(Table):
         Save document.
         """
         doc = self.get() or {}
-        data = json.dumps(doc, indent=4)
+        data = json.dumps(doc, indent=4, sort_keys=True)
         save_data(self.get_filename(), data)
 
         checksum = hashlib.sha256()
@@ -620,7 +618,7 @@ class TableStore(object):
         doc.
         """
         self._tableorder = self._tables.keys()
-        return json.dumps(self, indent=4, cls=TableStoreEncoder)
+        return json.dumps(self, indent=4, cls=TableStoreEncoder, sort_keys=True)
 
     def init_from_definition(self, definition):
         """
@@ -654,46 +652,39 @@ class TableStore(object):
         backend.start_saving()
         backend.save_data(self.TS_DEF_FILENAME, self.get_definition())
 
-        # Save system tables last, as they contain info gotten from this serialization
-        last_modified = self.meta['last_modified']
-        user_tables = [table for table in self._tables.values() if not table._is_system_table]
-        system_tables = [table for table in self._tables.values() if table._is_system_table]
-
-        for table in user_tables:
+        for table in self._tables.values():
             table.save(backend.save_data)
 
-        # If something changed, bump the version
-        if last_modified != self.meta['last_modified']:
-            self.meta.get()['version'] += 1
-
-        for table in system_tables:
-            table.save(backend.save_data)
+        # Calculate checksum for user tables
+        checksum = hashlib.sha256()
+        for table_name in self.tables:
+            md5 = self.get_table_metadata(table_name)['md5']
+            checksum.update(md5)
+        self.meta.get()['checksum'] = checksum.hexdigest()
 
         backend.done_saving()
 
-    def load_from_backend(self, backend, skip_definition=False, skip_for_version=None):
+    def load_from_backend(self, backend, skip_definition=False):
         """
         Initialize this table store using data from 'backend'.
+
         If 'skip_definition' is True, the current definition in the
         TableStore object is used, instead of the one stored in the
         backend.
-        If 'skip_for_version' is set, the function will skip loading
-        in from 'backend' if the other table store is at the same
-        version.
-
-        The function returns the version of the new table store.
         """
         backend.start_loading()
-        definition = backend.load_data(self.TS_DEF_FILENAME)
         if not skip_definition:
+            definition = backend.load_data(self.TS_DEF_FILENAME)
             self.init_from_definition(definition)
         self._origin = str(backend)
-        for table in self._tables.values():
-            table.load(backend.load_data)
-            if skip_for_version and skip_for_version == table.get()['version']:
-                break
+
+        user_tables = [table for table in self._tables.values() if not table._is_system_table]
+        system_tables = [table for table in self._tables.values() if table._is_system_table]
+        for table_list in system_tables, user_tables:
+            for table in table_list:
+                table.load(backend.load_data)
+
         backend.done_loading()
-        return self.meta.get()['version']
 
     def get_table_metadata(self, table_name):
         for table_meta in self.meta['tables']:
@@ -708,9 +699,17 @@ class TableStore(object):
         return table_meta
 
     def refresh_metadata(self):
-        """Helper function to refresh local meta data."""
-        b = create_backend('memory://_TMP')
-        self.save_to_backend(b)
+        """Refreshes local meta data and returns a tuple of old and new metadata."""
+        old = copy.deepcopy(self.meta.get())
+        backend = create_backend('memory://' + datetime.utcnow().isoformat() + 'Z')
+        self.save_to_backend(backend)
+        new = self.meta.get()
+        if old != new:
+            # If something changed, bump the version and timestamp
+            new['version'] += 1
+            new['last_modified'] = datetime.utcnow().isoformat() + 'Z'
+
+        return old, new
 
     def _add_metatable(self):
         """Add table to contain TableStore meta info."""
@@ -724,6 +723,7 @@ class TableStore(object):
                 'last_modified': {'format': 'date-time'},
                 'origin': {'type': 'string'},
                 'version': {'type': 'integer'},
+                'checksum': {'type': 'string'},
 
                 'tables': {'type': 'array', 'items': {
                     'type': 'object',
@@ -743,18 +743,12 @@ class TableStore(object):
             'tables': [],
         })
 
-    def reload_from_origin(self, origin):
-        my_version = self.meta.get()['version']
-        log.info("Reloading version %s from origin '%s'", my_version, origin)
-        new_ts = TableStore()
-        backend = create_backend(origin)
-        new_version = new_ts.load_from_backend(backend, skip_definition=True, skip_for_version=my_version)
-        if new_version == my_version:
-            log.info("Version at local and origin is same, %s.", my_version)
-            return self
-        else:
-            log.info("New version % loaded from origin.", new_version)
-            return new_ts
+
+def load_meta_from_backend(backend):
+    """Load TableStore from 'backend' that contains only the meta info."""
+    ts = TableStore()
+    ts.meta.load(backend.load_data)
+    return ts
 
 
 class Backend(object):
@@ -801,7 +795,7 @@ def get_store_from_url(url):
 
 def copy_table_store(table_store):
     """"Returns a stand-alone copy of 'table_store'."""
-    backend = create_backend('memory://')
+    backend = create_backend('memory://' + datetime.utcnow().isoformat() + 'Z')
     table_store.save_to_backend(backend)
     return TableStore(backend)
 
@@ -810,3 +804,70 @@ def register(cls):
     """Decorator to register Backend class for a particular URL scheme."""
     Backend.schemes[cls.__scheme__] = cls
     return cls
+
+
+def push_to_origin(local_ts, force=False):
+    """
+    Pushed 'local_ts' to origin.
+    Returns a dict with 'pushed' as True or False depending on success.
+
+    If local store has not been modified since last pull, and the origin
+    has the same version, no upload is actually performed and the return
+    value contains 'reason' = 'push_skipped_crc_match'.
+
+    If local store has indeed been modified since last pull, but the origin
+    has stayed unchanged, upload is performed and the return value contains
+    'reason' = 'pushed_to_origin'.
+
+    If origin has changed since last pull, the push is cancelled and the
+    return value contains 'reason' = 'checksum_differ' and 'time_diff' is
+    the time difference between the changes.
+
+    To force a push to a modified origin, set 'force' = True.
+    """
+    origin = local_ts.get_table('domain')['origin']
+    origin_backend = create_backend(origin)
+    origin_ts = load_meta_from_backend(origin_backend)
+
+    if not force and local_ts.meta['checksum'] != origin_ts.meta['checksum']:
+        local_modified = parse_8601(local_ts.meta['last_modified'])
+        origin_modified = parse_8601(origin_ts.meta['last_modified'])
+        return {'pushed': False, 'reason': 'checksum_differ', 'time_diff': origin_modified - local_modified}
+
+    crc_match = local_ts.meta['checksum'] == origin_ts.meta['checksum']
+    old, new = local_ts.refresh_metadata()
+
+    if crc_match and old == new:
+        return {'pushed': True, 'reason': 'push_skipped_crc_match'}
+
+    local_ts.save_to_backend(origin_backend)
+    return {'pushed': True, 'reason': 'pushed_to_origin'}
+
+
+def pull_from_origin(local_url, force=False):
+    local_backend = create_backend(local_url)
+    local_ts = TableStore(local_backend)
+    origin = local_ts.get_table('domain')['origin']
+    origin_backend = create_backend(origin)
+    origin_ts = load_meta_from_backend(origin_backend)
+    old, new = local_ts.refresh_metadata()
+
+    if old != new and not force:
+        return {'pulled': False, 'reason': 'local_is_modified'}
+
+    crc_match = local_ts.meta['checksum'] == origin_ts.meta['checksum']
+    if crc_match:
+        return {'pulled': True, 'reason': 'pull_skipped_crc_match'}
+
+    origin_ts = TableStore(origin_backend)
+    origin_ts.refresh_metadata()
+    origin_ts.save_to_backend(local_backend)
+    return {'pulled': True, 'reason': 'pulled_from_origin'}
+
+
+def parse_8601(s):
+    return datetime.strptime(s, "%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def _(d):
+    return json.dumps(d, indent=4, sort_keys=True)
