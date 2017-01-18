@@ -828,13 +828,13 @@ def push_to_origin(local_ts, force=False):
     origin = local_ts.get_table('domain')['origin']
     origin_backend = create_backend(origin)
     origin_ts = load_meta_from_backend(origin_backend)
+    crc_match = local_ts.meta['checksum'] == origin_ts.meta['checksum']
 
-    if not force and local_ts.meta['checksum'] != origin_ts.meta['checksum']:
+    if not force and not crc_match:
         local_modified = parse_8601(local_ts.meta['last_modified'])
         origin_modified = parse_8601(origin_ts.meta['last_modified'])
         return {'pushed': False, 'reason': 'checksum_differ', 'time_diff': origin_modified - local_modified}
 
-    crc_match = local_ts.meta['checksum'] == origin_ts.meta['checksum']
     old, new = local_ts.refresh_metadata()
 
     if crc_match and old == new:
@@ -860,7 +860,6 @@ def pull_from_origin(local_url, force=False):
         return {'pulled': True, 'reason': 'pull_skipped_crc_match'}
 
     origin_ts = TableStore(origin_backend)
-    origin_ts.refresh_metadata()
     origin_ts.save_to_backend(local_backend)
     return {'pulled': True, 'reason': 'pulled_from_origin'}
 
