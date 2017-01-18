@@ -661,7 +661,10 @@ class TableStore(object):
         backend.start_saving()
         backend.save_data(self.TS_DEF_FILENAME, self.get_definition())
 
-        for table in self._tables.values():
+        user_tables = [table for table in self._tables.values() if not table._is_system_table]
+        system_tables = [table for table in self._tables.values() if table._is_system_table]
+
+        for table in user_tables:
             table.save(backend.save_data)
 
         # Calculate checksum for user tables
@@ -670,6 +673,9 @@ class TableStore(object):
             md5 = self.get_table_metadata(table_name)['md5']
             checksum.update(md5)
         self.meta.get()['checksum'] = checksum.hexdigest()
+
+        for table in system_tables:
+            table.save(backend.save_data)
 
         backend.done_saving()
 
