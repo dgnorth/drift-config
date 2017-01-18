@@ -780,6 +780,7 @@ class TSTransactionError(RuntimeError):
 class TSTransaction():
     def __init__(self, url=None):
         self._url = url
+        self._ts = None
 
     def __enter__(self):
         if self._url:
@@ -788,9 +789,9 @@ class TSTransaction():
             domains = get_domains().values()
             if len(domains) != 1:
                 raise RuntimeError("Can't figure out a single local table store: {}".format(d for d in domains))
-            ts = domains[0]["table_store"]  # Assume 1 domain
+            self._ts = domains[0]["table_store"]  # Assume 1 domain
             self._url = 'file://' + domains[0]['path']
-            result = pull_from_origin(ts)
+            result = pull_from_origin(self._ts)
             if not result['pulled']:
                 e = TSTransactionError("Can't pull latest table store: {}".format(result['reason']))
                 e.result = result
