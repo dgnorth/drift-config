@@ -9,7 +9,7 @@ import jsonschema
 from driftconfig.relib import TableStore, Table, TableError, ConstraintError, Backend
 from driftconfig.backends import FileBackend
 
-from driftconfig.config import get_drift_table_store
+from driftconfig.config import get_drift_table_store, TSTransaction
 
 # TODO:
 # - test 'check_only' in Table.add().
@@ -115,9 +115,13 @@ class TestRelib(unittest.TestCase):
 
 
 
+class TestPushPull(unittest.TestCase):
 
+    def test_ts_transaction(self):
 
-
+        with TSTransaction() as ts:
+            row = ts.get_table('domain').get()
+            row['display_name'] += " moar! "
 
 
 

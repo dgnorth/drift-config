@@ -777,7 +777,7 @@ class TSTransactionError(RuntimeError):
     pass
 
 
-class TSTransaction():
+class TSTransaction(object):
     def __init__(self, url=None):
         self._url = url
         self._ts = None
@@ -796,6 +796,8 @@ class TSTransaction():
                 e = TSTransactionError("Can't pull latest table store: {}".format(result['reason']))
                 e.result = result
                 raise e
+            self._ts =  result['table_store']
+
         return self._ts
 
     def __exit__(self, exc, value, traceback):
@@ -811,8 +813,6 @@ class TSTransaction():
         # Write back to source
         source_backend = create_backend(self._url)
         self._ts.save_to_backend(source_backend)
-
-
 
 
 def parse_8601(s):
