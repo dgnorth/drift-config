@@ -8,8 +8,8 @@ import json
 import getpass
 import logging
 
-from driftconfig.relib import create_backend, get_store_from_url, push_to_origin, pull_from_origin
-from driftconfig.config import get_drift_table_store, get_domains
+from driftconfig.relib import create_backend, get_store_from_url
+from driftconfig.config import get_drift_table_store, get_domains, push_to_origin, pull_from_origin
 from driftconfig.backends import FileBackend
 from driftconfig.util import diff_table_stores
 
@@ -55,7 +55,12 @@ def get_options(parser):
         help='pull config continuously for 1 minute.'
     )
     p.add_argument(
-        '--force',
+        '--ignore-if-modified', '-i',
+        action='store_true',
+        help='Force a pull from origin even though local version has been modified.'
+    )
+    p.add_argument(
+        '--force', '-f',
         action='store_true',
         help='Force a pull from origin even though local version matches.'
     )
@@ -86,7 +91,7 @@ def get_options(parser):
         action='store',
     )
     p.add_argument(
-        '--force',
+        '--force', '-f',
         action='store_true',
         help='Force a push to origin even though origin has changed.'
     )
@@ -186,12 +191,13 @@ def pull_command(args):
     else:
         _pull_command(args)
 
+
 def _pull_command(args):
     for domain_name, domain_info in get_domains().items():
         if args.domain and args.domain != domain_name:
             continue
 
-        result = pull_from_origin(domain_info['table_store'], args.force)
+        result = pull_from_origin(domain_info['table_store'], ignore_if_modified=args.ignore_if_modified, force=args.force)
 
         if not result['pulled']:
             print "Pull failed for", domain_name, ". Reason:", result['reason']
@@ -232,22 +238,24 @@ def migrate_command(args):
 def now():
     return datetime.utcnow()
 
+
 sleep_time = 10
 run_time = 50
 
 start_time = now()
 end_time = start_time + timedelta(seconds=run_time)
 
+
 def pull_config_loop(args):
     print "Starting the pull config loop"
     while now() < end_time:
         st = time.time()
         _pull_command(args)
-        diff = time.time()-st
-        this_sleep_time = max(sleep_time-diff, 0)
+        diff = time.time() - st
+        this_sleep_time = max(sleep_time - diff, 0)
         print "Waiting for %.1f sec" % this_sleep_time
         time.sleep(this_sleep_time)
-    print "Completed in %.1f sec" % (now()-start_time).total_seconds()
+    print "Completed in %.1f sec" % (now() - start_time).total_seconds()
 
 
 def push_command(args):

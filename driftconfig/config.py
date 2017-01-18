@@ -348,8 +348,9 @@ aws commands extend service/deployable:
 import logging
 import os
 import os.path
+from datetime import datetime
 
-from driftconfig.relib import TableStore, BackendError, get_store_from_url
+from driftconfig.relib import TableStore, BackendError, get_store_from_url, copy_table_store, create_backend, load_meta_from_backend
 from driftconfig.backends import FileBackend, S3Backend, RedisBackend
 
 log = logging.getLogger(__name__)
@@ -702,6 +703,125 @@ def get_domains(skip_errors=False):
             domain = ts.get_table('domain')
             domains[domain['domain_name']] = {'path': path, 'table_store': ts}
     return domains
+
+
+class Check():
+
+    def __init__(self, ts):
+        self._ts_original = ts
+
+    def __enter__(self):
+        self._ts_copy = copy_table_store(self._ts_original)
+        return self._ts_copy
+
+    def __exit__(self, *args):
+        copy_table_store(self._ts_copy)
+
+
+def push_to_origin(local_ts, force=False):
+    """
+    Pushed 'local_ts' to origin.
+    Returns a dict with 'pushed' as True or False depending on success.
+
+    If local store has not been modified since last pull, and the origin
+    has the same version, no upload is actually performed and the return
+    value contains 'reason' = 'push_skipped_crc_match'.
+
+    If local store has indeed been modified since last pull, but the origin
+    has stayed unchanged, upload is performed and the return value contains
+    'reason' = 'pushed_to_origin'.
+
+    If origin has changed since last pull, the push is cancelled and the
+    return value contains 'reason' = 'checksum_differ' and 'time_diff' is
+    the time difference between the changes.
+
+    To force a push to a modified origin, set 'force' = True.
+    """
+    origin = local_ts.get_table('domain')['origin']
+    origin_backend = create_backend(origin)
+    origin_ts = load_meta_from_backend(origin_backend)
+    crc_match = local_ts.meta['checksum'] == origin_ts.meta['checksum']
+
+    if not force and not crc_match:
+        local_modified = parse_8601(local_ts.meta['last_modified'])
+        origin_modified = parse_8601(origin_ts.meta['last_modified'])
+        return {'pushed': False, 'reason': 'checksum_differ', 'time_diff': origin_modified - local_modified}
+
+    old, new = local_ts.refresh_metadata()
+
+    if crc_match and old == new and not force:
+        return {'pushed': True, 'reason': 'push_skipped_crc_match'}
+
+    local_ts.save_to_backend(origin_backend)
+    return {'pushed': True, 'reason': 'pushed_to_origin'}
+
+
+def pull_from_origin(local_ts, ignore_if_modified=False, force=False):
+    origin = local_ts.get_table('domain')['origin']
+    origin_backend = create_backend(origin)
+    origin_meta = load_meta_from_backend(origin_backend)
+    old, new = local_ts.refresh_metadata()
+
+    if old != new and not ignore_if_modified:
+        return {'pulled': False, 'reason': 'local_is_modified'}
+
+    crc_match = local_ts.meta['checksum'] == origin_meta.meta['checksum']
+    if crc_match and not force:
+        return {'pulled': True, 'table_store': local_ts, 'reason': 'pull_skipped_crc_match'}
+
+    origin_ts = TableStore(origin_backend)
+    return {'pulled': True, 'table_store': origin_ts, 'reason': 'pulled_from_origin'}
+
+
+class TSTransactionError(RuntimeError):
+    pass
+
+
+class TSTransaction():
+    def __init__(self, url=None):
+        self._url = url
+
+    def __enter__(self):
+        if self._url:
+            self._ts = create_backend(self._url)
+        else:
+            domains = get_domains().values()
+            if len(domains) != 1:
+                raise RuntimeError("Can't figure out a single local table store: {}".format(d for d in domains))
+            ts = domains[0]["table_store"]  # Assume 1 domain
+            self._url = 'file://' + domains[0]['path']
+            result = pull_from_origin(ts)
+            if not result['pulled']:
+                e = TSTransactionError("Can't pull latest table store: {}".format(result['reason']))
+                e.result = result
+                raise e
+        return self._ts
+
+    def __exit__(self, exc, value, traceback):
+        if exc:
+            return False
+
+        result = push_to_origin(self._ts)
+        if not result['pushed']:
+            e = TSTransactionError("Can't push to origin: {}".format(result))
+            e.result = result
+            raise e
+
+        # Write back to source
+        source_backend = create_backend(self._url)
+        self._ts.save_to_backend(source_backend)
+
+
+
+
+def parse_8601(s):
+    return datetime.strptime(s, "%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def _(d):
+    import json
+    return json.dumps(d, indent=4, sort_keys=True)
+
 
 
 CREATEDB = 0

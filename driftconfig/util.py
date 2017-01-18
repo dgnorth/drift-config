@@ -2,8 +2,6 @@
 import logging
 from datetime import datetime
 
-from driftconfig.relib import copy_table_store
-
 log = logging.getLogger(__name__)
 
 
@@ -67,15 +65,3 @@ def diff_table_stores(ts1, ts2):
 
     return report
 
-
-class Check():
-
-    def __init__(self, ts):
-        self._ts_original = ts
-
-    def __enter__(self):
-        self._ts_copy = copy_table_store(self._ts_original)
-        return self._ts_copy
-
-    def __exit__(self, *args):
-        copy_table_store(self._ts_copy)
