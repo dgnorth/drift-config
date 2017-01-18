@@ -191,12 +191,15 @@ def _pull_command(args):
         if args.domain and args.domain != domain_name:
             continue
 
-        result = pull_from_origin('file://' + domain_info['path'], args.force)
+        result = pull_from_origin(domain_info['table_store'], args.force)
 
         if not result['pulled']:
             print "Pull failed for", domain_name, ". Reason:", result['reason']
             print "Use --force to force a pull."
         else:
+            local_backend = create_backend('file://' + domain_info['path'])
+            result['table_store'].save_to_backend(local_backend)
+
             print "Config pulled. Reason: ", result['reason']
 
 

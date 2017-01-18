@@ -645,10 +645,19 @@ class TableStore(object):
             table._table_store = self
             self._tables[table_name] = table
 
-    def save_to_backend(self, backend):
+    def save_to_backend(self, backend, force=False):
         """
         Save this table store definition and table data to 'backend'.
+
+        If the table store is only partial (contains only meta table info) or not
+        fully intact, it will not save to 'backend' and instead raise an exception.
+        Use 'force' = True to override this behavior.
         """
+        # Do basic self test
+        if len(self._tables) < 2 and not force:
+            # Table store is only partially functional.
+            raise RuntimeError("Won't save out partially constructed table store.")
+
         backend.start_saving()
         backend.save_data(self.TS_DEF_FILENAME, self.get_definition())
 
@@ -837,31 +846,28 @@ def push_to_origin(local_ts, force=False):
 
     old, new = local_ts.refresh_metadata()
 
-    if crc_match and old == new:
+    if crc_match and old == new and not force:
         return {'pushed': True, 'reason': 'push_skipped_crc_match'}
 
     local_ts.save_to_backend(origin_backend)
     return {'pushed': True, 'reason': 'pushed_to_origin'}
 
 
-def pull_from_origin(local_url, force=False):
-    local_backend = create_backend(local_url)
-    local_ts = TableStore(local_backend)
+def pull_from_origin(local_ts, force=False):
     origin = local_ts.get_table('domain')['origin']
     origin_backend = create_backend(origin)
-    origin_ts = load_meta_from_backend(origin_backend)
+    origin_meta = load_meta_from_backend(origin_backend)
     old, new = local_ts.refresh_metadata()
 
     if old != new and not force:
         return {'pulled': False, 'reason': 'local_is_modified'}
 
-    crc_match = local_ts.meta['checksum'] == origin_ts.meta['checksum']
-    if crc_match:
-        return {'pulled': True, 'reason': 'pull_skipped_crc_match'}
+    crc_match = local_ts.meta['checksum'] == origin_meta.meta['checksum']
+    if crc_match and not force:
+        return {'pulled': True, 'table_store': local_ts, 'reason': 'pull_skipped_crc_match'}
 
     origin_ts = TableStore(origin_backend)
-    origin_ts.save_to_backend(local_backend)
-    return {'pulled': True, 'reason': 'pulled_from_origin'}
+    return {'pulled': True, 'table_store': origin_ts, 'reason': 'pulled_from_origin'}
 
 
 def parse_8601(s):
