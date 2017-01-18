@@ -665,16 +665,18 @@ class TableStore(object):
         system_tables = [table for table in self._tables.values() if table._is_system_table]
 
         for table in user_tables:
+            log.info("Save to backend %s: %s", backend, table)
             table.save(backend.save_data)
 
         # Calculate checksum for user tables
         checksum = hashlib.sha256()
-        for table_name in self.tables:
-            md5 = self.get_table_metadata(table_name)['md5']
+        for table in user_tables:
+            md5 = self.get_table_metadata(table.name)['md5']
             checksum.update(md5)
         self.meta.get()['checksum'] = checksum.hexdigest()
 
         for table in system_tables:
+            log.info("Save to backend %s: %s", backend, table)
             table.save(backend.save_data)
 
         backend.done_saving()
@@ -693,11 +695,9 @@ class TableStore(object):
             self.init_from_definition(definition)
         self._origin = str(backend)
 
-        user_tables = [table for table in self._tables.values() if not table._is_system_table]
-        system_tables = [table for table in self._tables.values() if table._is_system_table]
-        for table_list in system_tables, user_tables:
-            for table in table_list:
-                table.load(backend.load_data)
+        for table in self._tables.values():
+            log.info("Load from backend %s: %s", backend, table)
+            table.load(backend.load_data)
 
         backend.done_loading()
 
