@@ -60,7 +60,7 @@ def get_options(parser):
         help='Force a pull from origin even though local version has been modified.'
     )
     p.add_argument(
-        '--force', '-f',
+        '-f', '--force',
         action='store_true',
         help='Force a pull from origin even though local version matches.'
     )
@@ -91,7 +91,7 @@ def get_options(parser):
         action='store',
     )
     p.add_argument(
-        '--force', '-f',
+        '-f', '--force',
         action='store_true',
         help='Force a push to origin even though origin has changed.'
     )
@@ -127,7 +127,7 @@ def get_options(parser):
         action='store', help="Short name to identify the domain or owner of the config.",
     )
     p.add_argument(
-        '--details', '-d',
+        '-d', '--details',
         action='store_true',
         help='Do a detailed diff on modified tables.'
     )
@@ -217,7 +217,10 @@ def _pull_command(args):
 
         if not result['pulled']:
             print "Pull failed for", domain_name, ". Reason:", result['reason']
-            print "Use --force to force a pull."
+            if result['reason'] == 'local_is_modified':
+                print "Use --ignore-if-modified to overwrite local changes."
+            else:
+                print "Use --force to force a pull."
         else:
             local_backend = create_backend('file://' + domain_info['path'])
             result['table_store'].save_to_backend(local_backend)
