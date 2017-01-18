@@ -809,6 +809,58 @@ def copy_table_store(table_store):
     return TableStore(backend)
 
 
+def diff_tables(t1, t2):
+    """
+    Compare table 't1' to 't2' and report the difference.
+    Returns a dict with 'identical' as True or False depending on if the tables are identical,
+    and 'new_rows', 'deleted_rows' and 'modified_rows' lists with the diffs accordingly.
+    """
+    if t1 == t2:
+        return {'identical': True}
+
+    diff = {}
+    diff['identical'] = False
+
+    # Cheat by using the table._rows dict directly
+    pk1, pk2 = set(t1._rows), set(t2._rows)
+    diff['new_rows'] = [t1._rows[pk] for pk in pk1 - pk2]
+    diff['deleted_rows'] = [t2._rows[pk] for pk in pk2 - pk1]
+    diff['modified_rows'] = []
+    for common_pk in pk1.intersection(pk2):
+        first = t1._rows[common_pk]
+        second = t2._rows[common_pk]
+        if first != second:
+            diff['modified_rows'].append({'first': first, 'second': second})
+
+    return diff
+
+
+def diff_meta(m1, m2):
+    """Return a diff report on two meta tables."""
+    if m1 == m2:
+        return {'identical': True}
+
+    diff = {}
+    diff['identical'] = False
+
+    def parse_8601(s):
+        return datetime.strptime(s, "%Y-%m-%dT%H:%M:%S.%fZ")
+
+    d1, d2 = parse_8601(m1['last_modified']), parse_8601(m2['last_modified'])
+    diff['modified_diff'] = abs(d2 - d1)
+
+    t1 = {t['table_name']: t for t in m1['tables']}
+    t2 = {t['table_name']: t for t in m2['tables']}
+    diff['new_tables'] = list(set(t1) - set(t2))
+    diff['deleted_tables'] = list(set(t2) - set(t1))
+    diff['modified_tables'] = []
+    for table_name in t2:
+        if table_name in t1 and t1[table_name]['md5'] != t2[table_name]['md5']:
+            diff['modified_tables'].append(table_name)
+
+    return diff
+
+
 def register(cls):
     """Decorator to register Backend class for a particular URL scheme."""
     Backend.schemes[cls.__scheme__] = cls

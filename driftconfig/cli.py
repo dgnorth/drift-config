@@ -8,8 +8,8 @@ import json
 import getpass
 import logging
 
-from driftconfig.relib import create_backend, get_store_from_url
-from driftconfig.config import get_drift_table_store, get_domains, push_to_origin, pull_from_origin
+from driftconfig.relib import create_backend, get_store_from_url, load_meta_from_backend, diff_meta, diff_tables
+from driftconfig.config import get_drift_table_store, get_domains, push_to_origin, pull_from_origin, parse_8601
 from driftconfig.backends import FileBackend
 from driftconfig.util import diff_table_stores
 
@@ -126,7 +126,11 @@ def get_options(parser):
         'domain',
         action='store', help="Short name to identify the domain or owner of the config.",
     )
-
+    p.add_argument(
+        '--details', '-d',
+        action='store_true',
+        help='Do a detailed diff on modified tables.'
+    )
     # 'addtenant' command
     p = subparsers.add_parser(
         'addtenant',
@@ -192,6 +196,18 @@ def pull_command(args):
         _pull_command(args)
 
 
+def pull_config_loop(args):
+    print "Starting the pull config loop"
+    while now() < end_time:
+        st = time.time()
+        _pull_command(args)
+        diff = time.time() - st
+        this_sleep_time = max(sleep_time - diff, 0)
+        print "Waiting for %.1f sec" % this_sleep_time
+        time.sleep(this_sleep_time)
+    print "Completed in %.1f sec" % (now() - start_time).total_seconds()
+
+
 def _pull_command(args):
     for domain_name, domain_info in get_domains().items():
         if args.domain and args.domain != domain_name:
@@ -246,18 +262,6 @@ start_time = now()
 end_time = start_time + timedelta(seconds=run_time)
 
 
-def pull_config_loop(args):
-    print "Starting the pull config loop"
-    while now() < end_time:
-        st = time.time()
-        _pull_command(args)
-        diff = time.time() - st
-        this_sleep_time = max(sleep_time - diff, 0)
-        print "Waiting for %.1f sec" % this_sleep_time
-        time.sleep(this_sleep_time)
-    print "Completed in %.1f sec" % (now() - start_time).total_seconds()
-
-
 def push_command(args):
     domain_info = get_domains().get(args.domain)
     if not domain_info:
@@ -301,24 +305,42 @@ def create_command(args):
 
 
 def diff_command(args):
+    # Get local table store and its meta state
     domain_info = get_domains().get(args.domain)
-    ts_local = domain_info['table_store']
-    origin = ts_local.get_table('domain')['origin']
-    print "Diffing local '{}' to origin at {}".format(args.domain, origin)
-    ts_origin = get_store_from_url(origin)
-    report = diff_table_stores(ts_local, ts_origin)
+    local_ts = domain_info['table_store']
+    local_m1, local_m2 = local_ts.refresh_metadata()
 
-    if 'last_modified' in report:
-        print "No difference between table stores. Last modified:", report['last_modified']
-    else:
-        td, is_older, m1, m2 = report['last_modified_diff']
-        if is_older:
-            print "The origin table store is newer by", td
+    # Get origin table store meta info
+    origin = local_ts.get_table('domain')['origin']
+    origin_backend = create_backend(origin)
+    origin_ts = load_meta_from_backend(origin_backend)
+    origin_meta = origin_ts.meta.get()
+
+    local_diff = ("Local store and scratch", local_m1, local_m2, False)
+    origin_diff = ("Local and origin", origin_meta, local_m2, args.details)
+
+    for title, m1, m2, details in local_diff, origin_diff:
+        diff = diff_meta(m1, m2)
+        if diff['identical']:
+            print title, "is clean."
         else:
-            print "Your local table store is newer by", td
-        print m1
-        print m2
-    print ""
+            print title, "are different:"
+            if diff['modified_diff']:
+                print "\tTime since pull: ", str(diff['modified_diff']).split('.')[0]
+
+            print "\tNew tables:", diff['new_tables']
+            print "\tDeleted tables:", diff['deleted_tables']
+            print "\tModified tables:", diff['modified_tables']
+
+            if details:
+                # Diff origin
+                origin_ts = get_store_from_url(origin)
+                for table_name in diff['modified_tables']:
+                    t1 = local_ts.get_table(table_name)
+                    t2 = origin_ts.get_table(table_name)
+                    tablediff = diff_tables(t1, t2)
+                    print "\nTable diff for", table_name, "\n(first=local, second=origin):"
+                    print json.dumps(tablediff, indent=4, sort_keys=True)
 
 
 def addtenant_command(args):
