@@ -25,7 +25,7 @@ class S3Backend(Backend):
         import boto3
         self.s3_client = boto3.client('s3', region_name=region_name)
         self.bucket_name = bucket_name
-        self.folder_name = folder_name
+        self.folder_name = folder_name.lstrip('/')  # Strip leading slashes
         self.region_name = region_name
         self.etag = etag
 
@@ -44,7 +44,7 @@ class S3Backend(Backend):
         return url
 
     def __str__(self):
-        return "S3Backend's3://{}/{}'".format(self.bucket_name, self.folder_name)
+        return "S3Backend'{}'".format(self.get_url())
 
     def get_key_name(self, file_name):
         return '{}/{}'.format(self.folder_name, file_name)
