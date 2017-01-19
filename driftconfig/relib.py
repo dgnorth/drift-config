@@ -791,9 +791,6 @@ class Backend(object):
     def load_data(self, file_name):
         pass
 
-    def on_progress(self, message):
-        log.debug(message)
-
 
 def create_backend(url):
     parts = urlparse(url)

@@ -52,7 +52,7 @@ class S3Backend(Backend):
     def save_data(self, file_name, data):
         f = StringIO.StringIO(data)
         key_name = self.get_key_name(file_name)
-        self.on_progress("Uploading {} bytes to s3://{}/{}".format(len(data), self.bucket_name, key_name))
+        log.debug("Uploading %s bytes to s3://%s/%s", len(data), self.bucket_name, key_name)
         self.s3_client.upload_fileobj(
             f,
             self.bucket_name,
@@ -62,7 +62,7 @@ class S3Backend(Backend):
 
     def load_data(self, file_name):
         key_name = self.get_key_name(file_name)
-        self.on_progress("Downloading s3://{}/{}".format(self.bucket_name, key_name))
+        log.debug("Downloading s3://%s/%s", self.bucket_name, key_name)
         f = StringIO.StringIO()
         self.s3_client.download_fileobj(self.bucket_name, key_name, f)
         return f.getvalue()
@@ -104,7 +104,7 @@ class RedisBackend(Backend):
 
     def save_data(self, file_name, data):
         key_name = self.get_key_name(file_name)
-        self.on_progress("Adding {} bytes to Redis:{}".format(len(data), key_name))
+        log.debug("Adding %s bytes to Redis:%s", len(data), key_name)
         self.conn.set(key_name, data)
         if self.expire_sec is not None:
             self.conn.expire(key_name, self.expire_sec)
@@ -112,7 +112,7 @@ class RedisBackend(Backend):
 
     def load_data(self, file_name):
         key_name = self.get_key_name(file_name)
-        self.on_progress("Reading from Redis:{}".format(key_name))
+        log.debug("Reading from Redis:%s", key_name)
         data = self.conn.get(key_name)
         if data is None:
             raise BackendError("Redis cache doesn't have '{}'".format(key_name))
@@ -164,12 +164,12 @@ class FileBackend(Backend):
             os.makedirs(dir_name)
 
         with open(path_name, 'w') as f:
-            self.on_progress("Writing {} bytes to {}".format(len(data), path_name))
+            log.debug("Writing %s bytes to %s", len(data), path_name)
             f.write(data)
 
     def load_data(self, file_name):
         path_name = self.get_filename(file_name)
-        self.on_progress("Reading from {}".format(path_name))
+        log.debug("Reading from %s", path_name)
         with open(path_name, 'r') as f:
             return f.read()
 
@@ -230,6 +230,3 @@ class ZipEncoded(Backend):
 
     def load_data(self, file_name):
         self._zipfile.read(file_name)
-
-    def on_progress(self, message):
-        log.debug(message)
