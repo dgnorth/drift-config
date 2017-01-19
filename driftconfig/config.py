@@ -171,12 +171,40 @@ api-key-rules:
         status_code             integer
         response_body           dict
 
-# api-rule-assignments:
-#     product_name            string, pk, fk->products, required
-#     assignment_order        integer, pk, required
-#     match_type              string, pk, enum exact|partial, required
-#     version_patterns        array of string, required
-#     rule_name               string, fk->api-key-rules
+
+gameserver-management/
+
+gameserver-config (single row):
+    s3_bucket_index_file    string
+
+gameserver-builds:
+    product_name            string, pk, fk->products, required
+    ref:                    string, required
+
+gameserver-instances:
+    product_name            string, pk, fk->products, required
+    region                  string
+    group                   string
+    tenant_name             string, pk, fk->tenants, required
+    ref:                    string, required
+    num_instances           integer, required
+
+
+ex:
+
+    {
+        "product_name": "dg-superkaiju",
+        "ref": "0.1.0.32",
+    }
+
+
+eg vil:
+
+- on live run 10 processes of latest gameserver
+- roll out a new version of gameserver but keep old running for 48 hours at mininum capacity (2 processes)
+- 48 hours later, remove all old gameservers
+
+    gameserver-instances:
 
 
 
@@ -600,10 +628,16 @@ def get_drift_table_store():
     })
     keys.add_default_values({'in_use': True, 'create_date': '@@utcnow', 'key_type': 'product'})
 
+
     '''
     api-key-rules:
+        product_name            string, pk, fk->products
         rule_name               string, pk
-        product_name            string, fk->products, required
+
+        assignment_order        integer, required
+        version_patterns        array of strings, required
+        is_active               boolean, required, default=true
+
         rule_type               enum pass|redirect|reject, required, default=pass
         response_header         dict
         redirect:
@@ -614,13 +648,18 @@ def get_drift_table_store():
     '''
     keyrules = ts.add_table('api-key-rules')
     keyrules.set_subfolder_name('api-router')
-    keyrules.add_primary_key('rule_name')
+    keyrules.add_primary_key('product_name,rule_name')
     keyrules.add_foreign_key('product_name', 'products')
     keyrules.add_schema({
         'type': 'object',
         'properties':
         {
+            'assignment_order': {'type': 'integer'},
+            'version_patterns': {'type': 'array', 'items': {'type': 'string'}},
+            'is_active': {'type': 'boolean'},
+
             'rule_type': {'enum': ['pass', 'redirect', 'reject']},
+
             'response_header': {'type': 'object'},
             'redirect': {'type': 'object', 'properties': {
                 'tenant_name': {'type': 'string'},
@@ -630,89 +669,14 @@ def get_drift_table_store():
                 'response_body': {'type': 'object'},
             }},
         },
-        'required': ['product_name', 'rule_type'],
+        'required': ['assignment_order', 'version_patterns', 'is_active', 'rule_type'],
     })
-    keyrules.add_default_values({'rule_type': 'pass'})
-
-
-    '''
-    api-rule-assignments:
-        api_key_name            string, pk, fk->api-keys, required
-        match_type              string, pk, enum exact|partial, required
-        assignment_order        integer, pk, required
-        version_patterns        array of string, required
-        rule_name               string, fk->api-key-rules
-    '''
-    ruleass = ts.add_table('api-rule-assignments')
-    ruleass.set_subfolder_name('api-router')
-    ruleass.add_primary_key('api_key_name,match_type,assignment_order')
-    ruleass.add_foreign_key('api_key_name', 'api-keys')
-    ruleass.add_foreign_key('rule_name', 'api-key-rules')
-    ruleass.add_schema({
-        'type': 'object',
-        'properties':
-        {
-            'match_type': {'enum': ['exact', 'partial']},
-            'assignment_order': {'type': 'integer'},
-            'version_patterns': {'type': 'array', 'items': {'type': 'string'}},
-        },
-        'required': ['version_patterns'],
-    })
-
+    keyrules.add_default_values({'is_active': True, 'rule_type': 'pass'})
 
     definition = ts.get_definition()
     new_ts = TableStore()
     new_ts.init_from_definition(definition)
     return new_ts
-
-
-class ConfigSession(object):
-    """
-    This class wraps the Drift Config Database.
-    It persists the data on S3 and uses Redis to cache and distribute state.
-
-    Usage:
-
-    This class can be created and thrown away at will as it's supposed to
-    be short lived. It's also possible to call refresh() to fetch in the
-    most recent data.
-
-    Make sure to call save() to persist any changes to S3.
-
-    """
-    def __init__(self):
-        self.redis_store = RedisBackend(expire_sec=53)
-        self.s3_store = S3Backend('relib-test', 'kaleo-web-1', 'eu-west-1')
-        #self.file_store = FileBackend()
-        self.refresh()
-
-    def refresh(self):
-        try:
-            self.ts = TableStore(self.redis_store)
-        except BackendError:
-            # Fetch from S3
-            log.info("ConfigSession: Cache miss, fetching from S3..")
-            # TODO: Lock fetch
-            self.ts = TableStore(self.s3_store)
-            self.ts.save_to_backend(self.redis_store)
-
-
-    def save(self):
-        """
-        Save the data in 'ts'.
-        """
-        self.ts.save_to_backend(self.s3_store)
-        self.ts.save_to_backend(self.redis_store)
-
-    def __getitem__(self, table_name):
-        return self.ts.get_table(table_name)
-
-    def tenant_exists(self, tenant_name):
-        tenant = self['tenant-names'].get({'tenant_name': tenant_name})
-        return tenant is not None
-
-    def get_all_tenant_names(self):
-        return [t['tenant_name'] for t in self['tenant-names'].find()]
 
 
 def get_domains(skip_errors=False):
@@ -820,7 +784,7 @@ class TSTransaction(object):
 
     def __enter__(self):
         if self._url:
-            self._ts = create_backend(self._url)
+            self._ts = get_store_from_url(self._url)
         else:
             domains = get_domains().values()
             if len(domains) != 1:
@@ -860,25 +824,13 @@ def _(d):
     return json.dumps(d, indent=4, sort_keys=True)
 
 
-
-CREATEDB = 0
-
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')
 
-    c = ConfigSession()
+    # test TSTransaction
 
-    if CREATEDB:
-        # Create DB
-        c.ts = get_drift_table_store()
-        c.save()
+    with TSTransaction('file://~/.drift/config/dgnorth') as ts:
+        ts.get_table('domain').get()['display_name'] += ' bluuu!'
 
-    c['tenant-names'].add({'tenant_name': 'bloorgh'})
-    c['tenants'].add({
-        'tier_name','deployable_name','tenant_name'
-        })
-    print "existsts", c.tenant_exists('boo')
-    print "all tenants", c.get_all_tenant_names()
-    #c.save_config()
 
 
