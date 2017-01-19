@@ -665,7 +665,7 @@ class TableStore(object):
         system_tables = [table for table in self._tables.values() if table._is_system_table]
 
         for table in user_tables:
-            log.info("Save to backend %s: %s", backend, table)
+            log.debug("Save to backend %s: %s", backend, table)
             table.save(backend.save_data)
 
         # Calculate checksum for user tables
@@ -676,7 +676,7 @@ class TableStore(object):
         self.meta.get()['checksum'] = checksum.hexdigest()
 
         for table in system_tables:
-            log.info("Save to backend %s: %s", backend, table)
+            log.debug("Save to backend %s: %s", backend, table)
             table.save(backend.save_data)
 
         backend.done_saving()
@@ -696,7 +696,7 @@ class TableStore(object):
         self._origin = str(backend)
 
         for table in self._tables.values():
-            log.info("Load from backend %s: %s", backend, table)
+            log.debug("Load from backend %s: %s", backend, table)
             table.load(backend.load_data)
 
         backend.done_loading()
@@ -846,8 +846,10 @@ def diff_meta(m1, m2):
     if m1 == m2:
         return {'identical': True}
 
+
     diff = {}
     diff['identical'] = False
+    diff['checksum'] = {'first': m1['checksum'], 'second': m2['checksum']}
 
     def parse_8601(s):
         return datetime.strptime(s, "%Y-%m-%dT%H:%M:%S.%fZ")

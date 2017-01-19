@@ -26,6 +26,37 @@ deployable + autoscaling,release    = used by api-router configgenerator
 
 
 
+global map rules for table files:
+**********************************
+
+foreign_key='organizations.organization_name'
+template='organizations/{}'
+
+ex:
+
+table 'organizations'
+organizations.json  # note, unchanged as the key field is pk, not fk.
+
+
+table 'products'
+organizations/nova/products.json
+organizations/1939games/products.json
+
+table 'tenant-names'
+organizations/nova/tenant-names.json
+organizations/1939games/tenant-names.json
+
+
+table 'tenants'
+organizations/nova/tenants/tenants.DEVNORTH.nova-live.json
+organizations/1939games/tenants/tenants.DEVNORTH.1939-kards.json
+
+
+
+
+
+
+
 drift-config core tables:
 
 
@@ -129,8 +160,7 @@ api-key-rules:
     rule_name               string, pk
 
     assignment_order        integer, required
-    match_type              string, enum exact|partial, required
-    version_patterns        array of string, required
+    version_patterns        array of strings, required
     is_active               boolean, required, default=true
 
     rule_type               enum pass|redirect|reject, required, default=pass
@@ -739,8 +769,14 @@ def push_to_origin(local_ts, force=False):
     """
     origin = local_ts.get_table('domain')['origin']
     origin_backend = create_backend(origin)
-    origin_ts = load_meta_from_backend(origin_backend)
-    crc_match = local_ts.meta['checksum'] == origin_ts.meta['checksum']
+    try:
+        origin_ts = load_meta_from_backend(origin_backend)
+    except Exception as e:
+        log.warning("Can't load meta info from %s: %s", origin_backend, repr(e))
+        crc_match = True
+        force = True
+    else:
+        crc_match = local_ts.meta['checksum'] == origin_ts.meta['checksum']
 
     if not force and not crc_match:
         local_modified = parse_8601(local_ts.meta['last_modified'])

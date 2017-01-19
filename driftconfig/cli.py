@@ -328,6 +328,8 @@ def diff_command(args):
             print title, "is clean."
         else:
             print title, "are different:"
+            print "\tFirst checksum: ", diff['checksum']['first'][:7]
+            print "\tSecond checksum:", diff['checksum']['second'][:7]
             if diff['modified_diff']:
                 print "\tTime since pull: ", str(diff['modified_diff']).split('.')[0]
 
