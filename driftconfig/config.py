@@ -490,7 +490,11 @@ def get_drift_table_store():
         tier_name               string, pk, fk->tiers
         deployable_name         string, pk, fk->deployables
         api                     string, required
-        autoscaling             dict
+        autoscaling
+            min                 integer
+            max                 integer
+            desired             integer
+            instance_type       string, required
         release_version         string
     '''
     routing = ts.add_table('routing')
@@ -578,6 +582,123 @@ def get_drift_table_store():
         'required': ['assignment_order', 'version_patterns', 'is_active', 'rule_type'],
     })
     keyrules.add_default_values({'is_active': True, 'rule_type': 'pass'})
+
+
+    '''
+    ue4-gameservers/
+
+    ue4-gameservers-config (single row):
+        build_archive_defaults
+            region                  string
+            bucket_name             string
+            ue4_builds_folder       string
+    '''
+    ue4_gameservers_config = ts.add_table('ue4-gameservers-config', single_row=True)
+    ue4_gameservers_config.set_subfolder_name('ue4-gameservers')
+    ue4_gameservers_config.add_schema({
+        'type': 'object',
+        'properties':
+        {
+            'build_archive_defaults': {
+                'type': 'object',
+                'properties':
+                {
+                    'region': {'type': 'string'},
+                    'bucket_name': {'type': 'string'},
+                    'ue4_builds_folder': {'type': 'string'},
+                },
+            },
+        },
+    })
+
+
+    '''
+    ue4-build-artifacts
+        product_name            string, pk, fk->products, required
+
+        s3_region               string
+        bucket_name             string
+        path                    string
+        command_line            string
+    '''
+    ue4_build_artifacts = ts.add_table('ue4-build-artifacts')
+    ue4_build_artifacts.set_subfolder_name('ue4-gameservers')
+    ue4_build_artifacts.add_primary_key('product_name')
+    ue4_build_artifacts.add_foreign_key('product_name', 'products')
+    ue4_build_artifacts.add_schema({
+        'type': 'object',
+        'properties':
+        {
+            's3_region': {'type': 'string'},
+            'bucket_name': {'type': 'string'},
+            'path': {'type': 'string'},
+            'command_line': {'type': 'string'},
+        },
+        'required': ['s3_region', 'bucket_name', 'path', 'command_line'],
+    })
+
+    '''
+    gameservers-machines:
+        product_name            string, pk, fk->products, required
+        group_name              string, pk
+        region                  string, pk
+        platform                enum windows|linux, required
+        autoscaling
+            min                 integer
+            max                 integer
+            desired             integer
+            instance_type       string, required
+    '''
+    gameservers_machines = ts.add_table('gameservers-machines')
+    gameservers_machines.set_subfolder_name('ue4-gameservers')
+    gameservers_machines.add_primary_key('product_name,group_name,region')
+    gameservers_machines.add_foreign_key('product_name', 'products')
+    gameservers_machines.add_schema({
+        'type': 'object',
+        'properties':
+        {
+            'region': {'type': 'string'},
+            'platform': {'enum': ['windows', 'linux']},
+            'autoscaling': {'type': 'object', 'properties': {
+                'min': {'type': 'integer'},
+                'max': {'type': 'integer'},
+                'desired': {'type': 'integer'},
+                'instance_type': {'type': 'string'},
+            }},
+        },
+    })
+
+
+    '''
+    gameservers-instances:
+        gameserver_instance_id  string, pk, default=@@identity
+        product_name            string, fk->products, required
+        group_name              string, fk->gameservers-machines, required
+        region                  string, fk->gameservers-machines, required
+        tenant_name             string, fk->tenants, required
+        ref                     string, required
+        processes_per_machine   integer, required
+        command_line            string
+    '''
+    gameservers_instances = ts.add_table('gameservers-instances')
+    gameservers_instances.set_subfolder_name('ue4-gameservers')
+    gameservers_instances.add_primary_key('gameserver_instance_id')
+    gameservers_instances.add_foreign_key('product_name', 'products')
+    gameservers_instances.add_foreign_key('group_name,region', 'gameservers-machines')
+    gameservers_instances.add_foreign_key('tenant_name', 'tenant-names')
+    gameservers_instances.add_schema({
+        'type': 'object',
+        'properties':
+        {
+            'ref': {'type': 'string'},
+            'processes_per_machine': {'type': 'integer'},
+            'command_line': {'type': 'string'},
+        },
+        'required': ['product_name', 'group_name', 'region', 'tenant_name', 'ref', 'processes_per_machine'],
+    })
+    gameservers_instances.add_default_values({'gameserver_instance_id': '@@identity'})
+
+    # END OF TABLE DEFS
 
     definition = ts.get_definition()
     new_ts = TableStore()

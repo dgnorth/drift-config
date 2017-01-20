@@ -99,20 +99,73 @@ class TestRelib(unittest.TestCase):
             })
 
         ts.get_table('api-key-rules').add({
-            'rule_name': 'dg-unittest-product-rule-one',
             'product_name': 'dg-unittest-product',
+            'rule_name': 'dg-unittest-product-rule-one',
+            'assignment_order': 1,
+            'version_patterns': ['1.0.5', '1.0.8'],
+            'is_active': True,
             'rule_type': 'pass',
             'response_header': {'message-from-mum': "Put your sweater on!"},
             })
 
-        ts.get_table('api-rule-assignments').add({
-            'api_key_name': 'matti-555',
-            'match_type': 'exact',
-            'assignment_order': 1,
-            'version_patterns': ['1.0.5', '1.0.8'],
-            'rule_name': 'dg-unittest-product-rule-one',
+
+    def test_ue4_gameservers_rules(self):
+        """
+        HACK! This should not be in drift-config repository at all as it's
+        technically a 3rd party stuff.
+        """
+        ts = create_basic_domain()
+
+        ts.get_table('ue4-gameservers-config').add({
+            'build_archive_defaults': {
+                'region': 'eu-west-1',
+                'bucket_name': 'directive-tiers.dg-api.com',
+                'ue4_builds_folder': 'ue4-builds',
+            }
             })
 
+        ts.get_table('ue4-build-artifacts').add({
+            'product_name': 'dg-unittest-product',
+            's3_region': 'eu-west-1',
+            'bucket_name': 'directive-tiers.dg-api.com',
+            'path': 'ue4-builds/directivegames/SuperKaijuVR',
+            'command_line': '',
+            })
+
+        ts.get_table('gameservers-machines').add({
+            'product_name': 'dg-unittest-product',
+            'group_name': 'main',
+            'region': 'eu-west-1',
+            'platform': 'windows',
+            'autoscaling': {
+                'min': 1,
+                'max': 4,
+                'desired': 2,
+                'instance_type': 'm2.medium',
+            },
+            })
+
+        ts.get_table('gameservers-instances').add({
+            'gameserver_instance_id': 5000,
+            'product_name': 'dg-unittest-product',
+            'group_name': 'main',
+            'region': 'eu-west-1',
+            'tenant_name': 'dg-unittest-product',
+            'ref': '1.6.5',
+            'processes_per_machine': 4,
+            'command_line': '-bingo',
+            })
+
+        row = ts.get_table('gameservers-instances').add({
+            'product_name': 'dg-unittest-product',
+            'group_name': 'main',
+            'region': 'eu-west-1',
+            'tenant_name': 'dg-unittest-product',
+            'ref': '1.6.5',
+            'processes_per_machine': 4,
+            'command_line': '-gr0ndal',
+            })
+        self.assertEquals(row['gameserver_instance_id'], 5001)
 
 
 class TestPushPull(unittest.TestCase):
