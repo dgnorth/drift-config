@@ -227,8 +227,11 @@ class Table(object):
         # Make sure the fields in the other table exist and are either
         # the primary key or have unique constraints.
         foreign_table = self._table_store.get_table(table_name)
+        foreign_keys = set(c['alias_key_fields'])
+
         for fc in foreign_table._constraints:
-            if fc['type'] in ['primary_key', 'unique'] and fc['fields'] == c['alias_key_fields']:
+            primary_keys = set(fc['fields'])
+            if fc['type'] in ['primary_key', 'unique'] and foreign_keys.issubset(primary_keys):
                 break
         else:
             raise ConstraintError("Can't create foreign key relationship from {} {} to {}.".format(
@@ -471,6 +474,11 @@ class Table(object):
             if isinstance(v, basestring) and v.startswith('@@'):
                 if v == '@@utcnow':
                     d[k] = datetime.utcnow().isoformat() + 'Z'
+                elif v == '@@identity':
+                    if self._rows:
+                        d[k] = max([row[k] for row in self._rows.values()]) + 1
+                    else:
+                        d[k] = 1
                 else:
                     log.warning("Unknown dynamic default value '{}' defined in table '{}'".format(k, self._table_name))
         return d
