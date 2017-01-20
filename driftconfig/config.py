@@ -133,7 +133,7 @@ platforms:
 
 
 /////////////////////////////////////////////////////////////////////////////////
-// APP SPECIFIC CONFIG
+// APP SPECIFIC CONFIG - api-router
 /////////////////////////////////////////////////////////////////////////////////
 
 api-router/
@@ -172,146 +172,52 @@ api-key-rules:
         response_body           dict
 
 
-gameserver-management/
+/////////////////////////////////////////////////////////////////////////////////
+// APP SPECIFIC CONFIG - ue4-gameserver
+/////////////////////////////////////////////////////////////////////////////////
 
-gameserver-config (single row):
-    s3_bucket_index_file    string
 
-gameserver-builds:
+ue4-gameservers/
+
+ue4-gameservers-config (single row):
+    build_archive_defaults
+        region                  string
+        bucket_name             string
+        ue4_builds_folder       string
+
+
+ue4-builds
     product_name            string, pk, fk->products, required
-    ref:                    string, required
+
+    s3_region               string
+    bucket_name             string
+    path                    string
+
+
+gameservers-machines:
+    product_name            string, pk, fk->products, required
+    group_name              string, pk
+    region                  string, pk
+    platform                enum windows|linux, required
+    autoscaling
+        min                 integer
+        max                 integer
+        desired             integer
+        instance_type       string, required
+
 
 gameserver-instances:
     product_name            string, pk, fk->products, required
-    region                  string
-    group                   string
+    group_name              string, pk, fk->gameservers-machines, required
+    region                  string, pk, fk->gameservers-machines, required
     tenant_name             string, pk, fk->tenants, required
-    ref:                    string, required
-    num_instances           integer, required
+    ref:                    string, pk, required
+    processes_per_machine   integer, required
 
 
-ex:
-
-    {
-        "product_name": "dg-superkaiju",
-        "ref": "0.1.0.32",
-    }
-
-
-eg vil:
-
-- on live run 10 processes of latest gameserver
-- roll out a new version of gameserver but keep old running for 48 hours at mininum capacity (2 processes)
-- 48 hours later, remove all old gameservers
-
-    gameserver-instances:
-
-
-
-
-NEW PRODUCT:
-1. add product: dg-superkaiju
-2. create tenant: dg-superkaiju
-3. create api key: dg-superkaiju-8928973
-4. create api keys for users: axl-8289374, matti-8237498, nonnib-8734234
-
-
-this rule is always in play:
-    organization for api key must match target organization.
-    if not, RETURN 403 forbidden, org_mismatch
-
-if no user rule specified, just let it slide.
-
-if rules, but no rule match: RETURN 403 forbidden, version_not_allowed
-
-RULES:
-    0.6.1-bad       return rule_upgrade_superkaiju
-
-    0.6.8           redirect rule_redirect_to_superkaiju_test
-
-    .*-dev          pass
-    .*-editor       pass
-    .*-test         pass
-    0.6.1-test      pass
-    0.6.5           pass
-
-    *               return rule_upgrade_superkaiju
-
-
-version pattern:
-    version from versions table (0.6.1, 0.6.5, 0.7.0, etc...)
-    OR
-    tag, which will be regex'd using find ("thetag", "dev", "editor", etc...)
-
-
-
-KALEO WEB UIX WUNDER:
-
-LIVENORTH SuperKaiju version rules:
-
-REJECT:  3xx and 4xx response
-    0.6.1-woohoo rule_message_to_woohoo
-    0.6.1-bad    rule_upgrade_client
-
-REDIRECT:
-    0.7.0   tenant_name=superkaiju-test
-
-PASS:
-    .*-dev
-    .*-editor
-    .*-test
-    0.6.*
-    0.6.1-test
-
-DEFAULT: rule_upgrade_superkaiju
-
-
-from ue4 github a pretty json is fetched containing all the client actions:
-
-actions:
-upgrade_client
-display_message
-
-
-
-pk=superkaiju,dg-superkaiju-F00BAA12
-version_pattern=*.-dev
-pass=true
-
-pk=superkaiju,dg-superkaiju-F00BAA12
-version_pattern=*.-editor
-pass=true
-
-pk=superkaiju,dg-superkaiju-F00BAA12
-version_pattern=0.6.1
-pass=true
-
-pk=superkaiju,dg-superkaiju-F00BAA12
-version_pattern=0.6.1-test
-pass=true
-
-pk=superkaiju,dg-superkaiju-F00BAA12
-version_pattern=*
-pass=false
-rule_name=pissoff
-
-
-
-
-
-
-UIX USE CASE:
-
-product page for SuperKaijuVR:
-
-Pick tier: LIVENORTH
-
-list of api keys:
-    dg-superkaiju-B00B135
-
-
-
-
+/////////////////////////////////////////////////////////////////////////////////
+// APP SPECIFIC CONFIG - drift-base
+/////////////////////////////////////////////////////////////////////////////////
 
 drift-base/
 
