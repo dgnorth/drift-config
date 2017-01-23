@@ -244,8 +244,7 @@ class Table(object):
         foreign_keys = set(c['alias_key_fields'])
 
         for fc in foreign_table._constraints:
-            primary_keys = set(fc['fields'])
-            if fc['type'] in ['primary_key', 'unique'] and foreign_keys.issubset(primary_keys):
+            if fc['type'] in ['primary_key', 'unique'] and foreign_keys.issubset(set(fc['fields'])):
                 break
         else:
             raise ConstraintError("Can't create foreign key relationship from {} {} to {}.".format(
@@ -357,7 +356,41 @@ class Table(object):
 
         foreign_table = self._table_store.get_table(table_name)
         search_criteria = {k2: row[k1] for k1, k2 in zip(c['foreign_key_fields'], c['alias_key_fields'])}
-        return foreign_table.find(search_criteria)
+        
+        # Special case where foreign row is a reference to the 'row' itself, which is in the process
+        # of being inserted.
+        if self.name == table_name and set(search_criteria.items()).issubset(set(row.items())):
+            result = [row]
+        else:
+            result = foreign_table.find(search_criteria)
+
+        return result
+
+    def find_references(self, ref_row, _refs=None):
+        """
+        Return a dict of tables and rows that reference 'ref_row' either directly or indirectly.
+        {'table name': [row, ...]}
+        """
+        refs = _refs or []
+
+        for table in self._table_store.tables.values():
+            for c in table._constraints:
+                if c['type'] == 'foreign_key' and c['table'] == self.name:
+                    # 'table' and 'c' is referencing 'self'.
+                    search_criteria = {k2: ref_row[k1] for k1, k2 in zip(c['alias_key_fields'], c['foreign_key_fields'])}
+                    for row in table.find(search_criteria):
+                        refs.append((table.name, row))
+                        if table.name != self.name:
+                            table.find_references(row, refs)
+        
+        # Remove duplicates and formalize the result.
+        result = {}
+        for table_name, row in refs:
+            rows = result.setdefault(table_name, [])
+            if row not in rows:
+                rows.append(row)
+
+        return result
 
     def save(self, save_data):
         cs = self._save_table_data(save_data)

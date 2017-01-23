@@ -304,6 +304,78 @@ class TestRelib(unittest.TestCase):
             ts.save_to_backend(DictBackend())
         self.assertIn("foreign key record in 'continents' not found", str(context.exception))
 
+    def test_find_references(self):
+        
+        ts = TableStore()
+
+        # Make three tables which all have master-detail relationship and use
+        # aliased combined foreign keys for extra points.
+        # Master table contains a combinded primary key, master_id2 and master_id2.
+        # Middle table has foreign key relationship to master table primary keys but with
+        # aliased field names.
+        # Detail table has foreign key relationship to middle table using a unique field
+        # in the middle table, as opposed to the primary key. It also has a reference to
+        # itself.
+        ts = make_store(populate=True)
+        t1 = ts.add_table('master')
+        t1.add_primary_key('master_id1,master_id2')
+        t1r1 = t1.add({'master_id1': 1, 'master_id2': 'a'})  # Has two 'middle' rows referencing it.
+        t1r2 = t1.add({'master_id1': 2, 'master_id2': 'b'})  # Has one 'middle' row references to it.
+        t1r3 = t1.add({'master_id1': 3, 'master_id2': 'c'})  # Has no foreign references to it.
+
+        t2 = ts.add_table('middle')
+        t2.add_primary_key('middle_id')
+        t2.add_foreign_key('m1,m2', 'master', 'master_id1,master_id2')
+        t2.add_unique_constraint('middle_unique_id')
+        t2r1 = t2.add({'middle_id': 51, 'm1': 1, 'm2': 'a', 'middle_unique_id': 'unique_51'})  # Has two 'detail' row refs.
+        t2r2 = t2.add({'middle_id': 52, 'm1': 1, 'm2': 'a', 'middle_unique_id': 'unique_52'})  # Has two 'detail' row refs.
+        t2r3 = t2.add({'middle_id': 53, 'm1': 2, 'm2': 'b', 'middle_unique_id': 'unique_53'})  # Has two 'detail' row refs.
+                
+        t3 = ts.add_table('detail')
+        t3.add_primary_key('detail_id')
+        t3.add_foreign_key('middle_unique_id', 'middle')
+        t3.add_foreign_key('other_detail_id', 'detail', 'detail_id')
+        # This one references unique field "middle.unique_id=51" as well as itself
+        t3r1 = t3.add({'detail_id': 100, 'middle_unique_id': 'unique_51', 'other_detail_id': 100})
+        # This one references unique field "middle.unique_id=51" as well as the row above.
+        t3r2 = t3.add({'detail_id': 101, 'middle_unique_id': 'unique_51', 'other_detail_id': 100})
+        # This one references unique field "middle.unique_id=53" but the row above as well.
+        t3r3 = t3.add({'detail_id': 102, 'middle_unique_id': 'unique_53', 'other_detail_id': 101})
+        # These ones reference unique field "middle.unique_id=53" and nothing else, and are
+        # the only one that survive the cascading delete.
+        t3r4 = t3.add({'detail_id': 103, 'middle_unique_id': 'unique_53'})
+        t3r5 = t3.add({'detail_id': 104, 'middle_unique_id': 'unique_53'})
+
+        ts.check_integrity()
+        result = t1.find_references(t1r1)
+        # Only rows from 'middle' and 'detail' tables should be expected
+        self.assertItemsEqual(result.keys(), ['middle', 'detail'])
+
+        # First two of three rows in 'middle' should be expected.
+        self.assertEqual(len(result['middle']), 2)
+        self.assertIn(t2r1, result['middle'])
+        self.assertIn(t2r2, result['middle'])
+        self.assertNotIn(t2r3, result['middle'])
+
+        # First three of five rows in 'detail' should be expected.
+        self.assertEqual(len(result['detail']), 3)
+        self.assertIn(t3r1, result['detail'])
+        self.assertIn(t3r2, result['detail'])
+        self.assertIn(t3r3, result['detail'])
+        self.assertNotIn(t3r4, result['detail'])
+        self.assertNotIn(t3r5, result['detail'])
+
+        # Delete top row and expect problems
+        t1.remove(t1r1)
+        with self.assertRaises(TableError):
+            ts.check_integrity()
+
+        # Do cascading delete and expect success.
+        for table_name, rows in result.items():
+            for row in rows:
+                ts.get_table(table_name).remove(row)
+        ts.check_integrity()
+
     def test_serialization_filenames(self):
         table = Table('test-filename')
         table.add_primary_key('pk')
