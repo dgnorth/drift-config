@@ -407,11 +407,16 @@ def main(as_module=False):
     import argparse
     parser = argparse.ArgumentParser(description="")
     parser.add_argument('--loglevel')
+    parser.add_argument('--nocheck', action='store_true')
     get_options(parser)
     args = parser.parse_args()
 
     if args.loglevel:
         logging.basicConfig(level=args.loglevel)
+
+    if args.nocheck:
+        import driftconfig.relib
+        del driftconfig.relib.CHECK_INTEGRITY[:]
 
     fn = globals()["{}_command".format(args.command.replace("-", "_"))]
     fn(args)

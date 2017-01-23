@@ -6,26 +6,12 @@ import shutil
 
 import jsonschema
 
-from driftconfig.relib import TableStore, Table, TableError, ConstraintError, Backend
+from driftconfig.relib import TableStore, Table, TableError, ConstraintError, Backend, DictBackend
 from driftconfig.backends import FileBackend
 
 
 # TODO:
 # - test 'check_only' in Table.add().
-
-
-class TestBackend(Backend):
-    """Wrap a dict as a Backend for TableStore."""
-    def __init__(self, storage):
-        self.storage = storage
-
-    def save_data(self, k, v):
-        self.storage[k] = v
-
-    def load_data(self, k):
-        return self.storage[k]
-
-
 def make_store(populate, row_as_file=None):
     """Return a table store with two tables and populate if needed."""
     ts = TableStore()
@@ -303,6 +289,20 @@ class TestRelib(unittest.TestCase):
 
         self.assertIn("Schema check failed", str(context.exception))
 
+    def test_integrity_check(self):
+        ts = make_store(populate=True)
+        ts.check_integrity()
+        ts.get_table('continents').remove({'continent_id': 1})
+
+        # Make sure the the foreign key violation is caught
+        with self.assertRaises(ConstraintError) as context:
+            ts.check_integrity()
+        self.assertIn("foreign key record in 'continents' not found", str(context.exception))
+
+        # Also, make sure the check is run before serializing out.
+        with self.assertRaises(ConstraintError) as context:
+            ts.save_to_backend(DictBackend())
+        self.assertIn("foreign key record in 'continents' not found", str(context.exception))
 
     def test_serialization_filenames(self):
         table = Table('test-filename')
@@ -359,10 +359,10 @@ class TestRelib(unittest.TestCase):
 
             ts = make_store(populate=True, row_as_file=row_as_file)
             storage = {}
-            ts.save_to_backend(TestBackend(storage))
+            ts.save_to_backend(DictBackend(storage))
             storage = json.loads(json.dumps(storage))  # Do a quick json "leakage" check.
             ts_check = make_store(populate=False, row_as_file=row_as_file)
-            ts_check.load_from_backend(TestBackend(storage))
+            ts_check.load_from_backend(DictBackend(storage))
 
             # The original and the clone should be identical
             for table_name in ts.tables:
@@ -372,7 +372,7 @@ class TestRelib(unittest.TestCase):
             table_orig = ts.get_table('continents')
             table_check = make_store(populate=False, row_as_file=row_as_file).get_table('continents')
             storage = {}
-            ts.save_to_backend(TestBackend(storage))
+            ts.save_to_backend(DictBackend(storage))
             table_check.load(lambda file_name: storage[file_name])
             self.assertEqual(table_orig._rows, table_check._rows)
 
@@ -392,9 +392,9 @@ class TestRelib(unittest.TestCase):
         for group_by in ['key1', 'key1,key2', 'key1,key3', 'key3,key1,key2']:
             ts = make_multi(populate=True, group_by=group_by)
             storage = {}
-            ts.save_to_backend(TestBackend(storage))
+            ts.save_to_backend(DictBackend(storage))
             table_check = make_multi(populate=False, group_by=group_by)
-            table_check.load_from_backend(TestBackend(storage))
+            table_check.load_from_backend(DictBackend(storage))
             self.assertEqual(ts.get_table('multikey')._rows, table_check.get_table('multikey')._rows)
 
     def test_tablestore_definition(self):

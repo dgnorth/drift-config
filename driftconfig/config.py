@@ -354,6 +354,7 @@ def get_drift_table_store():
         },
         'required': ['domain_name', 'origin'],
     })
+    domain.add_default_values({'domain_name': '', 'origin': ''})
 
     organizations = ts.add_table('organizations')
     organizations.add_primary_key('organization_name')

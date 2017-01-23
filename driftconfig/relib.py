@@ -21,6 +21,11 @@ from schemautil import check_schema
 log = logging.getLogger(__name__)
 
 
+# Global integrity check switches.
+# TODO: Add unit tests to check proper functionality of these flags.
+CHECK_INTEGRITY = ['pk', 'fk', 'unique', 'schema']
+
+
 class RelibError(RuntimeError):
     pass
 
@@ -42,7 +47,7 @@ class Table(object):
     TABLENAME_REGEX = re.compile(r"^([a-z\d.-]){1,50}$")
     PK_FIELDNAME_REGEX = re.compile(r"^([\w\d.-]){1,50}$")
 
-    def __init__(self, table_name, table_store=None):
+    def __init__(self, table_name, table_store=None, from_def=None):
 
         # Table name must be nicely formatted so we can use it in path names.
         if not table_name.startswith('#') and not self.TABLENAME_REGEX.match(table_name):
@@ -59,6 +64,9 @@ class Table(object):
         self._group_by_fields = None
         self._subfolder = None
         self._is_system_table = False
+
+        if from_def:
+            self.__dict__.update(from_def['dict'])
 
     def __str__(self):
         return "Table('{}')".format(self._table_name)
@@ -98,17 +106,22 @@ class Table(object):
         # Make sure 'row' contains primary key and unique key fields and does not violate any
         # constraints thereof.
         # For convenience, the function returns the canonicalized primary key for the row.
+        check_pk = 'pk' in CHECK_INTEGRITY
+        check_fk = 'fk' in CHECK_INTEGRITY
+        check_unique = 'unique' in CHECK_INTEGRITY
+        check_schema_ = 'schema' in CHECK_INTEGRITY
+
         for c in self._constraints:
             if c['type'] in ['primary_key', 'unique'] and not set(c['fields']).issubset(row):
                 raise ConstraintError("In table '{}', row violates constraint {}: {}".format(self._table_name, c, row))
 
-            if c['type'] == 'unique':
+            if c['type'] == 'unique' and check_unique:
                 # Check for duplicates
                 search_criteria = {k: row[k] for k in c['fields']}
                 found = self.find(search_criteria)
                 if len(found):
                     raise ConstraintError("Unique constraint violation on {} because of {}.".format(search_criteria, found))
-            elif c['type'] == 'foreign_key':
+            elif c['type'] == 'foreign_key' and check_fk:
                 # Verify foreign row reference, if set.
                 if set(c['foreign_key_fields']).issubset(row):
                     foreign_row = self.get_foreign_row(None, c['table'], c['foreign_key_fields'], _row=row)
@@ -117,11 +130,12 @@ class Table(object):
                             self.name, c['table'], {k: row[k] for k in c['foreign_key_fields']}, json.dumps(row, indent=4)))
 
         # Check Json schema format compliance
-        check_schema(row, self._schema, "Adding row to {}".format(self))
+        if check_schema_:
+            check_schema(row, self._schema, "Adding row to {}".format(self))
 
         # Check primary key violation
         row_key = self._canonicalize_key(row)
-        if row_key in self._rows:
+        if check_pk and row_key in self._rows:
             raise ConstraintError("Primary key violation in table '{}': {}".format(self._table_name, row_key))
 
         return row_key
@@ -492,8 +506,8 @@ class SingleRowTable(Table):
     out with a dict as root object, as opposed to a list, like with the Table object.
     """
 
-    def __init__(self, table_name, table_store=None):
-        super(SingleRowTable, self).__init__(table_name, table_store)
+    def __init__(self, table_name, table_store=None, from_def=None):
+        super(SingleRowTable, self).__init__(table_name, table_store, from_def)
         self.add({})  # A single row table always has one, and only one row.
 
     def _canonicalize_key(self, primary_key, use_group_by=False):
@@ -563,7 +577,7 @@ class TableStoreEncoder(json.JSONEncoder):
         elif isinstance(obj, Table):
             #
             tmp, obj._rows = obj._rows, {}  # Remove rows temporarily
-            tmp2, obj._table_store = obj._table_store, None  # Remove circular depency temporarily
+            tmp2 = obj.__dict__.pop('_table_store')  # Exlude this property from definition
             try:
                 return {'class': obj.__class__.__name__, 'dict': obj.__dict__.copy()}
             finally:
@@ -635,36 +649,55 @@ class TableStore(object):
         """
         data = json.loads(definition)
         self.__dict__.update(data)
-        # HACK: Maintaint proper DAG order of tables. It gets screwed up during jsoning.
-        tables = self._tables
-        self._tables = collections.OrderedDict()
-        for table_name in self._tableorder:
-            self._tables[table_name] = tables[table_name]
+
+        # TODO: Maintaint proper DAG order of tables during serialization. It can be remedied
+        # by serializing it out as tuple list instead of dict, or decorating the key names with
+        # ordinals. Until then, this work-around is needed:
+        if self._tables.keys() != self._tableorder:
+            # Rearranging the tables according to _tableorder.
+            tables = self._tables
+            self._tables = collections.OrderedDict()
+            for table_name in self._tableorder:
+                self._tables[table_name] = tables[table_name]
 
         for table_name, table_data in self._tables.iteritems():
+            # TODO: Make this mapping dynamic instead of hardcoded.
             if table_data['class'] == 'Table':
                 cls = Table
             elif table_data['class'] == 'SingleRowTable':
                 cls = SingleRowTable
             else:
                 raise RuntimeError("Unknown table class '{}'".format(table_data['class']))
-            table = cls(table_name, self)
-            table.__dict__.update(table_data['dict'])
-            table._table_store = self
-            self._tables[table_name] = table
+            self._tables[table_name] = cls(table_name, self, table_data)
 
-    def save_to_backend(self, backend, force=False):
+    def check_integrity(self):
+        """Run constraints and schema integrity check on current table store."""
+        if not CHECK_INTEGRITY:  # Do a quick bail-out.
+            return
+
+        b = DictBackend()
+        self.save_to_backend(b, run_integrity_check=False)
+        # Serializing in a table store will in fact run all the integrity checks.
+        TableStore(b)  # This will trigger any constraint or schema violations.
+
+    def save_to_backend(self, backend, force=False, run_integrity_check=True):
         """
         Save this table store definition and table data to 'backend'.
 
         If the table store is only partial (contains only meta table info) or not
         fully intact, it will not save to 'backend' and instead raise an exception.
         Use 'force' = True to override this behavior.
+
+        If 'run_integrity_check' is True, full integrity check on constraints and schema
+        will be made prior to saving to backend.
         """
         # Do basic self test
         if len(self._tables) < 2 and not force:
             # Table store is only partially functional.
             raise RuntimeError("Won't save out partially constructed table store.")
+
+        if run_integrity_check:
+            self.check_integrity()
 
         backend.start_saving()
         backend.save_data(self.TS_DEF_FILENAME, self.get_definition())
@@ -798,6 +831,18 @@ class Backend(object):
 
     def load_data(self, file_name):
         pass
+
+
+class DictBackend(Backend):
+    """Wrap a dict as a Backend for TableStore."""
+    def __init__(self, storage=None):
+        self.storage = {} if storage is None else storage
+
+    def save_data(self, k, v):
+        self.storage[k] = v
+
+    def load_data(self, k):
+        return self.storage[k]
 
 
 def create_backend(url):
