@@ -70,11 +70,13 @@ organizations:
     organization_name       string, pk
     short_name              string, required
     display_name:           string
+    state                   enum initializing|active|disabled|deleted, default=active
 
 
 tiers:
     tier_name               string, pk
     is_live                 boolean, default=true
+    state                   enum initializing|active|disabled|deleted, default=active
 
 
 deployable-names:
@@ -91,7 +93,7 @@ deployables:
 products:
     product_name            string, pk
     organization_name       string, fk->organizations, required
-
+    state                   enum initializing|active|disabled|deleted, default=active
 
 tenant-names:
     # a tenant name is unique across all tiers
@@ -364,9 +366,11 @@ def get_drift_table_store():
             'organization_name': {'pattern': r'^([a-z0-9]){2,20}$'},
             'short_name': {'pattern': r'^([a-z0-9]){2,20}$'},
             'display_name': {'type': 'string'},
+            'state': {'enum': ['initializing', 'active', 'disabled', 'deleted']},
         },
         'required': ['short_name'],
     })
+    organizations.add_default_values({'state': 'active'})
 
     tiers = ts.add_table('tiers')
     tiers.add_primary_key('tier_name')
@@ -375,10 +379,11 @@ def get_drift_table_store():
         'properties': {
             'tier_name': {'pattern': r'^([A-Z]){3,20}$'},
             'is_live': {'type': 'boolean'},
+            'state': {'enum': ['initializing', 'active', 'disabled', 'deleted']},
         },
         'required': ['is_live'],
     })
-    tiers.add_default_values({'is_live': True})
+    tiers.add_default_values({'is_live': True, 'state': 'active'})
 
     deployable_names = ts.add_table('deployable-names')
     deployable_names.add_primary_key('deployable_name')
@@ -411,9 +416,11 @@ def get_drift_table_store():
         'type': 'object',
         'properties': {
             'product_name': {'pattern': r'^([a-z0-9-]){3,35}$'},
+            'state': {'enum': ['initializing', 'active', 'disabled', 'deleted']},
         },
         'required': ['organization_name'],
     })
+    products.add_default_values({'state': 'active'})
 
     tenant_names = ts.add_table('tenant-names')
     tenant_names.add_primary_key('tenant_name')
