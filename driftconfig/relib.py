@@ -67,6 +67,10 @@ class Table(object):
 
         if from_def:
             self.__dict__.update(from_def['dict'])
+            # HACK: Legacy defs overwrite this property, so let's fix it here.
+            if '_table_store' in from_def['dict']:
+                self._table_store = table_store
+                log.warning("Fixing _table_store property due to legacy definition file.")
 
     def __str__(self):
         return "Table('{}')".format(self._table_name)
@@ -356,7 +360,7 @@ class Table(object):
 
         foreign_table = self._table_store.get_table(table_name)
         search_criteria = {k2: row[k1] for k1, k2 in zip(c['foreign_key_fields'], c['alias_key_fields'])}
-        
+
         # Special case where foreign row is a reference to the 'row' itself, which is in the process
         # of being inserted.
         if self.name == table_name and set(search_criteria.items()).issubset(set(row.items())):
@@ -382,7 +386,7 @@ class Table(object):
                         refs.append((table.name, row))
                         if table.name != self.name:
                             table.find_references(row, refs)
-        
+
         # Remove duplicates and formalize the result.
         result = {}
         for table_name, row in refs:
