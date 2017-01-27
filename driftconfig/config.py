@@ -313,7 +313,6 @@ aws commands extend service/deployable:
 '''
 import logging
 import os
-import os.path
 from datetime import datetime
 
 from driftconfig.relib import TableStore, BackendError, get_store_from_url, copy_table_store, create_backend, load_meta_from_backend
@@ -712,26 +711,6 @@ def get_drift_table_store():
     new_ts = TableStore()
     new_ts.init_from_definition(definition)
     return new_ts
-
-
-def get_domains(skip_errors=False):
-    """Return all config domains stored on local disk."""
-    config_folder = os.path.join(os.path.expanduser('~'), '.drift', 'config')
-    domains = {}
-    for dir_name in os.listdir(config_folder):
-        path = os.path.join(config_folder, dir_name)
-        if os.path.isdir(path):
-            try:
-                ts = get_store_from_url('file://' + path)
-            except Exception as e:
-                if skip_errors:
-                    print "Note: '{}' is not a config folder, or is corrupt. ({}).".format(path, e)
-                    continue
-                else:
-                    raise
-            domain = ts.get_table('domain')
-            domains[domain['domain_name']] = {'path': path, 'table_store': ts}
-    return domains
 
 
 class Check():

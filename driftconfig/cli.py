@@ -9,9 +9,9 @@ import getpass
 import logging
 
 from driftconfig.relib import create_backend, get_store_from_url, load_meta_from_backend, diff_meta, diff_tables
-from driftconfig.config import get_drift_table_store, get_domains, push_to_origin, pull_from_origin, parse_8601
+from driftconfig.config import get_drift_table_store, push_to_origin, pull_from_origin
 from driftconfig.backends import FileBackend
-from driftconfig.util import diff_table_stores
+from driftconfig.util import config_dir, get_domains
 
 log = logging.getLogger(__name__)
 
@@ -172,7 +172,7 @@ def init_command(args):
     ts = get_store_from_url(args.source)
     domain_name = ts.get_table('domain')['domain_name']
     print "Config domain name: ", domain_name
-    local_store = create_backend('file://~/.drift/config/' + domain_name)
+    local_store = create_backend('file://' + config_dir(domain_name, user_dir=args.user_dir))
     ts.save_to_backend(local_store)
     print "Config stored at: ", local_store
 
@@ -184,9 +184,13 @@ def _format_domain_info(domain_info):
 
 
 def list_command(args):
-    # Enumerate subfolders at ~/.drift/config and see what's there
-    for d in get_domains().values():
-        print _format_domain_info(d)
+    # Enumerate subfolders at drift/config and see what's there
+    domains = get_domains(user_dir=args.user_dir)
+    if not domains:
+        print "No Drift configuration found at", config_dir('', user_dir=args.user_dir)
+    else:
+        for d in domains.values():
+            print _format_domain_info(d)
 
 
 def pull_command(args):
@@ -209,7 +213,7 @@ def pull_config_loop(args):
 
 
 def _pull_command(args):
-    for domain_name, domain_info in get_domains().items():
+    for domain_name, domain_info in get_domains(user_dir=args.user_dir).items():
         if args.domain and args.domain != domain_name:
             continue
 
@@ -230,7 +234,7 @@ def _pull_command(args):
 
 def migrate_command(args):
     print "Migrating '{}'".format(args.domain)
-    path = os.path.expanduser('~') + '/.drift/config/' + args.domain
+    path = config_dir(args.domain, user_dir=args.user_dir)
     if not os.path.exists(path):
         print "Path not found:", path
         sys.exit(1)
@@ -266,7 +270,7 @@ end_time = start_time + timedelta(seconds=run_time)
 
 
 def push_command(args):
-    domain_info = get_domains().get(args.domain)
+    domain_info = get_domains(user_dir=args.user_dir).get(args.domain)
     if not domain_info:
         print "Can't push '{}'.".format(args.domain)
         sys.exit(1)
@@ -288,7 +292,7 @@ def push_command(args):
 
 def create_command(args):
 
-    domain_info = get_domains().get(args.domain)
+    domain_info = get_domains(user_dir=args.user_dir).get(args.domain)
     if domain_info:
         print "The domain name specified is taken:"
         print _format_domain_info(domain_info)
@@ -300,7 +304,7 @@ def create_command(args):
         {'domain_name': args.domain, 'origin': args.source, 'display_name': args.organization or ''})
 
     # Save it locally
-    domain_folder = os.path.join(os.path.expanduser('~'), '.drift', 'config', args.domain)
+    domain_folder = config_dir(args.domain, user_dir=args.user_dir)
     local_store = create_backend('file://' + domain_folder)
     ts.save_to_backend(local_store)
     print "New config for '{}' saved to {}.".format(args.domain, domain_folder)
@@ -309,7 +313,7 @@ def create_command(args):
 
 def diff_command(args):
     # Get local table store and its meta state
-    domain_info = get_domains().get(args.domain)
+    domain_info = get_domains(user_dir=args.user_dir).get(args.domain)
     local_ts = domain_info['table_store']
     local_m1, local_m2 = local_ts.refresh_metadata()
 
@@ -358,7 +362,7 @@ def addtenant_command(args):
     print "  Product:     ", args.product
     print "  Deployables: ", args.deployables
 
-    domain_info = get_domains().get(args.domain)
+    domain_info = get_domains(user_dir=args.user_dir).get(args.domain)
     if not domain_info:
         print "The domain '{}'' is not found locally. Run 'init' to fetch it.".format(args.domain)
         sys.exit(1)
@@ -392,7 +396,7 @@ def addtenant_command(args):
         sys.exit(0)
 
     # Save it locally
-    local_store = create_backend('file://~/.drift/config/' + args.domain)
+    local_store = create_backend('file://' + config_dir(args.domain, user_dir=args.user_dir))
     ts.save_to_backend(local_store)
     print "Changes to config saved at {}.".format(local_store)
     print "Remember to push changes to persist them."
@@ -407,7 +411,8 @@ def main(as_module=False):
     import argparse
     parser = argparse.ArgumentParser(description="")
     parser.add_argument('--loglevel')
-    parser.add_argument('--nocheck', action='store_true')
+    parser.add_argument('--nocheck', action='store_true', help="Skip all relational integrity and schema checks.")
+    parser.add_argument('--user-dir', action='store_true', help="Choose user directory over site for locally stored configs.")
     get_options(parser)
     args = parser.parse_args()
 

@@ -6,10 +6,10 @@ from __future__ import absolute_import
 
 import logging
 
-from flask import _app_ctx_stack, current_app
+from flask import current_app
 from flask import _app_ctx_stack as stack
 from driftconfig.relib import get_store_from_url, create_backend, copy_table_store
-from driftconfig.config import get_domains
+from driftconfig.util import get_domains
 
 
 log = logging.getLogger(__name__)
