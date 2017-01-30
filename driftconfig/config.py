@@ -402,6 +402,7 @@ def get_drift_table_store():
 
     organizations = ts.add_table('organizations')
     organizations.add_primary_key('organization_name')
+    organizations.add_unique_constraint('short_name')
     organizations.add_schema({
         'type': 'object',
         'properties': {
