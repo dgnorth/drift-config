@@ -167,6 +167,40 @@ class TestRelib(unittest.TestCase):
             })
         self.assertEquals(row['gameserver_instance_id'], 5001)
 
+    def test_users(self):
+
+        ts = create_basic_domain()
+
+        user = ts.get_table('users').add({
+            'organization_name': 'directivegames',
+            'user_name': 'test_user',
+        })
+
+        role_service = ts.get_table('access-roles').add({
+            'role_name': 'service',
+            'deployable_name': 'drift-base',
+            'description': "Full access to all API's",
+        })
+
+        role_client = ts.get_table('access-roles').add({
+            'role_name': 'client',
+            'deployable_name': 'drift-base',
+            'description': "Full access to all API's",
+        })
+
+        ts.get_table('users-acl').add({
+            'organization_name': 'directivegames',
+            'user_name': user['user_name'],
+            'role_name': role_service['role_name'],
+        })
+
+        ts.get_table('users-acl').add({
+            'organization_name': 'directivegames',
+            'user_name': user['user_name'],
+            'role_name': role_client['role_name'],
+            'tenant_name': 'dg-unittest-product',
+        })
+
 
 class TestPushPull(unittest.TestCase):
 

@@ -133,6 +133,20 @@ platforms:
     meta
         subfolder_name=authentication
 
+users:
+    organization_name   string, pk, fk->organizations, required
+    user_name           string, pk, required
+    create_date         datetime, required, default=@@utcnow
+    valid_until         datetime
+    is_active           boolean, required, default=true
+    password            string
+    access_key          string
+    is_service          boolean, required, default=false
+    is_role_admin       boolean, required, default=false
+
+    meta
+        subfolder_name=authentication
+
 
 /////////////////////////////////////////////////////////////////////////////////
 // APP SPECIFIC CONFIG - api-router
@@ -246,14 +260,43 @@ authentication:
         provider_name       string
         provider_details    dict
 
-    access_keys
-        # replacing the global 'service_user'
-        user_name           string
-        roles               list of role names
-        access_keys         string
-        secret_key          string
-        valid_until         datetime
-        is_active           bool
+users:
+    # replacing the global 'service_user'
+    organization_name   string, pk, fk->organizations, required
+    user_name           string, pk, required
+    create_date         datetime, required, default=@@utcnow
+    valid_until         datetime
+    is_active           boolean, required, default=true
+    password            string
+    access_key          string
+    is_service          boolean, required, default=false
+    is_role_admin       boolean, required, default=false
+
+
+user-acl-roles:
+    organization_name   string, pk, fk->organizations, required
+    user_name           string, pk, fk->users, required
+    role_name           string, pk, fk->user-roles, required
+    tenant_name         string, fk->tenants
+
+
+# dynamically populated by deployables during "init" phase
+access-roles:
+    role_name               string, pk
+    deployable_name         string, fk->deployables
+    description             string
+
+
+use case:
+
+tenant: superkaiju
+login: directivegames.matti
+pass:  bobo
+
+-> lookup in user-acl:
+    no record -> if 'superuser' in  org.role:
+        assign ['admin'] to roles
+
 
 
 application specific tables:
@@ -489,6 +532,81 @@ def get_drift_table_store():
             }},
         },
     })
+
+    '''
+    users:
+        organization_name   string, pk, fk->organizations, required
+        user_name           string, pk, required
+        create_date         datetime, required, default=@@utcnow
+        valid_until         datetime
+        is_active           boolean, required, default=true
+        password            string
+        access_key          string
+        is_service          boolean, required, default=false
+        is_role_admin       boolean, required, default=false
+
+        meta
+            subfolder_name=authentication
+    '''
+    users = ts.add_table('users')
+    users.set_row_as_file(subfolder_name='authentication')
+    users.add_primary_key('organization_name,user_name')
+    users.add_foreign_key('organization_name', 'organizations')
+    users.add_schema({
+        'type': 'object',
+        'properties': {
+            'user_name': {'pattern': r'^([a-z0-9_]){2,30}$'},
+            'create_date': {'format': 'date-time'},
+            'valid_until': {'format': 'date-time'},
+            'is_active': {'type': 'boolean'},
+            'password': {'type': 'string'},
+            'access_key': {'type': 'string'},
+            'is_service': {'type': 'boolean'},
+            'is_role_admin': {'type': 'boolean'},
+            'access_key': {'type': 'string'},
+        },
+        'required': ['create_date', 'is_active', 'is_service', 'is_role_admin'],
+    })
+    users.add_default_values({
+        'create_date': '@@utcnow', 'is_active': True,
+        'is_service': False, 'is_role_admin': False
+    })
+
+
+    '''
+    # dynamically populated by deployables during "init" phase
+    access-roles:
+        role_name               string, pk
+        deployable_name         string, fk->deployables, required
+        description             string
+    '''
+    access_roles = ts.add_table('access-roles')
+    access_roles.set_row_as_file(subfolder_name='authentication')
+    access_roles.add_primary_key('role_name')
+    platforms.add_foreign_key('deployable_name', 'deployable-names')
+    access_roles.add_schema({
+        'type': 'object',
+        'properties': {
+            'description': {'type': 'string'},
+        },
+        'required': ['deployable_name'],
+    })
+
+
+    '''
+    users-acl:
+        organization_name   string, pk, fk->organizations, required
+        user_name           string, pk, fk->users, required
+        role_name           string, pk, fk->user-roles, required
+        tenant_name         string, fk->tenants
+    '''
+    users_acl = ts.add_table('users-acl')
+    users_acl.set_row_as_file(subfolder_name='authentication')
+    users_acl.add_primary_key('organization_name,user_name,role_name')
+    users_acl.add_foreign_key('organization_name', 'organizations')
+    users_acl.add_foreign_key('user_name', 'users')
+    users_acl.add_foreign_key('role_name', 'access-roles')
+    users_acl.add_foreign_key('tenant_name', 'tenant-names')
 
 
     # API ROUTER STUFF - THIS SHOULDN'T REALLY BE IN THIS FILE HERE
