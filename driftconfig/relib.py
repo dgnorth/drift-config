@@ -81,8 +81,8 @@ class Table(object):
 
     def _canonicalize_key(self, primary_key, use_group_by=False):
         """
-        Return a canonical string representation of the primary key 'primary_key' using
-        the primary key fields of this table.
+        Return a canonical representation of the primary key 'primary_key' using the
+        primary key fields of this table. The return type is a string or a number.
 
         If 'use_group_by'is set, only the fields specified in a call to set_row_as_file()
         are used.
@@ -91,6 +91,9 @@ class Table(object):
 
         The canonicalized string must conform to PK_FIELDNAME_REGEX pattern so it can be
         used in file names as well.
+
+        Special case: If the primary key is a number, the canonicalized version is the
+        number itself. This guarantees proper ordering when writing out json.
         """
         fields = self._group_by_fields if use_group_by else self._pk_fields
 
@@ -98,11 +101,13 @@ class Table(object):
             raise TableError("For table '{}', can't make primary key. Need {} but got {}.".format(
                 self._table_name, fields, primary_key.keys()))
 
-        canonicalized = '.'.join([str(primary_key[k]) for k in fields if k in primary_key])
-
-        if not self.PK_FIELDNAME_REGEX.match(canonicalized):
-            raise ConstraintError("Primary key value {!r} didn't match pattern '{}'.".format(
-                canonicalized, self.PK_FIELDNAME_REGEX.pattern))
+        if len(fields) == 1 and isinstance(primary_key[fields[0]], (int, long, float)):
+            canonicalized = primary_key[fields[0]]
+        else:
+            canonicalized = '.'.join([str(primary_key[k]) for k in fields if k in primary_key])
+            if not self.PK_FIELDNAME_REGEX.match(canonicalized):
+                raise ConstraintError("Primary key value {!r} didn't match pattern '{}'.".format(
+                    canonicalized, self.PK_FIELDNAME_REGEX.pattern))
 
         return canonicalized
 
@@ -336,7 +341,7 @@ class Table(object):
             file_name = self._subfolder + '/' + file_name
 
         if row:
-            file_name += '.' + self._canonicalize_key(row, use_group_by=True)
+            file_name += '.' + str(self._canonicalize_key(row, use_group_by=True))
 
         file_name += '.json'
 
@@ -420,17 +425,6 @@ class Table(object):
         # Save the rows sorted on primary key.
         rows = [self._rows[k] for k in sorted(self._rows)]
 
-        # TODO: Sunset this, as json serialization is now using sort_keys=True to maintain
-        # consistent md5 checksums.
-        def orderly_row(row):
-            # Sort Json row object keys so that primary key fields come first, and in the order
-            # they were originally defined.
-            d = collections.OrderedDict()
-            for pk_field in self._pk_fields:
-                d[pk_field] = row[pk_field]
-            d.update(row)  # Chuck in the rest
-            return d
-
         # Stub out the save_data() function so we can calculate a checksum.
         checksum = hashlib.sha256()
 
@@ -443,13 +437,13 @@ class Table(object):
 
             if row_per_file:
                 for row in rows:
-                    save_data_check(self.get_filename(row), json.dumps(orderly_row(row), indent=4, sort_keys=True))
+                    save_data_check(self.get_filename(row), json.dumps(row, indent=4, sort_keys=True))
             else:
                 # Group one or more rows together for each file.
                 group = {}
                 for row in rows:
                     key = self._canonicalize_key(row, use_group_by=True)
-                    group.setdefault(key, []).append(orderly_row(row))
+                    group.setdefault(key, []).append(row)
 
                 for rowset in group.values():
                     save_data_check(self.get_filename(rowset[0]), json.dumps(rowset, indent=4, sort_keys=True))
@@ -460,7 +454,7 @@ class Table(object):
 
         else:
             # Write out all rows as a list
-            rows = [orderly_row(row) for row in rows]
+            rows = [row for row in rows]
             save_data_check(self.get_filename(), json.dumps(rows, indent=4, sort_keys=True))
 
         cs = checksum.hexdigest()
