@@ -360,6 +360,7 @@ from datetime import datetime
 
 from driftconfig.relib import TableStore, BackendError, get_store_from_url, copy_table_store, create_backend, load_meta_from_backend
 from driftconfig.backends import FileBackend, S3Backend, RedisBackend
+from driftconfig.util import get_domains
 
 log = logging.getLogger(__name__)
 
