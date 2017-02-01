@@ -810,7 +810,7 @@ def get_drift_table_store():
     gameservers_instances.set_subfolder_name('ue4-gameservers')
     gameservers_instances.add_primary_key('gameserver_instance_id')
     gameservers_instances.add_foreign_key('product_name', 'products')
-    gameservers_instances.add_foreign_key('group_name,region', 'gameservers-machines')
+    #gameservers_instances.add_foreign_key('group_name,region', 'gameservers-machines')
     gameservers_instances.add_foreign_key('tenant_name', 'tenant-names')
     gameservers_instances.add_schema({
         'type': 'object',
