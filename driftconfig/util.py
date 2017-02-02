@@ -76,17 +76,7 @@ def get_drift_config(ts, tenant_name=None, tier_name=None, deployable_name=None)
                 "Tenant '{}' not found for tier '{}' and deployable '{}'".format(tenant_name, tier_name, deployable_name)
             )
     else:
-
-        # Fall back on default tenant, if possible.
-        for tenant in tenants.find({'tier_name': tier_name, 'deployable_name': deployable_name}):
-            if tenant.get('is_default'):
-                break
-        else:
-            tenant = None
-            log.info(
-                "No tenant specified and no default tenant available for tier '{}' and "
-                "deployable '{}'".format(tier_name, deployable_name)
-            )
+        tenant = None
 
     conf = collections.namedtuple(
         'driftconfig',
