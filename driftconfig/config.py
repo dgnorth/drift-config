@@ -893,7 +893,8 @@ def push_to_origin(local_ts, force=False):
 def pull_from_origin(local_ts, ignore_if_modified=False, force=False):
     origin = local_ts.get_table('domain')['origin']
     origin_backend = create_backend(origin)
-    origin_meta = load_meta_from_backend(origin_backend)
+    ##origin_meta = load_meta_from_backend(origin_backend)
+    origin_meta = TableStore(origin_backend)
     old, new = local_ts.refresh_metadata()
 
     if old != new and not ignore_if_modified:
@@ -903,7 +904,7 @@ def pull_from_origin(local_ts, ignore_if_modified=False, force=False):
     if crc_match and not force:
         return {'pulled': True, 'table_store': local_ts, 'reason': 'pull_skipped_crc_match'}
 
-    origin_ts = TableStore(origin_backend)
+    origin_ts = origin_meta ## TableStore(origin_backend)
     return {'pulled': True, 'table_store': origin_ts, 'reason': 'pulled_from_origin'}
 
 
