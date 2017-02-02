@@ -834,9 +834,7 @@ class TableStore(object):
 def load_meta_from_backend(backend):
     """Load TableStore from 'backend' that contains only the meta info."""
     ts = TableStore()
-    backend.start_loading()
     ts.meta.load(backend.load_data)
-    backend.done_loading()
     return ts
 
 

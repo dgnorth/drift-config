@@ -28,7 +28,6 @@ class S3Backend(Backend):
         self.folder_name = folder_name.lstrip('/')  # Strip leading slashes
         self.region_name = region_name
         self.etag = etag
-        self.archive = {}
 
     @classmethod
     def create_from_url_parts(cls, parts, query):
@@ -50,39 +49,7 @@ class S3Backend(Backend):
     def get_key_name(self, file_name):
         return '{}/{}'.format(self.folder_name, file_name)
 
-    def start_saving(self):
-        pass
-
     def save_data(self, file_name, data):
-        key_name = file_name
-        self.archive[key_name] = data
-
-    def done_saving(self):
-        from cPickle import dumps
-        blob = dumps(self.archive, protocol=2)
-        f = StringIO.StringIO(blob)
-        key_name = self.get_key_name('table-store.pickle')
-        log.info("Uploading %s bytes to s3://%s/%s", len(blob), self.bucket_name, key_name)
-        self.s3_client.upload_fileobj(
-            f,
-            self.bucket_name,
-            key_name,
-            #ExtraArgs={'ContentType': 'application/json'},
-        )
-        self.archive.clear()
-
-    def start_loading(self):
-        key_name = self.get_key_name('table-store.pickle')
-        log.debug("Downloading s3://%s/%s", self.bucket_name, key_name)
-        f = StringIO.StringIO()
-        self.s3_client.download_fileobj(self.bucket_name, key_name, f)
-        from cPickle import loads
-        self.archive = loads(f.getvalue())
-
-    def load_data(self, file_name):
-        return self.archive[file_name]
-
-    def xsave_data(self, file_name, data):
         f = StringIO.StringIO(data)
         key_name = self.get_key_name(file_name)
         log.debug("Uploading %s bytes to s3://%s/%s", len(data), self.bucket_name, key_name)
@@ -93,7 +60,7 @@ class S3Backend(Backend):
             ExtraArgs={'ContentType': 'application/json'},
         )
 
-    def xload_data(self, file_name):
+    def load_data(self, file_name):
         key_name = self.get_key_name(file_name)
         log.debug("Downloading s3://%s/%s", self.bucket_name, key_name)
         f = StringIO.StringIO()
