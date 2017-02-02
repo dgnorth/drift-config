@@ -846,6 +846,23 @@ class Check():
         copy_table_store(self._ts_copy)
 
 
+def load_from_origin(origin_backend):
+    from cPickle import loads
+    origin_backend.start_loading()
+    blob = origin_backend.load_data('table-store.pickle')
+    origin_backend.done_loading()
+    ts = loads(blob)
+    return ts
+
+
+def save_to_origin(ts, origin_backend):
+    from cPickle import dumps
+    blob = dumps(ts, protocol=2)
+    origin_backend.start_saving()
+    blob = origin_backend.save_data('table-store.pickle', blob)
+    origin_backend.done_saving()
+
+
 def push_to_origin(local_ts, force=False):
     """
     Pushed 'local_ts' to origin.
@@ -868,7 +885,8 @@ def push_to_origin(local_ts, force=False):
     origin = local_ts.get_table('domain')['origin']
     origin_backend = create_backend(origin)
     try:
-        origin_ts = load_meta_from_backend(origin_backend)
+        ###origin_ts = load_meta_from_backend(origin_backend)
+        origin_ts = load_from_origin(origin_backend)
     except Exception as e:
         log.warning("Can't load meta info from %s: %s", origin_backend, repr(e))
         crc_match = True
@@ -886,14 +904,16 @@ def push_to_origin(local_ts, force=False):
     if crc_match and old == new and not force:
         return {'pushed': True, 'reason': 'push_skipped_crc_match'}
 
-    local_ts.save_to_backend(origin_backend)
+    ###local_ts.save_to_backend(origin_backend)
+    save_to_origin(local_ts, origin_backend)
     return {'pushed': True, 'reason': 'pushed_to_origin'}
 
 
 def pull_from_origin(local_ts, ignore_if_modified=False, force=False):
     origin = local_ts.get_table('domain')['origin']
     origin_backend = create_backend(origin)
-    origin_meta = load_meta_from_backend(origin_backend)
+    ##origin_meta = load_meta_from_backend(origin_backend)
+    origin_meta = load_from_origin(origin_backend)
     old, new = local_ts.refresh_metadata()
 
     if old != new and not ignore_if_modified:
@@ -903,7 +923,8 @@ def pull_from_origin(local_ts, ignore_if_modified=False, force=False):
     if crc_match and not force:
         return {'pulled': True, 'table_store': local_ts, 'reason': 'pull_skipped_crc_match'}
 
-    origin_ts = TableStore(origin_backend)
+    ###origin_ts = TableStore(origin_backend)
+    origin_ts = origin_meta
     return {'pulled': True, 'table_store': origin_ts, 'reason': 'pulled_from_origin'}
 
 
