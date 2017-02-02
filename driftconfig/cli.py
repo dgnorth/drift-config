@@ -169,7 +169,9 @@ def get_options(parser):
 
 def init_command(args):
     print "Initializing config from", args.source
-    ts = get_store_from_url(args.source)
+    from config import load_from_origin
+    ##ts = get_store_from_url(args.source)
+    ts = load_from_origin(create_backend(args.source))
     domain_name = ts.get_table('domain')['domain_name']
     print "Config domain name: ", domain_name
     local_store = create_backend('file://' + config_dir(domain_name, user_dir=args.user_dir))
