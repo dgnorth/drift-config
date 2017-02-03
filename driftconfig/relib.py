@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 
 # Global integrity check switches.
 # TODO: Add unit tests to check proper functionality of these flags.
-CHECK_INTEGRITY = ['pk', 'fk', 'unique', 'schema']
+CHECK_INTEGRITY = ['pk', 'fk', 'unique', 'schema', 'constraints']
 
 
 class RelibError(RuntimeError):
@@ -119,24 +119,26 @@ class Table(object):
         check_fk = 'fk' in CHECK_INTEGRITY
         check_unique = 'unique' in CHECK_INTEGRITY
         check_schema_ = 'schema' in CHECK_INTEGRITY
+        check_constraints = 'constraints' in CHECK_INTEGRITY
 
-        for c in self._constraints:
-            if c['type'] in ['primary_key', 'unique'] and not set(c['fields']).issubset(row):
-                raise ConstraintError("In table '{}', row violates constraint {}: {}".format(self._table_name, c, row))
+        if check_constraints:
+            for c in self._constraints:
+                if c['type'] in ['primary_key', 'unique'] and not set(c['fields']).issubset(row):
+                    raise ConstraintError("In table '{}', row violates constraint {}: {}".format(self._table_name, c, row))
 
-            if c['type'] == 'unique' and check_unique:
-                # Check for duplicates
-                search_criteria = {k: row[k] for k in c['fields']}
-                found = self.find(search_criteria)
-                if len(found):
-                    raise ConstraintError("Unique constraint violation on {} because of {}.".format(search_criteria, found))
-            elif c['type'] == 'foreign_key' and check_fk:
-                # Verify foreign row reference, if set.
-                if set(c['foreign_key_fields']).issubset(row):
-                    foreign_row = self.get_foreign_row(None, c['table'], c['foreign_key_fields'], _row=row)
-                    if len(foreign_row) < 1:
-                        raise ConstraintError("In table '{}', foreign key record in '{}' not found {}.\nRow data:\n{}".format(
-                            self.name, c['table'], {k: row[k] for k in c['foreign_key_fields']}, json.dumps(row, indent=4)))
+                if c['type'] == 'unique' and check_unique:
+                    # Check for duplicates
+                    search_criteria = {k: row[k] for k in c['fields']}
+                    found = self.find(search_criteria)
+                    if len(found):
+                        raise ConstraintError("Unique constraint violation on {} because of {}.".format(search_criteria, found))
+                elif c['type'] == 'foreign_key' and check_fk:
+                    # Verify foreign row reference, if set.
+                    if set(c['foreign_key_fields']).issubset(row):
+                        foreign_row = self.get_foreign_row(None, c['table'], c['foreign_key_fields'], _row=row)
+                        if len(foreign_row) < 1:
+                            raise ConstraintError("In table '{}', foreign key record in '{}' not found {}.\nRow data:\n{}".format(
+                                self.name, c['table'], {k: row[k] for k in c['foreign_key_fields']}, json.dumps(row, indent=4)))
 
         # Check Json schema format compliance
         if check_schema_:
