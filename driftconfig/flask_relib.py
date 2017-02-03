@@ -8,7 +8,7 @@ import logging
 
 from flask import current_app
 from flask import _app_ctx_stack as stack
-from driftconfig.relib import get_store_from_url, create_backend, copy_table_store
+from driftconfig.relib import get_store_from_url, create_backend, copy_table_store, CHECK_INTEGRITY
 from driftconfig.util import get_domains
 
 
@@ -23,6 +23,8 @@ class FlaskRelib(object):
 
     def init_app(self, app):
         app.extensions['relib'] = self
+        if not app.debug:
+            del CHECK_INTEGRITY[:]
 
     def refresh(self):
         """Invalidate Redis cache, if in use, and fetch new config from source."""
