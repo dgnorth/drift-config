@@ -967,7 +967,7 @@ class TSTransaction(object):
 
         # Write back to source
         source_backend = create_backend(self._url)
-        self._ts.save_to_backend(source_backend)
+        source_backend.save_table_store(self._ts)
 
 
 def parse_8601(s):

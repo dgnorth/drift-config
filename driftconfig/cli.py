@@ -175,7 +175,7 @@ def init_command(args):
     domain_name = ts.get_table('domain')['domain_name']
     print "Config domain name: ", domain_name
     local_store = create_backend('file://' + config_dir(domain_name, user_dir=args.user_dir))
-    ts.save_to_backend(local_store)
+    local_store.save_table_store(ts)
     print "Config stored at: ", local_store
 
 
@@ -229,7 +229,7 @@ def _pull_command(args):
                 print "Use --force to force a pull."
         else:
             local_backend = create_backend('file://' + domain_info['path'])
-            result['table_store'].save_to_backend(local_backend)
+            local_backend.save_table_store(result['table_store'])
 
             print "Config pulled. Reason: ", result['reason']
 
@@ -257,7 +257,7 @@ def migrate_command(args):
 
     local_store = PatchBackend(path)
     ts.load_from_backend(local_store, skip_definition=True)
-    ts.save_to_backend(local_store)
+    local_store.save_table_store(ts)
 
 
 def now():
@@ -289,7 +289,7 @@ def push_command(args):
     else:
         print "Config pushed. Reason: ", result['reason']
         local_store = create_backend('file://' + domain_info['path'])
-        ts.save_to_backend(local_store)
+        local_store.save_table_store(ts)
 
 
 def create_command(args):
@@ -308,7 +308,7 @@ def create_command(args):
     # Save it locally
     domain_folder = config_dir(args.domain, user_dir=args.user_dir)
     local_store = create_backend('file://' + domain_folder)
-    ts.save_to_backend(local_store)
+    local_store.save_table_store(ts)
     print "New config for '{}' saved to {}.".format(args.domain, domain_folder)
     print "You can modify the files now before pushing it to source."
 
@@ -399,7 +399,7 @@ def addtenant_command(args):
 
     # Save it locally
     local_store = create_backend('file://' + config_dir(args.domain, user_dir=args.user_dir))
-    ts.save_to_backend(local_store)
+    local_store.save_table_store(ts)
     print "Changes to config saved at {}.".format(local_store)
     print "Remember to push changes to persist them."
 
