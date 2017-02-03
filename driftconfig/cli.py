@@ -96,6 +96,24 @@ def get_options(parser):
         help='Force a push to origin even though origin has changed.'
     )
 
+    # 'copy' command
+    p = subparsers.add_parser(
+        'copy',
+        help='Copy config.',
+        description="Copy config from one url to another."
+    )
+    p.add_argument(
+        'source_url',
+        action='store',
+    )
+    p.add_argument(
+        'dest_url',
+        action='store',
+    )
+    p.add_argument(
+        '-p', '--pickle',
+        action='store_true', help="Use pickle format for destination."
+    )
     # 'create' command
     p = subparsers.add_parser(
         'create',
@@ -256,7 +274,7 @@ def migrate_command(args):
             return super(PatchBackend, self).load_data(file_name)
 
     local_store = PatchBackend(path)
-    ts.load_from_backend(local_store, skip_definition=True)
+    ts._load_from_backend(local_store, skip_definition=True)
     local_store.save_table_store(ts)
 
 
@@ -290,6 +308,12 @@ def push_command(args):
         print "Config pushed. Reason: ", result['reason']
         local_store = create_backend('file://' + domain_info['path'])
         local_store.save_table_store(ts)
+
+
+def copy_command(args):
+    print "Copy '%s' to '%s'" % (args.source_url, args.dest_url)
+    ts = get_store_from_url(args.source_url)
+    create_backend(args.dest_url).save_table_store(ts, use_json=not args.pickle)
 
 
 def create_command(args):

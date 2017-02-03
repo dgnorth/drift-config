@@ -15,6 +15,10 @@ import copy
 from urlparse import urlparse, parse_qs
 import hashlib
 from datetime import datetime
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 
 from schemautil import check_schema
 
@@ -475,7 +479,7 @@ class Table(object):
             try:
                 rows = json.loads(data)
             except Exception:
-                print "Error parsing json file", self.get_filename()
+                log.error("Error parsing json file %s", self.get_filename())
                 raise
             for row in rows:
                 self.add(row)
@@ -505,7 +509,7 @@ class Table(object):
                     try:
                         rows = json.loads(data)
                     except Exception:
-                        print "Error parsing json file", file_name
+                        log.error("Error parsing json file %s", file_name)
                         raise
                     for row in rows:
                         self.add(row)
@@ -845,14 +849,31 @@ class Backend(object):
     """
 
     schemes = {}  # Backend registry using url scheme as key.
+    pickle_filename = 'table-store.pickle'
 
     def load_table_store(self):
-        ts = TableStore()
-        ts._load_from_backend(self)
+        blob = None
+        try:
+            blob = self.load_data(self.pickle_filename)
+        except:
+            log.warning("%s does not contain pickle: %s", self, self.pickle_filename)
+        if blob:
+            ts = pickle.loads(blob)
+        else:
+            # Try json loading
+            ts = TableStore()
+            ts._load_from_backend(self)
         return ts
 
-    def save_table_store(self, ts, run_integrity_check=True):
-        ts._save_to_backend(self, run_integrity_check=run_integrity_check)
+    def save_table_store(self, ts, use_json=True, run_integrity_check=True):
+        if use_json:
+            ts._save_to_backend(self, run_integrity_check=run_integrity_check)
+            self.save_data(self.pickle_filename, '')
+        else:
+            blob = pickle.dumps(ts, protocol=2)
+            self.start_saving()
+            self.save_data(self.pickle_filename, blob)
+            self.done_saving()
 
     def start_saving(self):
         pass

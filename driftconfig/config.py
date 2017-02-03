@@ -928,6 +928,26 @@ def pull_from_origin(local_ts, ignore_if_modified=False, force=False):
     return {'pulled': True, 'table_store': origin_ts, 'reason': 'pulled_from_origin'}
 
 
+def get_default_drift_config():
+    """
+    Return Drift config as a table store.
+    If 'DRIFT_CONFIG_URL' is found in environment variables, it is used to load the
+    table store. If not found, the local disk is searched using get_domain() and if
+    only one configuration is found there, it is used.
+    If all else fails, this function raises an exception.
+    """
+    url = os.environ.get('DRIFT_CONFIG_URL')
+    if url:
+        b = create_backend(url)
+        return b.load_table_store()
+    else:
+        domains = get_domains()
+        if len(domains) != 1:
+            raise RuntimeError("No single candidate found in ~/.drift/config")
+        domain = domains.values()[0]
+        return domain['table_store']
+
+
 class TSTransactionError(RuntimeError):
     pass
 

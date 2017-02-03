@@ -102,6 +102,13 @@ class RedisBackend(Backend):
     def get_key_name(self, file_name):
         return 'relib:{}:{}'.format(self.prefix, file_name)
 
+
+    def save_table_store(self, ts, use_json=False, run_integrity_check=True):
+        # Never save json format to Redis
+        use_json = False
+        return super(RedisBackend, self).save_table_store(
+            ts=ts, use_json=use_json, run_integrity_check=run_integrity_check)
+
     def save_data(self, file_name, data):
         key_name = self.get_key_name(file_name)
         log.debug("Adding %s bytes to Redis:%s", len(data), key_name)
