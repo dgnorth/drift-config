@@ -81,6 +81,7 @@ class RedisBackend(Backend):
         self.prefix = prefix or ''
         self.expire_sec = expire_sec
 
+
         self.conn = redis.StrictRedis(
             host=host,
             port=port,
@@ -88,10 +89,11 @@ class RedisBackend(Backend):
         )
 
         self.host, self.port, self.db = host, port, db
+        log.debug("%s initialized.", self)
 
     @classmethod
     def create_from_url_parts(cls, parts, query):
-        db = int(parts.path) if parts.path else None
+        db = int(parts.path[1:]) if parts.path else None
         prefix = query['prefix'][0] if 'prefix' in query else None
         expire_sec = query['expire_sec'][0] if 'expire_sec' in query else None
         return cls(host=parts.hostname, port=parts.port, db=db, prefix=prefix, expire_sec=expire_sec)
