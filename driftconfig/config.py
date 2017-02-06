@@ -355,12 +355,10 @@ aws commands extend service/deployable:
 
 '''
 import logging
-import os
 from datetime import datetime
 
-from driftconfig.relib import TableStore, BackendError, get_store_from_url, copy_table_store, create_backend, load_meta_from_backend
-from driftconfig.backends import FileBackend, S3Backend, RedisBackend
-from driftconfig.util import get_domains
+from driftconfig.relib import TableStore, copy_table_store, create_backend
+from driftconfig.util import get_default_drift_config
 
 log = logging.getLogger(__name__)
 
@@ -855,14 +853,6 @@ def load_from_origin(origin_backend):
     return ts
 
 
-def save_to_origin(ts, origin_backend):
-    from cPickle import dumps
-    blob = dumps(ts, protocol=2)
-    origin_backend.start_saving()
-    blob = origin_backend.save_data('table-store.pickle', blob)
-    origin_backend.done_saving()
-
-
 def push_to_origin(local_ts, force=False):
     """
     Pushed 'local_ts' to origin.
@@ -881,14 +871,16 @@ def push_to_origin(local_ts, force=False):
     the time difference between the changes.
 
     To force a push to a modified origin, set 'force' = True.
+
+    If 'skip_cache' is true, the cache, if defined for the table store, will
+    not be updated.
     """
     origin = local_ts.get_table('domain')['origin']
     origin_backend = create_backend(origin)
     try:
-        ###origin_ts = load_meta_from_backend(origin_backend)
-        origin_ts = load_from_origin(origin_backend)
+        origin_ts = origin_backend.load_table_store()
     except Exception as e:
-        log.warning("Can't load meta info from %s: %s", origin_backend, repr(e))
+        log.warning("Can't load table store from %s: %s", origin_backend, repr(e))
         crc_match = True
         force = True
     else:
@@ -904,16 +896,15 @@ def push_to_origin(local_ts, force=False):
     if crc_match and old == new and not force:
         return {'pushed': True, 'reason': 'push_skipped_crc_match'}
 
-    ###local_ts.save_to_backend(origin_backend)
-    save_to_origin(local_ts, origin_backend)
+    origin_backend.save_table_store(local_ts)
+
     return {'pushed': True, 'reason': 'pushed_to_origin'}
 
 
 def pull_from_origin(local_ts, ignore_if_modified=False, force=False):
     origin = local_ts.get_table('domain')['origin']
     origin_backend = create_backend(origin)
-    ##origin_meta = load_meta_from_backend(origin_backend)
-    origin_meta = load_from_origin(origin_backend)
+    origin_meta = origin_backend.load_table_store()
     old, new = local_ts.refresh_metadata()
 
     if old != new and not ignore_if_modified:
@@ -928,24 +919,11 @@ def pull_from_origin(local_ts, ignore_if_modified=False, force=False):
     return {'pulled': True, 'table_store': origin_ts, 'reason': 'pulled_from_origin'}
 
 
-def get_default_drift_config():
-    """
-    Return Drift config as a table store.
-    If 'DRIFT_CONFIG_URL' is found in environment variables, it is used to load the
-    table store. If not found, the local disk is searched using get_domain() and if
-    only one configuration is found there, it is used.
-    If all else fails, this function raises an exception.
-    """
-    url = os.environ.get('DRIFT_CONFIG_URL')
-    if url:
-        b = create_backend(url)
-        return b.load_table_store()
-    else:
-        domains = get_domains()
-        if len(domains) != 1:
-            raise RuntimeError("No single candidate found in ~/.drift/config")
-        domain = domains.values()[0]
-        return domain['table_store']
+def update_cache(ts):
+    cache = ts.get_table('domain').get('cache')
+    if cache:
+        b = create_backend(cache)
+        b.save_table_store(cache, use_json=False)
 
 
 class TSTransactionError(RuntimeError):
@@ -953,26 +931,17 @@ class TSTransactionError(RuntimeError):
 
 
 class TSTransaction(object):
-    def __init__(self, url=None):
-        self._url = url
+    def __init__(self):
         self._ts = None
 
     def __enter__(self):
-        if self._url:
-            self._ts = get_store_from_url(self._url)
-        else:
-            domains = get_domains().values()
-            if len(domains) != 1:
-                raise RuntimeError("Can't figure out a single local table store: {}".format(d for d in domains))
-            self._ts = domains[0]["table_store"]  # Assume 1 domain
-            self._url = 'file://' + domains[0]['path']
-            result = pull_from_origin(self._ts)
-            if not result['pulled']:
-                e = TSTransactionError("Can't pull latest table store: {}".format(result['reason']))
-                e.result = result
-                raise e
-            self._ts =  result['table_store']
-
+        self._ts = get_default_drift_config()
+        result = pull_from_origin(self._ts)
+        if not result['pulled']:
+            e = TSTransactionError("Can't pull latest table store: {}".format(result['reason']))
+            e.result = result
+            raise e
+        self._ts = result['table_store']
         return self._ts
 
     def __exit__(self, exc, value, traceback):
@@ -985,7 +954,7 @@ class TSTransaction(object):
             e.result = result
             raise e
 
-        # Write back to source
+        # Update cache if applicable
         source_backend = create_backend(self._url)
         source_backend.save_table_store(self._ts)
 

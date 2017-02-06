@@ -8,10 +8,10 @@ import json
 import getpass
 import logging
 
-from driftconfig.relib import create_backend, get_store_from_url, load_meta_from_backend, diff_meta, diff_tables
+from driftconfig.relib import create_backend, get_store_from_url, diff_meta, diff_tables
 from driftconfig.config import get_drift_table_store, push_to_origin, pull_from_origin
 from driftconfig.backends import FileBackend
-from driftconfig.util import config_dir, get_domains
+from driftconfig.util import config_dir, get_domains, get_default_drift_config
 
 log = logging.getLogger(__name__)
 
@@ -104,7 +104,7 @@ def get_options(parser):
     )
     p.add_argument(
         'source_url',
-        action='store',
+        action='store',  help="Source url, or . for default config url."
     )
     p.add_argument(
         'dest_url',
@@ -312,8 +312,12 @@ def push_command(args):
 
 def copy_command(args):
     print "Copy '%s' to '%s'" % (args.source_url, args.dest_url)
-    ts = get_store_from_url(args.source_url)
+    if args.source_url == '.':
+        ts = get_default_drift_config()
+    else:
+        ts = get_store_from_url(args.source_url)
     create_backend(args.dest_url).save_table_store(ts, use_json=not args.pickle)
+    print "Done."
 
 
 def create_command(args):
@@ -346,7 +350,7 @@ def diff_command(args):
     # Get origin table store meta info
     origin = local_ts.get_table('domain')['origin']
     origin_backend = create_backend(origin)
-    origin_ts = load_meta_from_backend(origin_backend)
+    origin_ts = origin_backend.load_table_store()
     origin_meta = origin_ts.meta.get()
 
     local_diff = ("Local store and scratch", local_m1, local_m2, False)
@@ -436,7 +440,7 @@ def run_command(args):
 def main(as_module=False):
     import argparse
     parser = argparse.ArgumentParser(description="")
-    parser.add_argument('--loglevel')
+    parser.add_argument('--loglevel', default='INFO')
     parser.add_argument('--nocheck', action='store_true', help="Skip all relational integrity and schema checks.")
     parser.add_argument('--user-dir', action='store_true', help="Choose user directory over site for locally stored configs.")
     get_options(parser)
