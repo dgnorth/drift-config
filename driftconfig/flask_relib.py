@@ -8,7 +8,7 @@ import logging
 
 from flask import _app_ctx_stack as stack
 from driftconfig.relib import CHECK_INTEGRITY
-from driftconfig.config import get_default_drift_config
+from driftconfig.util import get_default_drift_config
 
 
 log = logging.getLogger(__name__)
@@ -40,5 +40,6 @@ class FlaskRelib(object):
             return ctx.table_store
 
     def _get_table_store(self):
-        return get_default_drift_config()
+        ts = get_default_drift_config()
+        return ts
 
