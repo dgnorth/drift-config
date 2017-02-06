@@ -836,13 +836,6 @@ class TableStore(object):
         })
 
 
-def load_meta_from_backend(backend):
-    """Load TableStore from 'backend' that contains only the meta info."""
-    ts = TableStore()
-    ts.meta.load(backend.load_data)
-    return ts
-
-
 class Backend(object):
     """
     Backend is used to serialize table definition and data.
@@ -856,7 +849,7 @@ class Backend(object):
         try:
             blob = self.load_data(self.pickle_filename)
         except:
-            log.warning("%s does not contain pickle: %s", self, self.pickle_filename)
+            log.info("%s does not contain pickle: %s. Assuming json source.", self, self.pickle_filename)
         if blob:
             ts = pickle.loads(blob)
         else:
