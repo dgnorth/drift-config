@@ -914,7 +914,6 @@ def pull_from_origin(local_ts, ignore_if_modified=False, force=False):
     if crc_match and not force:
         return {'pulled': True, 'table_store': local_ts, 'reason': 'pull_skipped_crc_match'}
 
-    ###origin_ts = TableStore(origin_backend)
     origin_ts = origin_meta
     return {'pulled': True, 'table_store': origin_ts, 'reason': 'pulled_from_origin'}
 
@@ -923,7 +922,7 @@ def update_cache(ts):
     cache = ts.get_table('domain').get('cache')
     if cache:
         b = create_backend(cache)
-        b.save_table_store(cache, use_json=False)
+        b.save_table_store(cache)
 
 
 class TSTransactionError(RuntimeError):

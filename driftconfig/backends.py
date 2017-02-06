@@ -20,6 +20,7 @@ class S3Backend(Backend):
     """
 
     __scheme__ = 's3'
+    default_format = 'pickle'
 
     def __init__(self, bucket_name, folder_name, region_name=None, etag=None):
         import boto3
@@ -72,6 +73,7 @@ class S3Backend(Backend):
 class RedisBackend(Backend):
 
     __scheme__ = 'redis'
+    default_format = 'pickle'
 
     def __init__(self, host=None, port=None, db=None, prefix=None, expire_sec=None):
         import redis
@@ -103,13 +105,6 @@ class RedisBackend(Backend):
 
     def get_key_name(self, file_name):
         return 'relib:{}:{}'.format(self.prefix, file_name)
-
-
-    def save_table_store(self, ts, use_json=False, run_integrity_check=True):
-        # Never save json format to Redis
-        use_json = False
-        return super(RedisBackend, self).save_table_store(
-            ts=ts, use_json=use_json, run_integrity_check=run_integrity_check)
 
     def save_data(self, file_name, data):
         key_name = self.get_key_name(file_name)

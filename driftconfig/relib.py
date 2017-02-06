@@ -843,6 +843,7 @@ class Backend(object):
 
     schemes = {}  # Backend registry using url scheme as key.
     pickle_filename = 'table-store.pickle'
+    default_format = 'json'  # Default table store file format for the backend.
 
     def load_table_store(self):
         blob = None
@@ -858,15 +859,17 @@ class Backend(object):
             ts._load_from_backend(self)
         return ts
 
-    def save_table_store(self, ts, use_json=True, run_integrity_check=True):
-        if use_json:
+    def save_table_store(self, ts, run_integrity_check=True):
+        if self.default_format == 'json':
             ts._save_to_backend(self, run_integrity_check=run_integrity_check)
             self.save_data(self.pickle_filename, '')
-        else:
+        elif self.default_format == 'pickle':
             blob = pickle.dumps(ts, protocol=2)
             self.start_saving()
             self.save_data(self.pickle_filename, blob)
             self.done_saving()
+        else:
+            raise RuntimeError("Unsupported table store file format '%s'" % self.default_format)
 
     def start_saving(self):
         pass

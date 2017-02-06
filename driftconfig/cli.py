@@ -316,7 +316,9 @@ def copy_command(args):
         ts = get_default_drift_config()
     else:
         ts = get_store_from_url(args.source_url)
-    create_backend(args.dest_url).save_table_store(ts, use_json=not args.pickle)
+    b = create_backend(args.dest_url)
+    b.default_format = 'pickle' if args.pickle else 'json'
+    b.save_table_store(ts)
     print "Done."
 
 
