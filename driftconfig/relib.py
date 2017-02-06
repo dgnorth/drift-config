@@ -862,7 +862,7 @@ class Backend(object):
     def save_table_store(self, ts, run_integrity_check=True):
         if self.default_format == 'json':
             ts._save_to_backend(self, run_integrity_check=run_integrity_check)
-            self.save_data(self.pickle_filename, '')
+            self.save_data(self.pickle_filename, '')  # An empty pickle file indicates json format.
         elif self.default_format == 'pickle':
             blob = pickle.dumps(ts, protocol=2)
             self.start_saving()
