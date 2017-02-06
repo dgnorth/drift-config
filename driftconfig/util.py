@@ -6,7 +6,7 @@ import sys
 import os
 import os.path
 
-from driftconfig.relib import get_store_from_url
+from driftconfig.relib import get_store_from_url, create_backend
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +59,32 @@ def get_domains(user_dir=False, skip_errors=False):
     return domains
 
 
+def get_default_drift_config():
+    """
+    Return Drift config as a table store.
+    If 'DRIFT_CONFIG_URL' is found in environment variables, it is used to load the
+    table store. If not found, the local disk is searched using get_domain() and if
+    only one configuration is found there, it is used.
+    If all else fails, this function raises an exception.
+    """
+    url = os.environ.get('DRIFT_CONFIG_URL')
+    if url:
+        b = create_backend(url)
+        return b.load_table_store()
+    else:
+        domains = get_domains()
+        if len(domains) != 1:
+            raise RuntimeError("No single candidate found in ~/.drift/config")
+        domain = domains.values()[0]
+        return domain['table_store']
+
+
+conf_tuple = collections.namedtuple(
+    'driftconfig',
+    ['table_store', 'organization', 'product', 'tenant_name', 'tier', 'deployable', 'tenant', 'domain']
+)
+
+
 def get_drift_config(ts, tenant_name=None, tier_name=None, deployable_name=None):
     """
     Return config tuple for given config context, containing the following properties:
@@ -78,25 +104,25 @@ def get_drift_config(ts, tenant_name=None, tier_name=None, deployable_name=None)
     else:
         tenant = None
 
-    conf = collections.namedtuple(
-        'driftconfig',
-        ['table_store', 'organization', 'product', 'tenant_name', 'tier', 'deployable', 'tenant', 'domain']
-    )
-
-    conf.table_store = ts
-    conf.tenant = tenant
-    conf.tier = ts.get_table('tiers').get({'tier_name': tier_name})
-    conf.deployable = ts.get_table('deployables').get({'deployable_name': deployable_name, 'tier_name': tier_name})
-    conf.domain = ts.get_table('domain')
-
     if tenant:
-        conf.tenant_name = tenants.get_foreign_row(tenant, 'tenant-names')[0]
-        conf.product = ts.get_table('tenant-names').get_foreign_row(conf.tenant_name, 'products')[0]
-        conf.organization = ts.get_table('products').get_foreign_row(conf.product, 'organizations')[0]
+        tenant_name = tenants.get_foreign_row(tenant, 'tenant-names')[0]
+        product = ts.get_table('tenant-names').get_foreign_row(tenant_name, 'products')[0]
+        organization = ts.get_table('products').get_foreign_row(product, 'organizations')[0]
     else:
-        conf.tenant_name = None
-        conf.product = None
-        conf.organization = None
+        tenant_name = None
+        product = None
+        organization = None
+
+    conf = conf_tuple(
+        table_store=ts,
+        tenant=tenant,
+        tier=ts.get_table('tiers').get({'tier_name': tier_name}),
+        deployable=ts.get_table('deployables').get({'deployable_name': deployable_name, 'tier_name': tier_name}),
+        domain=ts.get_table('domain'),
+        tenant_name=tenant_name,
+        product=product,
+        organization=organization,
+    )
 
     return conf
 
