@@ -85,7 +85,7 @@ conf_tuple = collections.namedtuple(
 )
 
 
-def get_drift_config(ts, tenant_name=None, tier_name=None, deployable_name=None):
+def get_drift_config(ts=None, tenant_name=None, tier_name=None, deployable_name=None):
     """
     Return config tuple for given config context, containing the following properties:
     ['organization', 'product', 'tenant_name', 'tier', 'deployable', 'tenant']
@@ -93,6 +93,7 @@ def get_drift_config(ts, tenant_name=None, tier_name=None, deployable_name=None)
     'ts' is the config TableStore object.
     'tenant_name' is the name of the tenant, or None if not applicable.
     """
+    ts = ts or get_default_drift_config()
     tenants = ts.get_table('tenants')
 
     if tenant_name:
