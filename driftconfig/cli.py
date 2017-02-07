@@ -246,8 +246,9 @@ def _pull_command(args):
             else:
                 print "Use --force to force a pull."
         else:
-            local_backend = create_backend('file://' + domain_info['path'])
-            local_backend.save_table_store(result['table_store'])
+            if result['reason'] == 'pulled_from_origin':
+                local_backend = create_backend('file://' + domain_info['path'])
+                local_backend.save_table_store(result['table_store'])
 
             print "Config pulled. Reason: ", result['reason']
 
