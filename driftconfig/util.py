@@ -81,11 +81,11 @@ def get_default_drift_config():
 
 conf_tuple = collections.namedtuple(
     'driftconfig',
-    ['table_store', 'organization', 'product', 'tenant_name', 'tier', 'deployable', 'tenant', 'domain']
+    ['table_store', 'organization', 'product', 'tenant_name', 'tier', 'deployable', 'tenant', 'domain', 'drift_app']
 )
 
 
-def get_drift_config(ts=None, tenant_name=None, tier_name=None, deployable_name=None):
+def get_drift_config(ts=None, tenant_name=None, tier_name=None, deployable_name=None, drift_app=None):
     """
     Return config tuple for given config context, containing the following properties:
     ['organization', 'product', 'tenant_name', 'tier', 'deployable', 'tenant']
@@ -95,6 +95,11 @@ def get_drift_config(ts=None, tenant_name=None, tier_name=None, deployable_name=
     """
     ts = ts or get_default_drift_config()
     tenants = ts.get_table('tenants')
+
+    # HACK: Until 'flask_config' has been repurposed into 'drift_app' config, we enable a little mapping between
+    # here for convenience:
+    if drift_app and not deployable_name:
+        deployable_name = drift_app['name']
 
     if tenant_name:
         tenant = tenants.get({'tier_name': tier_name, 'deployable_name': deployable_name, 'tenant_name': tenant_name})
@@ -123,6 +128,7 @@ def get_drift_config(ts=None, tenant_name=None, tier_name=None, deployable_name=
         tenant_name=tenant_name,
         product=product,
         organization=organization,
+        drift_app=drift_app,
     )
 
     return conf
