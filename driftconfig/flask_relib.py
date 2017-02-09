@@ -17,7 +17,6 @@ log = logging.getLogger(__name__)
 class FlaskRelib(object):
 
     def __init__(self, app=None):
-        self._ts = None
         if app is not None:
             self.init_app(app)
 
@@ -41,9 +40,6 @@ class FlaskRelib(object):
             return ctx.table_store
 
     def _get_table_store(self):
-        ts = self._ts or get_default_drift_config()
+        ts = get_default_drift_config()
         return ts
 
-    def set_sticky_ts(self, ts):
-        """Assign permanently 'ts' to the current flask app."""
-        self._ts = ts

@@ -59,6 +59,14 @@ def get_domains(user_dir=False, skip_errors=False):
     return domains
 
 
+_sticky_ts = None
+
+def set_sticky_config(ts):
+    """Assign permanently 'ts' as the one and only drift config. Useful for tests."""
+    global _sticky_ts
+    _sticky_ts = ts
+
+
 def get_default_drift_config():
     """
     Return Drift config as a table store.
@@ -66,7 +74,13 @@ def get_default_drift_config():
     table store. If not found, the local disk is searched using get_domain() and if
     only one configuration is found there, it is used.
     If all else fails, this function raises an exception.
+
+    If a table store object was set using set_sticky_config(), then that object will
+    always be returned.
     """
+    if _sticky_ts:
+        return _sticky_ts
+
     url = os.environ.get('DRIFT_CONFIG_URL')
     if url:
         b = create_backend(url)
@@ -81,7 +95,18 @@ def get_default_drift_config():
 
 conf_tuple = collections.namedtuple(
     'driftconfig',
-    ['table_store', 'organization', 'product', 'tenant_name', 'tier', 'deployable', 'tenant', 'domain', 'drift_app']
+    [
+        'table_store',
+        'organization',
+        'product',
+        'tenant_name',
+        'tier',
+        'deployable',
+        'tenant',
+        'tenants',
+        'domain',
+        'drift_app'
+    ]
 )
 
 
@@ -126,6 +151,7 @@ def get_drift_config(ts=None, tenant_name=None, tier_name=None, deployable_name=
         deployable=ts.get_table('deployables').get({'deployable_name': deployable_name, 'tier_name': tier_name}),
         domain=ts.get_table('domain'),
         tenant_name=tenant_name,
+        tenants=ts.get_table('tenants').find({'tier_name': tier_name, 'deployable_name': deployable_name, 'state': 'active'}),
         product=product,
         organization=organization,
         drift_app=drift_app,
