@@ -6,10 +6,9 @@ from __future__ import absolute_import
 
 import logging
 
-from flask import current_app
 from flask import _app_ctx_stack as stack
-from driftconfig.relib import get_store_from_url, create_backend, copy_table_store
-from driftconfig.util import get_domains
+from driftconfig.relib import CHECK_INTEGRITY
+from driftconfig.util import get_default_drift_config
 
 
 log = logging.getLogger(__name__)
@@ -18,25 +17,20 @@ log = logging.getLogger(__name__)
 class FlaskRelib(object):
 
     def __init__(self, app=None):
+        self._ts = None
         if app is not None:
             self.init_app(app)
 
     def init_app(self, app):
         app.extensions['relib'] = self
+        if not app.debug:
+            del CHECK_INTEGRITY[:]
 
     def refresh(self):
         """Invalidate Redis cache, if in use, and fetch new config from source."""
         ctx = stack.top
         if ctx is not None and hasattr(ctx, 'table_store'):
             delattr(ctx, 'table_store')
-
-    def save(self, table_store=None):
-        """Save 'table_store' to source. If 'table_store' is not specified, the default one is used."""
-        table_store = table_store or self.table_store
-        origin = table_store.get_table('domain')['origin']
-        origin_backend = create_backend(origin)
-        table_store.save_to_backend(origin_backend)
-        self.refresh()
 
     @property
     def table_store(self):
@@ -47,17 +41,9 @@ class FlaskRelib(object):
             return ctx.table_store
 
     def _get_table_store(self):
-        if 'DRIFT_CONFIG_URL' not in current_app.config:
-            domains = get_domains()
-            if len(domains) != 1:
-                raise RuntimeError("'DRIFT_CONFIG_URL' not in app.config and no single "
-                                   "candidate found in ~/.drift/config")
-            domain = domains.values()[0]
-            return domain['table_store']
-        else:
-            url = current_app['DRIFT_CONFIG_URL']
-            return get_store_from_url(url)
+        ts = self._ts or get_default_drift_config()
+        return ts
 
-    def get_copy(self):
-        """"Return a copy of current table store. Good for editing."""
-        return copy_table_store(self.table_store)
+    def set_sticky_ts(self, ts):
+        """Assign permanently 'ts' to the current flask app."""
+        self._ts = ts

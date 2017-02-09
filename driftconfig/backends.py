@@ -20,6 +20,7 @@ class S3Backend(Backend):
     """
 
     __scheme__ = 's3'
+    default_format = 'pickle'
 
     def __init__(self, bucket_name, folder_name, region_name=None, etag=None):
         import boto3
@@ -72,6 +73,7 @@ class S3Backend(Backend):
 class RedisBackend(Backend):
 
     __scheme__ = 'redis'
+    default_format = 'pickle'
 
     def __init__(self, host=None, port=None, db=None, prefix=None, expire_sec=None):
         import redis
@@ -81,6 +83,7 @@ class RedisBackend(Backend):
         self.prefix = prefix or ''
         self.expire_sec = expire_sec
 
+
         self.conn = redis.StrictRedis(
             host=host,
             port=port,
@@ -88,10 +91,11 @@ class RedisBackend(Backend):
         )
 
         self.host, self.port, self.db = host, port, db
+        log.debug("%s initialized.", self)
 
     @classmethod
     def create_from_url_parts(cls, parts, query):
-        db = int(parts.path) if parts.path else None
+        db = int(parts.path[1:]) if parts.path else None
         prefix = query['prefix'][0] if 'prefix' in query else None
         expire_sec = query['expire_sec'][0] if 'expire_sec' in query else None
         return cls(host=parts.hostname, port=parts.port, db=db, prefix=prefix, expire_sec=expire_sec)

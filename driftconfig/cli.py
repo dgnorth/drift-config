@@ -8,10 +8,10 @@ import json
 import getpass
 import logging
 
-from driftconfig.relib import create_backend, get_store_from_url, load_meta_from_backend, diff_meta, diff_tables
+from driftconfig.relib import create_backend, get_store_from_url, diff_meta, diff_tables
 from driftconfig.config import get_drift_table_store, push_to_origin, pull_from_origin
 from driftconfig.backends import FileBackend
-from driftconfig.util import config_dir, get_domains
+from driftconfig.util import config_dir, get_domains, get_default_drift_config
 
 log = logging.getLogger(__name__)
 
@@ -96,6 +96,24 @@ def get_options(parser):
         help='Force a push to origin even though origin has changed.'
     )
 
+    # 'copy' command
+    p = subparsers.add_parser(
+        'copy',
+        help='Copy config.',
+        description="Copy config from one url to another."
+    )
+    p.add_argument(
+        'source_url',
+        action='store',  help="Source url, or . for default config url."
+    )
+    p.add_argument(
+        'dest_url',
+        action='store',
+    )
+    p.add_argument(
+        '-p', '--pickle',
+        action='store_true', help="Use pickle format for destination."
+    )
     # 'create' command
     p = subparsers.add_parser(
         'create',
@@ -169,11 +187,13 @@ def get_options(parser):
 
 def init_command(args):
     print "Initializing config from", args.source
-    ts = get_store_from_url(args.source)
+    from config import load_from_origin
+    ##ts = get_store_from_url(args.source)
+    ts = load_from_origin(create_backend(args.source))
     domain_name = ts.get_table('domain')['domain_name']
     print "Config domain name: ", domain_name
     local_store = create_backend('file://' + config_dir(domain_name, user_dir=args.user_dir))
-    ts.save_to_backend(local_store)
+    local_store.save_table_store(ts)
     print "Config stored at: ", local_store
 
 
@@ -226,8 +246,9 @@ def _pull_command(args):
             else:
                 print "Use --force to force a pull."
         else:
-            local_backend = create_backend('file://' + domain_info['path'])
-            result['table_store'].save_to_backend(local_backend)
+            if result['reason'] == 'pulled_from_origin':
+                local_backend = create_backend('file://' + domain_info['path'])
+                local_backend.save_table_store(result['table_store'])
 
             print "Config pulled. Reason: ", result['reason']
 
@@ -254,8 +275,8 @@ def migrate_command(args):
             return super(PatchBackend, self).load_data(file_name)
 
     local_store = PatchBackend(path)
-    ts.load_from_backend(local_store, skip_definition=True)
-    ts.save_to_backend(local_store)
+    ts._load_from_backend(local_store, skip_definition=True)
+    local_store.save_table_store(ts)
 
 
 def now():
@@ -287,7 +308,19 @@ def push_command(args):
     else:
         print "Config pushed. Reason: ", result['reason']
         local_store = create_backend('file://' + domain_info['path'])
-        ts.save_to_backend(local_store)
+        local_store.save_table_store(ts)
+
+
+def copy_command(args):
+    print "Copy '%s' to '%s'" % (args.source_url, args.dest_url)
+    if args.source_url == '.':
+        ts = get_default_drift_config()
+    else:
+        ts = get_store_from_url(args.source_url)
+    b = create_backend(args.dest_url)
+    b.default_format = 'pickle' if args.pickle else 'json'
+    b.save_table_store(ts)
+    print "Done."
 
 
 def create_command(args):
@@ -306,7 +339,7 @@ def create_command(args):
     # Save it locally
     domain_folder = config_dir(args.domain, user_dir=args.user_dir)
     local_store = create_backend('file://' + domain_folder)
-    ts.save_to_backend(local_store)
+    local_store.save_table_store(ts)
     print "New config for '{}' saved to {}.".format(args.domain, domain_folder)
     print "You can modify the files now before pushing it to source."
 
@@ -320,7 +353,7 @@ def diff_command(args):
     # Get origin table store meta info
     origin = local_ts.get_table('domain')['origin']
     origin_backend = create_backend(origin)
-    origin_ts = load_meta_from_backend(origin_backend)
+    origin_ts = origin_backend.load_table_store()
     origin_meta = origin_ts.meta.get()
 
     local_diff = ("Local store and scratch", local_m1, local_m2, False)
@@ -397,7 +430,7 @@ def addtenant_command(args):
 
     # Save it locally
     local_store = create_backend('file://' + config_dir(args.domain, user_dir=args.user_dir))
-    ts.save_to_backend(local_store)
+    local_store.save_table_store(ts)
     print "Changes to config saved at {}.".format(local_store)
     print "Remember to push changes to persist them."
 
@@ -410,7 +443,7 @@ def run_command(args):
 def main(as_module=False):
     import argparse
     parser = argparse.ArgumentParser(description="")
-    parser.add_argument('--loglevel')
+    parser.add_argument('--loglevel', default='INFO')
     parser.add_argument('--nocheck', action='store_true', help="Skip all relational integrity and schema checks.")
     parser.add_argument('--user-dir', action='store_true', help="Choose user directory over site for locally stored configs.")
     get_options(parser)

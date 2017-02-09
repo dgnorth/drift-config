@@ -15,6 +15,10 @@ import copy
 from urlparse import urlparse, parse_qs
 import hashlib
 from datetime import datetime
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 
 from schemautil import check_schema
 
@@ -23,7 +27,7 @@ log = logging.getLogger(__name__)
 
 # Global integrity check switches.
 # TODO: Add unit tests to check proper functionality of these flags.
-CHECK_INTEGRITY = ['pk', 'fk', 'unique', 'schema']
+CHECK_INTEGRITY = ['pk', 'fk', 'unique', 'schema', 'constraints']
 
 
 class RelibError(RuntimeError):
@@ -119,24 +123,26 @@ class Table(object):
         check_fk = 'fk' in CHECK_INTEGRITY
         check_unique = 'unique' in CHECK_INTEGRITY
         check_schema_ = 'schema' in CHECK_INTEGRITY
+        check_constraints = 'constraints' in CHECK_INTEGRITY
 
-        for c in self._constraints:
-            if c['type'] in ['primary_key', 'unique'] and not set(c['fields']).issubset(row):
-                raise ConstraintError("In table '{}', row violates constraint {}: {}".format(self._table_name, c, row))
+        if check_constraints:
+            for c in self._constraints:
+                if c['type'] in ['primary_key', 'unique'] and not set(c['fields']).issubset(row):
+                    raise ConstraintError("In table '{}', row violates constraint {}: {}".format(self._table_name, c, row))
 
-            if c['type'] == 'unique' and check_unique:
-                # Check for duplicates
-                search_criteria = {k: row[k] for k in c['fields']}
-                found = self.find(search_criteria)
-                if len(found):
-                    raise ConstraintError("Unique constraint violation on {} because of {}.".format(search_criteria, found))
-            elif c['type'] == 'foreign_key' and check_fk:
-                # Verify foreign row reference, if set.
-                if set(c['foreign_key_fields']).issubset(row):
-                    foreign_row = self.get_foreign_row(None, c['table'], c['foreign_key_fields'], _row=row)
-                    if len(foreign_row) < 1:
-                        raise ConstraintError("In table '{}', foreign key record in '{}' not found {}.\nRow data:\n{}".format(
-                            self.name, c['table'], {k: row[k] for k in c['foreign_key_fields']}, json.dumps(row, indent=4)))
+                if c['type'] == 'unique' and check_unique:
+                    # Check for duplicates
+                    search_criteria = {k: row[k] for k in c['fields']}
+                    found = self.find(search_criteria)
+                    if len(found):
+                        raise ConstraintError("Unique constraint violation on {} because of {}.".format(search_criteria, found))
+                elif c['type'] == 'foreign_key' and check_fk:
+                    # Verify foreign row reference, if set.
+                    if set(c['foreign_key_fields']).issubset(row):
+                        foreign_row = self.get_foreign_row(None, c['table'], c['foreign_key_fields'], _row=row)
+                        if len(foreign_row) < 1:
+                            raise ConstraintError("In table '{}', foreign key record in '{}' not found {}.\nRow data:\n{}".format(
+                                self.name, c['table'], {k: row[k] for k in c['foreign_key_fields']}, json.dumps(row, indent=4)))
 
         # Check Json schema format compliance
         if check_schema_:
@@ -473,7 +479,7 @@ class Table(object):
             try:
                 rows = json.loads(data)
             except Exception:
-                print "Error parsing json file", self.get_filename()
+                log.error("Error parsing json file %s", self.get_filename())
                 raise
             for row in rows:
                 self.add(row)
@@ -503,7 +509,7 @@ class Table(object):
                     try:
                         rows = json.loads(data)
                     except Exception:
-                        print "Error parsing json file", file_name
+                        log.error("Error parsing json file %s", file_name)
                         raise
                     for row in rows:
                         self.add(row)
@@ -624,7 +630,7 @@ class TableStore(object):
     TS_DEF_FILENAME = '#tsdef.json'
     TS_META_TABLENAME = '#tsmeta'
 
-    def __init__(self, backend=None):
+    def __init__(self):
         """
         Initialize TableStore. If 'backend' is set, it will load definition and data from
         that backend.
@@ -633,8 +639,6 @@ class TableStore(object):
         self._tableorder = []  # Table order, because of DAG
         self._origin = 'clean'
         self._add_metatable()
-        if backend:
-            self.load_from_backend(backend)
 
     def __str__(self):
         return 'TableStore(Origin: {}. Tables: {})'.format(self._origin, len(self._tables))
@@ -707,11 +711,12 @@ class TableStore(object):
             return
 
         b = DictBackend()
-        self.save_to_backend(b, run_integrity_check=False)
+        b.save_table_store(self, run_integrity_check=False)
+        ##self.save_to_backend(b, run_integrity_check=False)
         # Serializing in a table store will in fact run all the integrity checks.
-        TableStore(b)  # This will trigger any constraint or schema violations.
+        b.load_table_store()  # This will trigger any constraint or schema violations.
 
-    def save_to_backend(self, backend, force=False, run_integrity_check=True):
+    def _save_to_backend(self, backend, force=False, run_integrity_check=True):
         """
         Save this table store definition and table data to 'backend'.
 
@@ -753,7 +758,7 @@ class TableStore(object):
 
         backend.done_saving()
 
-    def load_from_backend(self, backend, skip_definition=False):
+    def _load_from_backend(self, backend, skip_definition=False):
         """
         Initialize this table store using data from 'backend'.
 
@@ -789,7 +794,7 @@ class TableStore(object):
         """Refreshes local meta data and returns a tuple of old and new metadata."""
         old = copy.deepcopy(self.meta.get())
         backend = create_backend('memory://' + datetime.utcnow().isoformat() + 'Z')
-        self.save_to_backend(backend)
+        backend.save_table_store(self)
         new = self.meta.get()
         if old != new:
             # If something changed, bump the version and timestamp
@@ -831,19 +836,40 @@ class TableStore(object):
         })
 
 
-def load_meta_from_backend(backend):
-    """Load TableStore from 'backend' that contains only the meta info."""
-    ts = TableStore()
-    ts.meta.load(backend.load_data)
-    return ts
-
-
 class Backend(object):
     """
     Backend is used to serialize table definition and data.
     """
 
     schemes = {}  # Backend registry using url scheme as key.
+    pickle_filename = 'table-store.pickle'
+    default_format = 'json'  # Default table store file format for the backend.
+
+    def load_table_store(self):
+        blob = None
+        try:
+            blob = self.load_data(self.pickle_filename)
+        except:
+            log.info("%s does not contain pickle: %s. Assuming json source.", self, self.pickle_filename)
+        if blob:
+            ts = pickle.loads(blob)
+        else:
+            # Try json loading
+            ts = TableStore()
+            ts._load_from_backend(self)
+        return ts
+
+    def save_table_store(self, ts, run_integrity_check=True):
+        if self.default_format == 'json':
+            ts._save_to_backend(self, run_integrity_check=run_integrity_check)
+            self.save_data(self.pickle_filename, '')  # An empty pickle file indicates json format.
+        elif self.default_format == 'pickle':
+            blob = pickle.dumps(ts, protocol=2)
+            self.start_saving()
+            self.save_data(self.pickle_filename, blob)
+            self.done_saving()
+        else:
+            raise RuntimeError("Unsupported table store file format '%s'" % self.default_format)
 
     def start_saving(self):
         pass
@@ -886,14 +912,15 @@ def create_backend(url):
 
 
 def get_store_from_url(url):
-    return TableStore(create_backend(url))
+    b = create_backend(url)
+    return b.load_table_store()
 
 
 def copy_table_store(table_store):
     """"Returns a stand-alone copy of 'table_store'."""
     backend = create_backend('memory://' + datetime.utcnow().isoformat() + 'Z')
-    table_store.save_to_backend(backend)
-    return TableStore(backend)
+    backend.save_table_store(table_store)
+    return backend.load_table_store()
 
 
 def diff_tables(t1, t2):

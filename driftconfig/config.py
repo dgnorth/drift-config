@@ -355,12 +355,10 @@ aws commands extend service/deployable:
 
 '''
 import logging
-import os
 from datetime import datetime
 
-from driftconfig.relib import TableStore, BackendError, get_store_from_url, copy_table_store, create_backend, load_meta_from_backend
-from driftconfig.backends import FileBackend, S3Backend, RedisBackend
-from driftconfig.util import get_domains
+from driftconfig.relib import TableStore, copy_table_store, create_backend
+from driftconfig.util import get_default_drift_config
 
 log = logging.getLogger(__name__)
 
@@ -846,6 +844,15 @@ class Check():
         copy_table_store(self._ts_copy)
 
 
+def load_from_origin(origin_backend):
+    from cPickle import loads
+    origin_backend.start_loading()
+    blob = origin_backend.load_data('table-store.pickle')
+    origin_backend.done_loading()
+    ts = loads(blob)
+    return ts
+
+
 def push_to_origin(local_ts, force=False):
     """
     Pushed 'local_ts' to origin.
@@ -864,13 +871,16 @@ def push_to_origin(local_ts, force=False):
     the time difference between the changes.
 
     To force a push to a modified origin, set 'force' = True.
+
+    If 'skip_cache' is true, the cache, if defined for the table store, will
+    not be updated.
     """
     origin = local_ts.get_table('domain')['origin']
     origin_backend = create_backend(origin)
     try:
-        origin_ts = load_meta_from_backend(origin_backend)
+        origin_ts = origin_backend.load_table_store()
     except Exception as e:
-        log.warning("Can't load meta info from %s: %s", origin_backend, repr(e))
+        log.warning("Can't load table store from %s: %s", origin_backend, repr(e))
         crc_match = True
         force = True
     else:
@@ -886,14 +896,15 @@ def push_to_origin(local_ts, force=False):
     if crc_match and old == new and not force:
         return {'pushed': True, 'reason': 'push_skipped_crc_match'}
 
-    local_ts.save_to_backend(origin_backend)
+    origin_backend.save_table_store(local_ts)
+
     return {'pushed': True, 'reason': 'pushed_to_origin'}
 
 
 def pull_from_origin(local_ts, ignore_if_modified=False, force=False):
     origin = local_ts.get_table('domain')['origin']
     origin_backend = create_backend(origin)
-    origin_meta = load_meta_from_backend(origin_backend)
+    origin_meta = origin_backend.load_table_store()
     old, new = local_ts.refresh_metadata()
 
     if old != new and not ignore_if_modified:
@@ -903,8 +914,15 @@ def pull_from_origin(local_ts, ignore_if_modified=False, force=False):
     if crc_match and not force:
         return {'pulled': True, 'table_store': local_ts, 'reason': 'pull_skipped_crc_match'}
 
-    origin_ts = TableStore(origin_backend)
+    origin_ts = origin_meta
     return {'pulled': True, 'table_store': origin_ts, 'reason': 'pulled_from_origin'}
+
+
+def update_cache(ts):
+    cache = ts.get_table('domain').get('cache')
+    if cache:
+        b = create_backend(cache)
+        b.save_table_store(cache)
 
 
 class TSTransactionError(RuntimeError):
@@ -912,26 +930,17 @@ class TSTransactionError(RuntimeError):
 
 
 class TSTransaction(object):
-    def __init__(self, url=None):
-        self._url = url
+    def __init__(self):
         self._ts = None
 
     def __enter__(self):
-        if self._url:
-            self._ts = get_store_from_url(self._url)
-        else:
-            domains = get_domains().values()
-            if len(domains) != 1:
-                raise RuntimeError("Can't figure out a single local table store: {}".format(d for d in domains))
-            self._ts = domains[0]["table_store"]  # Assume 1 domain
-            self._url = 'file://' + domains[0]['path']
-            result = pull_from_origin(self._ts)
-            if not result['pulled']:
-                e = TSTransactionError("Can't pull latest table store: {}".format(result['reason']))
-                e.result = result
-                raise e
-            self._ts =  result['table_store']
-
+        self._ts = get_default_drift_config()
+        result = pull_from_origin(self._ts)
+        if not result['pulled']:
+            e = TSTransactionError("Can't pull latest table store: {}".format(result['reason']))
+            e.result = result
+            raise e
+        self._ts = result['table_store']
         return self._ts
 
     def __exit__(self, exc, value, traceback):
@@ -944,9 +953,9 @@ class TSTransaction(object):
             e.result = result
             raise e
 
-        # Write back to source
+        # Update cache if applicable
         source_backend = create_backend(self._url)
-        self._ts.save_to_backend(source_backend)
+        source_backend.save_table_store(self._ts)
 
 
 def parse_8601(s):
