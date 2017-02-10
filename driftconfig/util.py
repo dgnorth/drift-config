@@ -87,7 +87,13 @@ def get_default_drift_config():
         return b.load_table_store()
     else:
         domains = get_domains()
-        if len(domains) != 1:
+        if len(domains) == 0:
+            raise RuntimeError(
+                "No config found in ~/.drift/config. Use 'driftconfig init' command to "
+                "initialize a local config, or add a reference to the config using the "
+                "environment variable 'DRIFT_CONFIG_URL'."
+            )
+        elif len(domains) != 1:
             raise RuntimeError("No single candidate found in ~/.drift/config")
         domain = domains.values()[0]
         return domain['table_store']
