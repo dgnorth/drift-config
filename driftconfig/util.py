@@ -106,7 +106,7 @@ def get_default_drift_config_and_source():
         elif len(domains) != 1:
             raise RuntimeError("No single candidate found in ~/.drift/config")
         domain = domains.values()[0]
-        return domain['table_store'], domain['path']
+        return domain['table_store'], 'file://' + domain['path']
 
 
 conf_tuple = collections.namedtuple(
