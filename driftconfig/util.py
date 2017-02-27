@@ -61,6 +61,7 @@ def get_domains(user_dir=False, skip_errors=False):
 
 _sticky_ts = None
 
+
 def set_sticky_config(ts):
     """Assign permanently 'ts' as the one and only drift config. Useful for tests."""
     global _sticky_ts
@@ -78,13 +79,22 @@ def get_default_drift_config():
     If a table store object was set using set_sticky_config(), then that object will
     always be returned.
     """
+    ts, source = get_default_drift_config_and_source()
+    return ts
+
+
+def get_default_drift_config_and_source():
+    """
+    Same as get_default_drift_config but returns a tuple of table store and the
+    source of where it was loaded from.
+    """
     if _sticky_ts:
         return _sticky_ts
 
     url = os.environ.get('DRIFT_CONFIG_URL')
     if url:
         b = create_backend(url)
-        return b.load_table_store()
+        return b.load_table_store(), url
     else:
         domains = get_domains()
         if len(domains) == 0:
@@ -96,7 +106,7 @@ def get_default_drift_config():
         elif len(domains) != 1:
             raise RuntimeError("No single candidate found in ~/.drift/config")
         domain = domains.values()[0]
-        return domain['table_store']
+        return domain['table_store'], domain['path']
 
 
 conf_tuple = collections.namedtuple(

@@ -358,7 +358,7 @@ import logging
 from datetime import datetime
 
 from driftconfig.relib import TableStore, copy_table_store, create_backend
-from driftconfig.util import get_default_drift_config
+from driftconfig.util import get_default_drift_config_and_source
 
 log = logging.getLogger(__name__)
 
@@ -934,7 +934,7 @@ class TSTransaction(object):
         self._ts = None
 
     def __enter__(self):
-        self._ts = get_default_drift_config()
+        self._ts, self._url = get_default_drift_config_and_source()
         result = pull_from_origin(self._ts)
         if not result['pulled']:
             e = TSTransactionError("Can't pull latest table store: {}".format(result['reason']))
