@@ -204,6 +204,20 @@ class Table(object):
             self._rows[row_key] = row
         return row
 
+    def update(self, row):
+        """
+        Same as add() but will update the row if it already exists.
+        """
+        # Turn off primary key violation check temporarily
+        has_pk = 'pk' in CHECK_INTEGRITY
+        if has_pk:
+            CHECK_INTEGRITY.remove('pk')
+        try:
+            return self.add(row)
+        finally:
+            if has_pk:
+                CHECK_INTEGRITY.append('pk')
+
     def get(self, primary_key):
         """
         Get the record pointed to by 'primary_key'.
