@@ -8,7 +8,7 @@ import json
 import getpass
 import logging
 
-from driftconfig.relib import create_backend, get_store_from_url, diff_meta, diff_tables
+from driftconfig.relib import create_backend, get_store_from_url, diff_meta, diff_tables, CHECK_INTEGRITY
 from driftconfig.config import get_drift_table_store, push_to_origin, pull_from_origin
 from driftconfig.backends import FileBackend
 from driftconfig.util import config_dir, get_domains, get_default_drift_config
@@ -34,6 +34,11 @@ def get_options(parser):
     p.add_argument(
         'source',
         action='store',
+    )
+    p.add_argument(
+        '--ignore-errors', '-i',
+        action='store_true',
+        help='Ignore any errors.'
     )
 
     # 'list' command
@@ -189,6 +194,8 @@ def init_command(args):
     print "Initializing config from", args.source
     from config import load_from_origin
     ##ts = get_store_from_url(args.source)
+    if args.ignore_errors:
+        del CHECK_INTEGRITY[:]
     ts = load_from_origin(create_backend(args.source))
     domain_name = ts.get_table('domain')['domain_name']
     print "Config domain name: ", domain_name

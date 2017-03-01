@@ -878,6 +878,8 @@ class Backend(object):
             ts._save_to_backend(self, run_integrity_check=run_integrity_check)
             self.save_data(self.pickle_filename, '')  # An empty pickle file indicates json format.
         elif self.default_format == 'pickle':
+            if run_integrity_check:
+                ts.check_integrity()
             blob = pickle.dumps(ts, protocol=2)
             self.start_saving()
             self.save_data(self.pickle_filename, blob)
