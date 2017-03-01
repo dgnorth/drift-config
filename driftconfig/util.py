@@ -11,6 +11,11 @@ from driftconfig.relib import get_store_from_url, create_backend
 log = logging.getLogger(__name__)
 
 
+class TenantNotConfigured(RuntimeError):
+    """Raised in case a tenant is not found during a call to get_drift_config()."""
+    pass
+
+
 def config_dir(config_name, user_dir=False):
     """
     Return a path to config dir for 'config_name'.
@@ -145,7 +150,7 @@ def get_drift_config(ts=None, tenant_name=None, tier_name=None, deployable_name=
     if tenant_name:
         tenant = tenants.get({'tier_name': tier_name, 'deployable_name': deployable_name, 'tenant_name': tenant_name})
         if not tenant:
-            raise RuntimeError(
+            raise TenantNotConfigured(
                 "Tenant '{}' not found for tier '{}' and deployable '{}'".format(tenant_name, tier_name, deployable_name)
             )
     else:
