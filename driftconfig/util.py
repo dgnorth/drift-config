@@ -89,7 +89,7 @@ def get_default_drift_config_and_source():
     source of where it was loaded from.
     """
     if _sticky_ts:
-        return _sticky_ts
+        return _sticky_ts, 'memory://_dummy'
 
     url = os.environ.get('DRIFT_CONFIG_URL')
     if url:
@@ -176,7 +176,7 @@ def get_drift_config(ts=None, tenant_name=None, tier_name=None, deployable_name=
     return conf
 
 
-def diff_table_stores(ts1, ts2):
+def diff_table_stores(ts1, ts2, verbose=False):
 
     report = {}
 
@@ -210,7 +210,6 @@ def diff_table_stores(ts1, ts2):
 
     for table_name in ts1.tables:
         table_diff = {}
-        report['tables'][table_name] = table_diff
 
         try:
             t1, t2 = ts1.get_table(table_name), ts2.get_table(table_name)
@@ -233,6 +232,9 @@ def diff_table_stores(ts1, ts2):
                     diffdump = diff(t2.find(), t1.find(), syntax='symmetric', marshal=True)
 
             table_diff['md5'] = diffdump, is_older, t1_meta['md5'], t2_meta['md5']
+
+        if table_diff or verbose:
+            report['tables'][table_name] = table_diff
 
     return report
 
