@@ -845,19 +845,6 @@ def get_drift_table_store():
     return new_ts
 
 
-class Check():
-
-    def __init__(self, ts):
-        self._ts_original = ts
-
-    def __enter__(self):
-        self._ts_copy = copy_table_store(self._ts_original)
-        return self._ts_copy
-
-    def __exit__(self, *args):
-        copy_table_store(self._ts_copy)
-
-
 def load_from_origin(origin_backend):
     from cPickle import loads
     origin_backend.start_loading()
