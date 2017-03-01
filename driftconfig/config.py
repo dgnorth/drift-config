@@ -251,7 +251,7 @@ authentication:
     keys
         issued              datetime
         expires             datetime
-        pub_rsa             string
+        public_key          string
         private_key         string      (note, this entry only accessible to the issuing service)
 
     authentications
@@ -507,7 +507,7 @@ def get_drift_table_store():
                 'properties': {
                     'issued': {'format': 'date-time'},
                     'expires': {'format': 'date-time'},
-                    'pub_rsa': {'type': 'string'},
+                    'public_key': {'type': 'string'},
                     'private_key': {'type': 'string'},
                 },
             }},
@@ -609,12 +609,11 @@ def get_drift_table_store():
     users_acl.add_foreign_key('tenant_name', 'tenant-names')
 
 
-    # API ROUTER STUFF - THIS SHOULDN'T REALLY BE IN THIS FILE HERE
+    # RELEASE MANAGEMENT - THIS SHOULDN'T REALLY BE IN THIS FILE HERE, or what?
     '''
     routing:
         tier_name               string, pk, fk->tiers
         deployable_name         string, pk, fk->deployables
-        api                     string, required
         autoscaling
             min                 integer
             max                 integer
@@ -622,11 +621,10 @@ def get_drift_table_store():
             instance_type       string, required
         release_version         string
     '''
-    routing = ts.add_table('routing')
-    routing.set_subfolder_name('api-router')
-    routing.add_primary_key('tier_name,deployable_name')
-    routing.add_schema({'type': 'object', 'properties': {
-        'api': {'type': 'string'},
+    instances = ts.add_table('instances')
+    instances.set_subfolder_name('release-mgmt')
+    instances.add_primary_key('tier_name,deployable_name')
+    instances.add_schema({'type': 'object', 'properties': {
         'autoscaling': {'type': 'object', 'properties': {
             'min': {'type': 'integer'},
             'max': {'type': 'integer'},
@@ -634,6 +632,22 @@ def get_drift_table_store():
             'instance_type': {'type': 'string'},
         }},
         'release_version': {'type': 'string'},
+    }})
+
+
+
+    # API ROUTER STUFF - THIS SHOULDN'T REALLY BE IN THIS FILE HERE
+    '''
+    routing:
+        tier_name               string, pk, fk->tiers
+        deployable_name         string, pk, fk->deployables
+        api                     string, required
+    '''
+    routing = ts.add_table('routing')
+    routing.set_subfolder_name('api-router')
+    routing.add_primary_key('tier_name,deployable_name')
+    routing.add_schema({'type': 'object', 'properties': {
+        'api': {'type': 'string'},
     }})
 
 
@@ -930,7 +944,8 @@ class TSTransactionError(RuntimeError):
 
 
 class TSTransaction(object):
-    def __init__(self):
+    def __init__(self, commit_to_origin=True):
+        self._commit_to_origin = commit_to_origin
         self._ts = None
 
     def __enter__(self):
@@ -947,15 +962,16 @@ class TSTransaction(object):
         if exc:
             return False
 
-        result = push_to_origin(self._ts)
-        if not result['pushed']:
-            e = TSTransactionError("Can't push to origin: {}".format(result))
-            e.result = result
-            raise e
+        if self._commit_to_origin:
+            result = push_to_origin(self._ts)
+            if not result['pushed']:
+                e = TSTransactionError("Can't push to origin: {}".format(result))
+                e.result = result
+                raise e
 
-        # Update cache if applicable
-        source_backend = create_backend(self._url)
-        source_backend.save_table_store(self._ts)
+            # Update cache if applicable
+            source_backend = create_backend(self._url)
+            source_backend.save_table_store(self._ts)
 
 
 def parse_8601(s):
