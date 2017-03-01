@@ -358,6 +358,7 @@ import logging
 from datetime import datetime
 
 from driftconfig.relib import TableStore, copy_table_store, create_backend
+import driftconfig.relib
 from driftconfig.util import get_default_drift_config_and_source
 
 log = logging.getLogger(__name__)
@@ -897,7 +898,13 @@ def push_to_origin(local_ts, force=False):
     if crc_match and old == new and not force:
         return {'pushed': True, 'reason': 'push_skipped_crc_match'}
 
-    origin_backend.save_table_store(local_ts)
+    # Always turn on all integrity check when saving to origin
+    tmp = driftconfig.relib.CHECK_INTEGRITY
+    driftconfig.relib.CHECK_INTEGRITY = ['pk', 'fk', 'unique', 'schema', 'constraints']
+    try:
+        origin_backend.save_table_store(local_ts)
+    finally:
+        driftconfig.relib.CHECK_INTEGRITY = tmp
 
     return {'pushed': True, 'reason': 'pushed_to_origin'}
 
