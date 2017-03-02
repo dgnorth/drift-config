@@ -109,7 +109,8 @@ def get_default_drift_config_and_source():
                 "environment variable 'DRIFT_CONFIG_URL'."
             )
         elif len(domains) != 1:
-            raise RuntimeError("No single candidate found in ~/.drift/config")
+            raise RuntimeError("No single candidate found in ~/.drift/config. Specify which "
+                "config to usethe config using the environment variable 'DRIFT_CONFIG_URL'")
         domain = domains.values()[0]
         return domain['table_store'], 'file://' + domain['path']
 
