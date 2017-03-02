@@ -76,7 +76,7 @@ def set_sticky_config(ts):
 def get_default_drift_config():
     """
     Return Drift config as a table store.
-    If 'DRIFT_CONFIG_URL' is found in environment variables, it is used to load the
+    If 'drift_config_url' is found in environment variables, it is used to load the
     table store. If not found, the local disk is searched using get_domain() and if
     only one configuration is found there, it is used.
     If all else fails, this function raises an exception.
@@ -96,7 +96,7 @@ def get_default_drift_config_and_source():
     if _sticky_ts:
         return _sticky_ts, 'memory://_dummy'
 
-    url = os.environ.get('DRIFT_CONFIG_URL')
+    url = os.environ.get('drift_config_url')
     if url:
         b = create_backend(url)
         return b.load_table_store(), url
@@ -106,11 +106,11 @@ def get_default_drift_config_and_source():
             raise RuntimeError(
                 "No config found in ~/.drift/config. Use 'driftconfig init' command to "
                 "initialize a local config, or add a reference to the config using the "
-                "environment variable 'DRIFT_CONFIG_URL'."
+                "environment variable 'drift_config_url'."
             )
         elif len(domains) != 1:
             raise RuntimeError("No single candidate found in ~/.drift/config. Specify which "
-                "config to usethe config using the environment variable 'DRIFT_CONFIG_URL'")
+                "config to usethe config using the environment variable 'drift_config_url'")
         domain = domains.values()[0]
         return domain['table_store'], 'file://' + domain['path']
 
