@@ -51,15 +51,26 @@ class S3Backend(Backend):
         return '{}/{}'.format(self.folder_name, file_name)
 
     def save_data(self, file_name, data):
+        return self._save_data_with_bucket_logic(file_name, data, try_create_bucket=True)
+    
+    def _save_data_with_bucket_logic(self, file_name, data, try_create_bucket):
+        from botocore.client import ClientError
         f = StringIO.StringIO(data)
         key_name = self.get_key_name(file_name)
         log.debug("Uploading %s bytes to s3://%s/%s", len(data), self.bucket_name, key_name)
-        self.s3_client.upload_fileobj(
-            f,
-            self.bucket_name,
-            key_name,
-            ExtraArgs={'ContentType': 'application/json'},
-        )
+        try:
+            self.s3_client.upload_fileobj(
+                f,
+                self.bucket_name,
+                key_name,
+                ExtraArgs={'ContentType': 'application/json'},
+            )
+        except ClientError as e:
+            if 'NoSuchBucket' in str(e) and try_create_bucket:
+                self.s3_client.create_bucket(Bucket=self.bucket_name)
+                return self._save_data_with_bucket_logic(file_name, data, try_create_bucket=False)
+            else:
+                raise
 
     def load_data(self, file_name):
         key_name = self.get_key_name(file_name)
