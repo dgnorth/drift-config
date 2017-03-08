@@ -967,7 +967,7 @@ def diff_tables(t1, t2):
 
 def diff_meta(m1, m2):
     """Return a diff report on two meta tables."""
-    if m1 == m2:
+    if m1['checksum'] == m2['checksum']:
         return {'identical': True}
 
 
