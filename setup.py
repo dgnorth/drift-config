@@ -28,5 +28,6 @@ setup(
     entry_points='''
         [console_scripts]
         driftconfig=driftconfig.cli:main
+        dconf=driftconfig.cli:cli
     '''
 )

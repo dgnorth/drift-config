@@ -7,11 +7,12 @@ import time
 import json
 import getpass
 import logging
+import pkg_resources
 
 from driftconfig.relib import create_backend, get_store_from_url, diff_meta, diff_tables, CHECK_INTEGRITY
-from driftconfig.config import get_drift_table_store, push_to_origin, pull_from_origin
+from driftconfig.config import get_drift_table_store, push_to_origin, pull_from_origin, TSTransaction, TSLocal
 from driftconfig.backends import FileBackend
-from driftconfig.util import config_dir, get_domains, get_default_drift_config
+from driftconfig.util import config_dir, get_domains, get_default_drift_config, get_default_drift_config_and_source
 
 log = logging.getLogger(__name__)
 
@@ -119,25 +120,6 @@ def get_options(parser):
         '-p', '--pickle',
         action='store_true', help="Use pickle format for destination."
     )
-    # 'create' command
-    p = subparsers.add_parser(
-        'create',
-        help='Create a new config.',
-        description="Create a new config. It will only exist locally until it's pushed."
-    )
-    p.add_argument(
-        'domain',
-        action='store', help="Short name to identify the domain or owner of the config.",
-    )
-    p.add_argument(
-        'source',
-        action='store', help="The source location of the config, normally an S3 location."
-    )
-    p.add_argument(
-        '--organization',
-        default=None,
-        action='store', help="The name of the domain owner or organization."
-    )
 
     # 'diff' command
     p = subparsers.add_parser(
@@ -154,6 +136,70 @@ def get_options(parser):
         action='store_true',
         help='Do a detailed diff on modified tables.'
     )
+
+    # CRUD command suite -------------------------------------------
+    # 'create' command
+    p = subparsers.add_parser(
+        'create',
+        description='Create a new Drift configuration.',
+    )
+    p.add_argument(
+        'domain',
+        action='store', help="Short name to identify the domain or owner of the config.",
+    )
+    p.add_argument(
+        'source',
+        action='store', help="The source location of the config, normally an S3 location."
+    )
+    p.add_argument(
+        '--display-name',
+        action='store', help="Display name."
+    )
+
+    # 'add' command
+    p = subparsers.add_parser(
+        'add',
+        help='Add a new entry to the config database.',
+    )
+    p.add_argument(
+        'entry-type',
+        action='store',
+        help="The entry type.",
+        choices=['tier', 'deployable', 'organization', 'product'],
+    )
+    p.add_argument(
+        'entry-name',
+        action='store',
+        help="The entry name",
+    )
+    p.add_argument(
+        'values',
+        action='store',
+        help="Extra values",
+        nargs='*'
+    )
+
+    def _add_action(p):
+        p.add_argument(
+            'action',
+            action='store', help="Action to perform.",
+            default='info',
+            choices=['info', 'add', 'update', 'delete'],
+        )
+
+    # 'tier' command
+    p = subparsers.add_parser(
+        'tier',
+        description='Add a new entry to the config database.',
+    )
+    _add_action(p)
+    p.add_argument(
+        'name',
+        action='store',
+        help="The name of the tier.",
+        nargs='?'
+    )
+
     # 'addtenant' command
     p = subparsers.add_parser(
         'addtenant',
@@ -257,7 +303,7 @@ def _pull_command(args):
                 local_backend = create_backend('file://' + domain_info['path'])
                 local_backend.save_table_store(result['table_store'])
 
-            print "Config pulled. Reason: ", result['reason']
+            print "Config for {} pulled. Reason: {}".format(domain_name, result['reason'])
 
 
 def migrate_command(args):
@@ -334,14 +380,28 @@ def create_command(args):
 
     domain_info = get_domains(user_dir=args.user_dir).get(args.domain)
     if domain_info:
-        print "The domain name specified is taken:"
+        print "The domain name '{}' is taken:".format(args.domain)
         print _format_domain_info(domain_info)
         sys.exit(1)
+
+    # Force s3 naming convention. The root folder name and domain name must match.
+    if args.source.startswith('s3://'):
+        # Strip trailing slashes
+        if args.source.endswith('/'):
+            args.source = args.source[:-1]
+
+        s3_backend = create_backend(args.source)
+        target_folder = s3_backend.folder_name.rsplit('/')[-1]
+        if target_folder != args.domain:
+            print "Error: For S3 source, the target folder name and domain name must match."
+            print "Target folder is '{}' but domain name is '{}'".format(target_folder, args.domain)
+            print "Suggestion: {}".format(args.source.replace(target_folder, args.domain))
+            sys.exit(1)
 
     # Get empty table store for Drift.
     ts = get_drift_table_store()
     ts.get_table('domain').add(
-        {'domain_name': args.domain, 'origin': args.source, 'display_name': args.organization or ''})
+        {'domain_name': args.domain, 'origin': args.source, 'display_name': args.display_name or ''})
 
     # Save it locally
     domain_folder = config_dir(args.domain, user_dir=args.user_dir)
@@ -349,6 +409,69 @@ def create_command(args):
     local_store.save_table_store(ts)
     print "New config for '{}' saved to {}.".format(args.domain, domain_folder)
     print "You can modify the files now before pushing it to source."
+    _, cmd = os.path.split(sys.argv[0])
+    print "To commit the config to source, run this command: {} push {}".format(cmd, args.domain)
+
+_ENTRY_TO_TABLE_NAME = {
+    'tier': 'tiers',
+    'deployable': 'deployable-names',
+    'organization': 'organizations',
+    'product': 'products',
+}
+
+def add_command(args):
+    extra = {}
+    for kv in args.values:
+        if '=' not in kv:
+            print "'values' argument must be of the format key=value, not {}".format(kv)
+            sys.exit(1)
+        k, v = kv.split('=', 1)
+        if v.lower() == 'true':
+            v = True
+        elif v.lower() == 'false':
+            v = False
+        elif v.replace('.', '', 1).isdigit() and not v.isdigit():
+            v = float(v)
+        elif v.isdigit():
+            v = int(v)
+        extra[k] = v
+
+    with TSTransaction() as ts:
+        table = ts.get_table(_ENTRY_TO_TABLE_NAME[args.get('entry-type')])
+        print "got table", table
+
+def tier_command(args):
+    if args.name is None and args.action != 'info':
+        print "Tier name is missing!"
+        sys.exit(1)
+
+    if args.action == 'info':
+        conf = get_default_drift_config()
+        if args.name is None:
+            print "Tiers:"
+            for tier in conf.get_table('tiers').find():
+                print "\t{} state={}, is_live={}".format(
+                    tier['tier_name'].ljust(21), tier['state'], tier['is_live'])
+        else:
+            tier = conf.get_table('tiers').find({'tier_name': args.name})
+            if not tier:
+                print "No tier named {} found.".format(args.name)
+                sys.exit(1)
+            tier = tier[0]
+            print "Tier {}:".format(tier['tier_name'])
+            print json.dumps(tier, indent=4)
+
+    elif args.action == 'add':
+        with TSTransaction() as ts:
+            tiers = ts.get_table('tiers')
+            if tiers.find({'tier_name': args.name}):
+                print "Tier {} already exists!".format(args.name)
+                sys.exit(1)
+            tiers.add({'tier_name': args.name})
+    elif args.action == 'update':
+        pass
+
+    print "Done!"
 
 
 def diff_command(args):
@@ -450,7 +573,7 @@ def run_command(args):
 def main(as_module=False):
     import argparse
     parser = argparse.ArgumentParser(description="")
-    parser.add_argument('--loglevel', default='INFO')
+    parser.add_argument('--loglevel', default='WARNING')
     parser.add_argument('--nocheck', action='store_true', help="Skip all relational integrity and schema checks.")
     parser.add_argument('--user-dir', action='store_true', help="Choose user directory over site for locally stored configs.")
     get_options(parser)
@@ -469,3 +592,259 @@ def main(as_module=False):
 
 if __name__ == '__main__':
     main(as_module=True)
+
+
+import click
+import posixpath
+
+
+def _header(ts):
+    domain = ts.get_table('domain')
+    click.secho("Drift config DB ", nl=False)
+    click.secho(domain['domain_name'], bold=True, nl=False)
+    click.secho(" at origin ", nl=False)
+    click.secho(domain['origin'], bold=True)
+
+
+def _epilogue(ts):
+    name = ts.get_table('domain')['domain_name']
+    click.secho("Run \"driftconfig diff {} -d\" to see changes. Run \"driftconfig push {}\" to commit them.".format(name, name))
+
+
+class Globals(object):
+    pass
+
+
+pass_repo = click.make_pass_decorator(Globals)
+
+
+@click.group()
+@click.option('--config-url', '-u', envvar='DRIFT_CONFIG_URL', metavar='',
+    help="Url to DB origin.")
+@click.option('--verbose', '-v', is_flag=True,
+    help='Enables verbose mode.')
+@click.version_option('1.0')
+@click.pass_context
+def cli(ctx, config_url, verbose):
+    """This command line tool helps you manage and maintain Drift
+    Configuration databases.
+    """
+    ctx.obj = Globals()
+    ctx.obj.config_url = config_url
+    if config_url:
+        os.environ['DRIFT_CONFIG_URL'] = config_url
+    ctx.obj.verbose = verbose
+
+
+@cli.command()
+@click.argument('table-name')
+def edit(table_name):
+    """Edit a config table.\n
+    TABLE_NAME is one of: domain, organizations, tiers, deployable-names, deployables,
+    products, tenant-names, tenants.
+    """
+    ts, source = get_default_drift_config_and_source()
+    table = ts.get_table(table_name)
+    backend = create_backend(source)
+    path = backend.get_filename(table.get_filename())
+    with open(path, 'r') as f:
+        text = click.edit(f.read(), editor='nano')
+    if text:
+        with open(path, 'w') as f:
+            f.write(text)
+
+        _epilogue(ts)
+
+
+@cli.group()
+@pass_repo
+def tier(repo):
+    """This command enables you to manage tier related entries in the configuration
+    database."""
+
+
+@tier.command()
+@click.option('--tier-name', '-t', type=str, default=None)
+def info(tier_name):
+    """Show tier info."""
+    conf = get_default_drift_config()
+    _header(conf)
+    if tier_name is None:
+        click.echo("Tiers:")
+        for tier in conf.get_table('tiers').find():
+            click.echo("\t{} state={}, is_live={}".format(
+                tier['tier_name'].ljust(21), tier['state'], tier['is_live']))
+    else:
+        tier = conf.get_table('tiers').find({'tier_name': tier_name})
+        if not tier:
+            click.secho("No tier named {} found.".format(tier_name), fg='red', bold=True)
+            sys.exit(1)
+        tier = tier[0]
+        click.echo("Tier {}:".format(tier['tier_name']))
+        click.echo(json.dumps(tier, indent=4))
+
+
+@tier.command()
+@click.argument('tier-name', type=str)
+@click.option('--is-live/--is-dev', help="Flag tier for 'live' or 'development' purposes. Default is 'live'.")
+@click.option('--edit', '-e', help="Use editor to modify the entry.", is_flag=True)
+def add(tier_name, is_live, edit):
+    """Add a new tier.\n
+    TIER_NAME is a 3-20 character long upper case string containing only the letters A-Z."""
+    with TSLocal() as ts:
+        tiers = ts.get_table('tiers')
+        entry = {'tier_name': tier_name, 'is_live': is_live}
+        if edit:
+            edit = click.edit(json.dumps(entry, indent=4), editor='nano')
+            if edit:
+                entry = json.loads(edit)
+        if tiers.find(entry):
+            click.secho("Tier {} already exists!".format(entry['tier_name']), fg='red', bold=True)
+            sys.exit(1)
+        tiers.add(entry)
+
+        _epilogue(ts)
+
+
+@tier.command()
+@click.argument('tier-name', type=str)
+def edit(tier_name):
+    """Edit a tier."""
+    with TSLocal() as ts:
+        tiers = ts.get_table('tiers')
+        entry = tiers.get({'tier_name': tier_name})
+        if not entry:
+            click.secho("tier {} not found!".format(tier_name))
+            sys.exit(1)
+
+        edit = click.edit(json.dumps(entry, indent=4), editor='nano')
+        if edit:
+            entry = json.loads(edit)
+            tiers.update(entry)
+
+
+@cli.group()
+@pass_repo
+def deployable(repo):
+    """This command enables you to manage registration of deployables in the
+    configuration database."""
+
+
+@deployable.command()
+def info():
+    """Show deployable registration info."""
+    click.secho("Registered Drift deployable plugins:")
+
+    # setuptools distribution object:
+    # http://setuptools.readthedocs.io/en/latest/pkg_resources.html#distribution-objects
+    # 'activate', 'as_requirement', 'check_version_conflict', 'clone', 'egg_name', 'extras',
+    # 'from_filename', 'from_location', 'get_entry_info', 'get_entry_map', 'has_version',
+    # 'hashcmp', 'insert_on', 'key', 'load_entry_point', 'location', 'parsed_version',
+    # 'platform', 'precedence', 'project_name', 'py_version', 'requires', 'version'
+
+    # setuptools entry point object:
+    # http://setuptools.readthedocs.io/en/latest/pkg_resources.html#entrypoint-objects
+    # 'attrs', 'dist', 'extras', 'load', 'module_name', 'name', 'parse', 'parse_group',
+    # 'parse_map', 'pattern', 'require', 'resolve'
+
+    ts = get_default_drift_config()
+    click.echo("List of Drift deployable plugins in ", nl=False)
+    _header(ts)
+    deployables = ts.get_table('deployable-names')
+    for d in _enumerate_plugins('drift.plugin', 'register_deployable'):
+        dist, meta, classifiers = d['dist'], d['meta'], d['classifiers']
+        click.secho(dist.key, bold=True, nl=False)
+        entry = deployables.get({'deployable_name': dist.key})
+        if entry:
+            click.secho("")
+        else:
+            click.secho(" (Plugin NOT registered in config DB!)", fg='red')
+
+        assigned = ts.get_table('deployables').find({'deployable_name': dist.key})
+        if assigned:
+            click.secho("\tTier assignment:")
+            for assignment in assigned:
+                if 'version' in assignment:
+                    click.secho("\t{tier_name} at version {version}".format(**assignment), nl=False)
+                else:
+                    click.secho("\t{tier_name}".format(**assignment), nl=False)
+                if assignment['is_active']:
+                    click.secho("")
+                else:
+                    click.secho(" [inactive]", fg='gray')
+
+        click.secho("\tVersion: {}".format(dist.parsed_version))
+        if meta:
+            for key in ['Author', 'Summary']:
+                if key in meta:
+                    click.secho("\t{}:{}".format(key, meta[key]))
+            for classifier in classifiers:
+                if 'Programming Language' in classifier and classifier.count('::') == 1:
+                    click.secho("\t{}".format(classifier))
+        else:
+            click.secho("\t(meta info missing)")
+        click.secho("")
+
+
+@deployable.command()
+@click.argument('deployable-name', type=str)
+@click.option('--tier', '-t', type=str, multiple=True,
+    help="Associate deployable to a tier. You can repeat this option for multiple tiers. "
+    "Specify 'all' to associate with all available tiers.")
+def register(deployable_name, tier):
+    """Add or update the registration of a deployable plugin.\n
+    DEPLOYABLE_NAME is the name of the plugin to register. Specify 'all' to register all plugins."""
+    tiers = tier  # The 'tier' option is a list, so find a better name for it.
+    with TSLocal() as ts:
+        deployable_names = ts.get_table('deployable-names')
+        deployables = ts.get_table('deployables')
+
+        for d in _enumerate_plugins('drift.plugin', 'register_deployable'):
+            dist = d['dist']
+            if deployable_name == dist.key or deployable_name == 'all':
+                summary = d['meta'].get('Summary', "(No description available)")
+                row = {'deployable_name': dist.key, 'display_name': summary}
+                deployable_names.update(row)
+                click.secho("{} added/updated.".format(dist.key))
+                for tier_entry in ts.get_table('tiers').find():
+                    if tier_entry['tier_name'] in tiers or 'all' in tiers:
+                        row = {
+                            'tier_name': tier_entry['tier_name'],
+                            'deployable_name': dist.key,
+                            'is_active': True,
+                        }
+                        # By default, live tiers use version affinity
+                        if tier_entry['is_live']:
+                            row['version'] = str(dist.parsed_version)
+                        deployables.update(row)
+
+        _epilogue(ts)
+
+
+def _enumerate_plugins(entry_group, entry_name):
+    """
+    Return a list of Python plugins with entry map group and entry point
+    name matching 'entry_group' and 'entry_name'.
+    """
+    ws = pkg_resources.WorkingSet()
+    distributions, errors = ws.find_plugins(pkg_resources.Environment())
+    for dist in distributions:
+        entry_map = dist.get_entry_map()
+        entry = entry_map.get(entry_group, {}).get(entry_name)
+        if entry:
+            meta = {}
+            classifiers = []
+            if dist.has_metadata('PKG-INFO'):
+                for line in dist.get_metadata_lines('PKG-INFO'):
+                    key, value = line.split(':', 1)
+                    if key == 'Classifier':
+                        classifiers.append(value.strip())
+                    else:
+                        meta[key] = value
+
+            yield {
+                'dist': dist,
+                'entry': entry,
+                'meta': meta,
+                'classifiers': classifiers,
+            }
