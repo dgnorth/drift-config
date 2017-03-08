@@ -87,6 +87,7 @@ deployable-names:
 deployables:
     tier_name               string, pk, fk->tiers
     deployable_name         string, pk, fk->deployables
+    version                 string
     is_active               boolean, default=false
 
 
@@ -446,6 +447,7 @@ def get_drift_table_store():
     deployables.add_schema({
         'type': 'object',
         'properties': {
+            'version': {'type': 'string'},
             'is_active': {'type': 'boolean'},
         },
         'required': ['is_active'],
@@ -938,8 +940,9 @@ class TSTransactionError(RuntimeError):
 
 
 class TSTransaction(object):
-    def __init__(self, commit_to_origin=True):
+    def __init__(self, commit_to_origin=True, write_to_scratch=True):
         self._commit_to_origin = commit_to_origin
+        self._write_to_scratch = write_to_scratch
         self._ts = None
 
     def __enter__(self):
@@ -963,9 +966,27 @@ class TSTransaction(object):
                 e.result = result
                 raise e
 
+        if self._write_to_scratch:
             # Update cache if applicable
             source_backend = create_backend(self._url)
             source_backend.save_table_store(self._ts)
+
+
+class TSLocal(object):
+    def __init__(self):
+        self._ts = None
+
+    def __enter__(self):
+        self._ts, self._url = get_default_drift_config_and_source()
+        return self._ts
+
+    def __exit__(self, exc, value, traceback):
+        if exc:
+            return False
+
+        # Update cache if applicable
+        source_backend = create_backend(self._url)
+        source_backend.save_table_store(self._ts)
 
 
 def parse_8601(s):
