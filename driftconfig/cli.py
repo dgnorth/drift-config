@@ -397,6 +397,9 @@ def create_command(args):
             print "Target folder is '{}' but domain name is '{}'".format(target_folder, args.domain)
             print "Suggestion: {}".format(args.source.replace(target_folder, args.domain))
             sys.exit(1)
+    elif args.source.startswith('file://'):
+        # Expand user vars
+        args.source = args.source.replace('~', os.path.expanduser('~'))
 
     # Get empty table store for Drift.
     ts = get_drift_table_store()
@@ -637,6 +640,24 @@ def cli(ctx, config_url, verbose):
 
 
 @cli.command()
+def list():
+    """List out all Drift configuration DB's that are active on this machine.
+    """
+    domains = get_domains()
+    if not domains:
+        click.secho("No Drift configuration found on this machine. Run 'init' or 'create' "
+            "command to remedy.")
+    else:
+        for domain_info in domains.values():
+            domain = domain_info['table_store'].get_table('domain')
+            click.secho(domain['domain_name'] + ":", bold=True, nl=False)
+            click.secho(" \"{}\"".format(domain['display_name']), fg='green')
+            click.secho("\tOrigin: " + domain['origin'])
+            click.secho("\tLocal: " + domain_info['path'])
+            click.secho("")
+
+
+@cli.command()
 @click.argument('table-name')
 def edit(table_name):
     """Edit a config table.\n
@@ -650,6 +671,7 @@ def edit(table_name):
     with open(path, 'r') as f:
         text = click.edit(f.read(), editor='nano')
     if text:
+        click.secho("Writing changes to " + path)
         with open(path, 'w') as f:
             f.write(text)
 
