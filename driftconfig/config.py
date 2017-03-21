@@ -857,7 +857,7 @@ def load_from_origin(origin_backend):
     return ts
 
 
-def push_to_origin(local_ts, force=False):
+def push_to_origin(local_ts, force=False, _first=False):
     """
     Pushed 'local_ts' to origin.
     Returns a dict with 'pushed' as True or False depending on success.
@@ -878,17 +878,22 @@ def push_to_origin(local_ts, force=False):
 
     If 'skip_cache' is true, the cache, if defined for the table store, will
     not be updated.
+
+    '_first' is used internally, and indicates it's the first time the table
+    store is pushed.
     """
     origin = local_ts.get_table('domain')['origin']
     origin_backend = create_backend(origin)
-    try:
-        origin_ts = origin_backend.load_table_store()
-    except Exception as e:
-        log.warning("Can't load table store from %s: %s", origin_backend, repr(e))
-        crc_match = True
-        force = True
+    if _first:
+        crc_match = force = True
     else:
-        crc_match = local_ts.meta['checksum'] == origin_ts.meta['checksum']
+        try:
+            origin_ts = origin_backend.load_table_store()
+        except Exception as e:
+            log.warning("Can't load table store from %s: %s", origin_backend, repr(e))
+            crc_match = force = True
+        else:
+            crc_match = local_ts.meta['checksum'] == origin_ts.meta['checksum']
 
     if not force and not crc_match:
         local_modified = parse_8601(local_ts.meta['last_modified'])

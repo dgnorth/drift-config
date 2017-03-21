@@ -411,9 +411,12 @@ def create_command(args):
     local_store = create_backend('file://' + domain_folder)
     local_store.save_table_store(ts)
     print "New config for '{}' saved to {}.".format(args.domain, domain_folder)
-    print "You can modify the files now before pushing it to source."
-    _, cmd = os.path.split(sys.argv[0])
-    print "To commit the config to source, run this command: {} push {}".format(cmd, args.domain)
+    print "Pushing to origin..."
+    result = push_to_origin(ts, _first=True)
+    if not result['pushed']:
+        print "Push failed. Reason:", result['reason']
+    print "Done."
+
 
 _ENTRY_TO_TABLE_NAME = {
     'tier': 'tiers',
@@ -480,6 +483,9 @@ def tier_command(args):
 def diff_command(args):
     # Get local table store and its meta state
     domain_info = get_domains(user_dir=args.user_dir).get(args.domain)
+    if domain_info is None:
+        click.secho("Configuration not found: {}".format(args.domain), fg='red')
+        sys.exit(1)
     local_ts = domain_info['table_store']
     local_m1, local_m2 = local_ts.refresh_metadata()
 
