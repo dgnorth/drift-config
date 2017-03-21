@@ -20,6 +20,7 @@ setup(
     description='Drift Configuration Management.',
     install_requires=[
         'click>=2.0',
+        'jsonschema',
     ],
     classifiers=[
         'License :: OSI Approved :: MIT License',
