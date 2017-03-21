@@ -793,9 +793,9 @@ def info():
             click.secho("\tTier assignment:")
             for assignment in assigned:
                 if 'version' in assignment:
-                    click.secho("\t{tier_name} at version {version}".format(**assignment), nl=False)
+                    click.secho("\t\t{tier_name} at version {version}".format(**assignment), nl=False)
                 else:
-                    click.secho("\t{tier_name}".format(**assignment), nl=False)
+                    click.secho("\t\t{tier_name}".format(**assignment), nl=False)
                 if assignment['is_active']:
                     click.secho("")
                 else:
