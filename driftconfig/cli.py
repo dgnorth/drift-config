@@ -8,6 +8,7 @@ import json
 import getpass
 import logging
 import pkg_resources
+import collections
 
 from driftconfig.relib import create_backend, get_store_from_url, diff_meta, diff_tables, CHECK_INTEGRITY
 from driftconfig.config import get_drift_table_store, push_to_origin, pull_from_origin, TSTransaction, TSLocal
@@ -15,6 +16,19 @@ from driftconfig.backends import FileBackend
 from driftconfig.util import config_dir, get_domains, get_default_drift_config, get_default_drift_config_and_source
 
 log = logging.getLogger(__name__)
+
+
+# Enable simple in-line color and styling of output
+try:
+    from colorama.ansi import Fore, Back, Style
+    styles = {'f': Fore, 'b': Back, 's': Style}
+    # Example: "{s.BRIGHT}Bold and {f.RED}red{f.RESET}{s.NORMAL}".format(**styles)
+except ImportError:
+    class EmptyString(object):
+        def __getattr__(self, name):
+            return ''
+
+    styles = {'f': EmptyString(), 'b': EmptyString(), 's': EmptyString()}
 
 
 def get_options(parser):
@@ -632,9 +646,13 @@ pass_repo = click.make_pass_decorator(Globals)
     help="Url to DB origin.")
 @click.option('--verbose', '-v', is_flag=True,
     help='Enables verbose mode.')
+@click.option('--organization', '-o', is_flag=True,
+    help='Specify organization name/short name.')
+@click.option('--product', '-p', is_flag=True,
+    help='Specify product name.')
 @click.version_option('1.0')
 @click.pass_context
-def cli(ctx, config_url, verbose):
+def cli(ctx, config_url, verbose, organization, product):
     """This command line tool helps you manage and maintain Drift
     Configuration databases.
     """
@@ -643,6 +661,8 @@ def cli(ctx, config_url, verbose):
     if config_url:
         os.environ['DRIFT_CONFIG_URL'] = config_url
     ctx.obj.verbose = verbose
+    ctx.obj.organization = organization
+    ctx.obj.product = product
 
 
 @cli.command()
@@ -852,7 +872,8 @@ def organization(repo):
 
 
 @organization.command()
-@click.option('--organization-name', '-o', type=str, default=None)
+@click.option('--name', '-n', 'organization_name', type=str,
+    help="Show full info for given organization. Specify name or short name.")
 def info(organization_name):
     """Show organization info."""
     conf = get_default_drift_config()
@@ -867,23 +888,33 @@ def info(organization_name):
     else:
         org = conf.get_table('organizations').find({'organization_name': organization_name})
         if not org:
+            org = conf.get_table('organizations').find({'short_name': organization_name})
+        if not org:
             click.secho("No organization named {} found.".format(organization_name), fg='red', bold=True)
             sys.exit(1)
         org = org[0]
         click.echo("Organization {}:".format(org['organization_name']))
-        click.echo(json.dumps(tier, indent=4))
+        click.echo(json.dumps(org, indent=4))
 
 
 @organization.command()
 @click.argument('organization-name', type=str)
-@click.option('--is-live/--is-dev', help="Flag org for 'live' or 'development' purposes. Default is 'live'.")
+@click.argument('short-name', type=str)
+@click.option('--display-name', '-d', help="Display name.", type=str)
 @click.option('--edit', '-e', help="Use editor to modify the entry.", is_flag=True)
-def add(organization_name, is_live, edit):
+def add(organization_name, short_name, display_name, edit):
     """Add a new organization.\n
-    ORGANIZATION_NAME is a 2-20 character long upper case string containing only lower case letters and digits."""
+    ORGANIZATION_NAME is a 2-20 character long string containing only lower case letters and digits.\n
+    SHORT_NAME is a 2-20 character long string containing only lower case letters and digits."""
     with TSLocal() as ts:
         organizations = ts.get_table('organizations')
-        entry = {'organization_name': organization_name, 'is_live': is_live}
+        entry = {
+            'organization_name': organization_name,
+            'short_name': short_name,
+        }
+        if display_name:
+            entry['display_name'] = display_name
+
         if edit:
             edit = click.edit(json.dumps(entry, indent=4), editor='nano')
             if edit:
@@ -913,6 +944,91 @@ def edit(organization_name):
             organizations.update(entry)
 
 
+@cli.group()
+@pass_repo
+def product(repo):
+    """Manage products in the configuration database."""
+
+
+@product.command()
+@click.option('-name', '-n', 'product_name', type=str, help="Show full info for given product.")
+def info(product_name):
+    """Show product info."""
+    conf = get_default_drift_config()
+    _header(conf)
+
+    if product_name is None:
+        tabulate(
+            ['organization_name', 'product_name', 'state'],
+            conf.get_table('products').find(),
+            indent='  ',
+        )
+    else:
+        product = conf.get_table('products').find({'product_name': product_name})
+        if not product:
+            click.secho("No product named {} found.".format(product_name), fg='red', bold=True)
+            sys.exit(1)
+        product = product[0]
+        click.secho("Product {s.BRIGHT}{}{s.NORMAL}:".format(product['product_name'], **styles))
+        click.echo(json.dumps(product, indent=4))
+
+
+@product.command()
+@click.argument('product-name', type=str)
+@click.option('--edit', '-e', help="Use editor to modify the entry.", is_flag=True)
+def add(product_name, edit):
+    """Add a new product.\n
+    PRODUCT_NAME is a 3-35 character long string containing only lower case letters digits and dashes.
+    The product name must be prefixed with the organization short name and a dash.
+    """
+    if '-' not in product_name:
+        click.secho("Error: The product name must be prefixed with the organization "
+            "short name and a dash.", fg='red', bold=True)
+        sys.exit(1)
+
+    short_name = product_name.split('-', 1)[0]
+    conf = get_default_drift_config()
+    org = conf.get_table('organizations').find({'short_name': short_name})
+    if not org:
+        click.secho("No organization with short name {} found.".format(short_name), fg='red', bold=True)
+        sys.exit(1)
+
+    organization_name = org[0]['organization_name']
+
+    with TSLocal() as ts:
+        products = ts.get_table('products')
+        entry = {
+            'organization_name': organization_name,
+            'product_name': product_name
+        }
+
+        if edit:
+            edit = click.edit(json.dumps(entry, indent=4), editor='nano')
+            if edit:
+                entry = json.loads(edit)
+        if products.find(entry):
+            click.secho("Product {} already exists!".format(entry['product_name']), fg='red', bold=True)
+            sys.exit(1)
+        products.add(entry)
+
+        _epilogue(ts)
+
+
+@product.command()
+@click.argument('product-name', type=str)
+def edit(product_name):
+    """Edit a product."""
+    with TSLocal() as ts:
+        products = ts.get_table('products')
+        entry = products.get({'product_name': product_name})
+        if not entry:
+            click.secho("product {} not found!".format(product_name))
+            sys.exit(1)
+
+        edit = click.edit(json.dumps(entry, indent=4), editor='nano')
+        if edit:
+            entry = json.loads(edit)
+            products.update(entry)
 
 
 def _enumerate_plugins(entry_group, entry_name):
@@ -947,15 +1063,22 @@ def tabulate(headers, rows, indent=None, col_padding=None):
     """Pretty print tabular data."""
     indent = indent or ''
     col_padding = col_padding or 3
-    col_size = [len(h) for h in headers]  # Width of header cols
-    col_size += [[len(str(row[h])) for h in headers] for row in rows]  # Width of col in each row
+
+    # Calculate max width for each column
+    col_size = [[len(h) for h in headers]]  # Width of header cols
+    col_size += [[len(str(row.get(h, ''))) for h in headers] for row in rows]  # Width of col in each row
+    col_size = [max(col) for col in zip(*col_size)]  # Find the largest
+
+    # Sort rows on first column
+    rows = sorted(rows, key=lambda i: i[headers[0]])
 
     for row in [headers] + rows:
+        click.echo(indent, nl=False)
         for h, width in zip(headers, col_size):
             if row == headers:
                 h = h.replace('_', ' ').title()  # Make header name pretty
-                click.secho(indent + h.ljust(width + col_padding), bold=True, nl=False)
+                click.secho(h.ljust(width + col_padding), bold=True, nl=False)
             else:
                 fg = 'black' if row.get('active', True) else 'white'
-                click.secho(indent + str(row[h]).ljust(width + col_padding), nl=False, fg=fg)
+                click.secho(str(row.get(h, '')).ljust(width + col_padding), nl=False, fg=fg)
         click.echo()
