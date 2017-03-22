@@ -208,15 +208,16 @@ class Table(object):
         """
         Same as add() but will update the row if it already exists.
         """
-        # Turn off primary key violation check temporarily
-        has_pk = 'pk' in CHECK_INTEGRITY
-        if has_pk:
+        # Turn off primary key violation and unique contraint check temporarily
+        tmp = CHECK_INTEGRITY[:]
+        if 'pk' in CHECK_INTEGRITY:
             CHECK_INTEGRITY.remove('pk')
+        if 'unique' in CHECK_INTEGRITY:
+            CHECK_INTEGRITY.remove('unique')
         try:
             return self.add(row)
         finally:
-            if has_pk:
-                CHECK_INTEGRITY.append('pk')
+            CHECK_INTEGRITY[:] = tmp
 
     def get(self, primary_key):
         """
