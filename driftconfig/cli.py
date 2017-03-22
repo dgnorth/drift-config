@@ -687,8 +687,7 @@ def edit(table_name):
 @cli.group()
 @pass_repo
 def tier(repo):
-    """This command enables you to manage tier related entries in the configuration
-    database."""
+    """Manage tier related entries in the configuration database."""
 
 
 @tier.command()
@@ -699,9 +698,7 @@ def info(tier_name):
     _header(conf)
     if tier_name is None:
         click.echo("Tiers:")
-        for tier in conf.get_table('tiers').find():
-            click.echo("\t{} state={}, is_live={}".format(
-                tier['tier_name'].ljust(21), tier['state'], tier['is_live']))
+        tabulate(['tier_name', 'state', 'is_live'], conf.get_table('tiers').find(), indent='  ')
     else:
         tier = conf.get_table('tiers').find({'tier_name': tier_name})
         if not tier:
@@ -754,8 +751,7 @@ def edit(tier_name):
 @cli.group()
 @pass_repo
 def deployable(repo):
-    """This command enables you to manage registration of deployables in the
-    configuration database."""
+    """Manage registration of deployables in the configuration database."""
 
 
 @deployable.command()
@@ -849,6 +845,76 @@ def register(deployable_name, tier):
         _epilogue(ts)
 
 
+@cli.group()
+@pass_repo
+def organization(repo):
+    """Manage organizations in the configuration database."""
+
+
+@organization.command()
+@click.option('--organization-name', '-o', type=str, default=None)
+def info(organization_name):
+    """Show organization info."""
+    conf = get_default_drift_config()
+    _header(conf)
+
+    if organization_name is None:
+        tabulate(
+            ['organization_name', 'short_name', 'state', 'display_name'],
+            conf.get_table('organizations').find(),
+            indent='  ',
+        )
+    else:
+        org = conf.get_table('organizations').find({'organization_name': organization_name})
+        if not org:
+            click.secho("No organization named {} found.".format(organization_name), fg='red', bold=True)
+            sys.exit(1)
+        org = org[0]
+        click.echo("Organization {}:".format(org['organization_name']))
+        click.echo(json.dumps(tier, indent=4))
+
+
+@organization.command()
+@click.argument('organization-name', type=str)
+@click.option('--is-live/--is-dev', help="Flag org for 'live' or 'development' purposes. Default is 'live'.")
+@click.option('--edit', '-e', help="Use editor to modify the entry.", is_flag=True)
+def add(organization_name, is_live, edit):
+    """Add a new organization.\n
+    ORGANIZATION_NAME is a 2-20 character long upper case string containing only lower case letters and digits."""
+    with TSLocal() as ts:
+        organizations = ts.get_table('organizations')
+        entry = {'organization_name': organization_name, 'is_live': is_live}
+        if edit:
+            edit = click.edit(json.dumps(entry, indent=4), editor='nano')
+            if edit:
+                entry = json.loads(edit)
+        if organizations.find(entry):
+            click.secho("Organization {} already exists!".format(entry['organization_name']), fg='red', bold=True)
+            sys.exit(1)
+        organizations.add(entry)
+
+        _epilogue(ts)
+
+
+@organization.command()
+@click.argument('organization-name', type=str)
+def edit(organization_name):
+    """Edit a organization."""
+    with TSLocal() as ts:
+        organizations = ts.get_table('organizations')
+        entry = organizations.get({'organization_name': organization_name})
+        if not entry:
+            click.secho("organization {} not found!".format(organization_name))
+            sys.exit(1)
+
+        edit = click.edit(json.dumps(entry, indent=4), editor='nano')
+        if edit:
+            entry = json.loads(edit)
+            organizations.update(entry)
+
+
+
+
 def _enumerate_plugins(entry_group, entry_name):
     """
     Return a list of Python plugins with entry map group and entry point
@@ -876,3 +942,20 @@ def _enumerate_plugins(entry_group, entry_name):
                 'meta': meta,
                 'classifiers': classifiers,
             }
+
+def tabulate(headers, rows, indent=None, col_padding=None):
+    """Pretty print tabular data."""
+    indent = indent or ''
+    col_padding = col_padding or 3
+    col_size = [len(h) for h in headers]  # Width of header cols
+    col_size += [[len(str(row[h])) for h in headers] for row in rows]  # Width of col in each row
+
+    for row in [headers] + rows:
+        for h, width in zip(headers, col_size):
+            if row == headers:
+                h = h.replace('_', ' ').title()  # Make header name pretty
+                click.secho(indent + h.ljust(width + col_padding), bold=True, nl=False)
+            else:
+                fg = 'black' if row.get('active', True) else 'white'
+                click.secho(indent + str(row[h]).ljust(width + col_padding), nl=False, fg=fg)
+        click.echo()
