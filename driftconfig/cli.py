@@ -666,7 +666,7 @@ def cli(ctx, config_url, verbose, organization, product):
 
 
 @cli.command()
-def list():
+def info():
     """List out all Drift configuration DB's that are active on this machine.
     """
     domains = get_domains()
@@ -979,7 +979,7 @@ def info(product_name):
 
     if product_name is None:
         tabulate(
-            ['organization_name', 'product_name', 'state'],
+            ['organization_name', 'product_name', 'state', 'deployables'],
             conf.get_table('products').find(),
             indent='  ',
         )
@@ -1082,23 +1082,25 @@ def info(tenant_name):
 
 @tenant.command()
 @click.argument('tenant-name', type=str)
+@click.argument('product-name', type=str)
 @click.option('--edit', '-e', help="Use editor to modify the entry.", is_flag=True)
-def add(product_name, edit):
-    """Add a new product.\n
-    PRODUCT_NAME is a 3-35 character long string containing only lower case letters digits and dashes.
-    The product name must be prefixed with the organization short name and a dash.
+def add(tenant_name, product_name, edit):
+    """Add a new tenant.\n
+    TENANT_NAME is a 3-30 character long string containing only lower case letters digits and dashes.
+    The tenant name must be prefixed with the organization short name and a dash.
+    PRODUCT_NAME is the product which the tenant is associated with.
     """
     if edit:
         click.secho("Editing tier and deployable details not implemented yet. Don't use "
             "the --edit option!", fg='red')
         sys.exit(1)
 
-    if '-' not in product_name:
-        click.secho("Error: The product name must be prefixed with the organization "
+    if '-' not in tenant_name:
+        click.secho("Error: The tenant name must be prefixed with the organization "
             "short name and a dash.", fg='red', bold=True)
         sys.exit(1)
 
-    short_name = product_name.split('-', 1)[0]
+    short_name = tenant_name.split('-', 1)[0]
     conf = get_default_drift_config()
     org = conf.get_table('organizations').find({'short_name': short_name})
     if not org:
@@ -1106,33 +1108,43 @@ def add(product_name, edit):
         sys.exit(1)
 
     organization_name = org[0]['organization_name']
+    product = conf.get_table('products').find({'product_name': product_name})
+    if not product:
+        click.secho("No product named {} found.".format(product_name), fg='red', bold=True)
+        sys.exit(1)
+    product = product[0]
+
 
     with TSLocal() as ts:
-        products = ts.get_table('products')
+        click.secho("Creating tenant {} for product {}.".format(tenant_name, product_name))
+        tenant_names = ts.get_table('tenant-names')
         entry = {
+            'tenant_name': tenant_name,
             'organization_name': organization_name,
-            'product_name': product_name
+            'product_name': product_name,
+            'reserved_by': getpass.getuser(),
+            'reserved_at': datetime.utcnow().isoformat() + 'Z',
         }
 
         if edit:
             edit = click.edit(json.dumps(entry, indent=4), editor='nano')
             if edit:
                 entry = json.loads(edit)
-        if products.find(entry):
-            click.secho("Product {} already exists!".format(entry['product_name']), fg='red', bold=True)
+        if tenant_names.find(entry):
+            click.secho("Tenant {} already exists!".format(tenant_name), fg='red', bold=True)
             sys.exit(1)
-        products.add(entry)
+        tenant_names.add(entry)
 
         _epilogue(ts)
 
 
 @tenant.command()
 @click.argument('tenant-name', type=str)
-@click.option('--details', '-d', help="Edit the tier and deployable details.", is_flag=True)
+@click.option('--details', '-d', help="Edit the tenant and deployable details.", is_flag=True)
 def edit(tenant_name, details):
     """Edit a tenant."""
     if details:
-        click.secho("Editing tier and deployable details not implemented yet!", fg='red')
+        click.secho("Editing tenant and deployable details not implemented yet!", fg='red')
         sys.exit(1)
 
     with TSLocal() as ts:
