@@ -674,13 +674,30 @@ def list():
         click.secho("No Drift configuration found on this machine. Run 'init' or 'create' "
             "command to remedy.")
     else:
+        ts, source = get_default_drift_config_and_source()
+        got_default = False
+
         for domain_info in domains.values():
             domain = domain_info['table_store'].get_table('domain')
-            click.secho(domain['domain_name'] + ":", bold=True, nl=False)
+            is_default = domain['domain_name'] == ts.get_table('domain')['domain_name']
+            if is_default:
+                click.secho(domain['domain_name'] + " [DEFAULT]:", bold=True, nl=False)
+                got_default = True
+            else:
+                click.secho(domain['domain_name'] + ":", bold=True, nl=False)
+
             click.secho(" \"{}\"".format(domain['display_name']), fg='green')
             click.secho("\tOrigin: " + domain['origin'])
             click.secho("\tLocal: " + domain_info['path'])
             click.secho("")
+
+        if got_default:
+            if 'DRIFT_CONFIG_URL' in os.environ:
+                click.secho("The default config is specified using the 'DRIFT_CONFIG_URL' environment variable.")
+            else:
+                click.secho("The config above is the default one as it's the only one cached locally in ~/.drift/config.")
+        else:
+            click.secho("Note: There is no default config specified!")
 
 
 @cli.command()
@@ -796,7 +813,7 @@ def info():
     _header(ts)
     deployables = ts.get_table('deployable-names')
     for d in _enumerate_plugins('drift.plugin', 'register_deployable'):
-        dist, meta, classifiers = d['dist'], d['meta'], d['classifiers']
+        dist, meta, classifiers, tags = d['dist'], d['meta'], d['classifiers'], d['tags']
         click.secho(dist.key, bold=True, nl=False)
         entry = deployables.get({'deployable_name': dist.key})
         if entry:
@@ -809,7 +826,7 @@ def info():
             click.secho("\tTier assignment:")
             for assignment in assigned:
                 if 'version' in assignment:
-                    click.secho("\t\t{tier_name} at version {version}".format(**assignment), nl=False)
+                    click.secho("\t\t{tier_name} [{version}]".format(**assignment), nl=False)
                 else:
                     click.secho("\t\t{tier_name}".format(**assignment), nl=False)
                 if assignment['is_active']:
@@ -817,7 +834,9 @@ def info():
                 else:
                     click.secho(" [inactive]", fg='gray')
 
+        click.secho("\tTags: {}".format(', '.join(tags)))
         click.secho("\tVersion: {}".format(dist.parsed_version))
+
         if meta:
             for key in ['Author', 'Summary']:
                 if key in meta:
@@ -856,6 +875,7 @@ def register(deployable_name, tier):
                             'tier_name': tier_entry['tier_name'],
                             'deployable_name': dist.key,
                             'is_active': True,
+                            'tags': d['tags'],
                         }
                         # By default, live tiers use version affinity
                         if tier_entry['is_live']:
@@ -1031,6 +1051,103 @@ def edit(product_name):
             products.update(entry)
 
 
+@cli.group()
+@pass_repo
+def tenant(repo):
+    """Manage tenants in the configuration database."""
+
+
+@tenant.command()
+@click.option('-name', '-n', 'tenant_name', type=str, help="Show full info for given tenant.")
+def info(tenant_name):
+    """Show tenant info."""
+    conf = get_default_drift_config()
+    _header(conf)
+
+    if tenant_name is None:
+        tabulate(
+            ['organization_name', 'product_name', 'tenant_name', 'reserved_at', 'reserved_by'],
+            conf.get_table('tenant-names').find(),
+            indent='  ',
+        )
+    else:
+        tenant = conf.get_table('tenants').find({'tenant_name': tenant_name})
+        if not tenant:
+            click.secho("No tenant named {} found.".format(tenant_name), fg='red', bold=True)
+            sys.exit(1)
+
+        click.secho("Tenant {s.BRIGHT}{}{s.NORMAL}:".format(tenant_name, **styles))
+        click.echo(json.dumps(tenant, indent=4))
+
+
+@tenant.command()
+@click.argument('tenant-name', type=str)
+@click.option('--edit', '-e', help="Use editor to modify the entry.", is_flag=True)
+def add(product_name, edit):
+    """Add a new product.\n
+    PRODUCT_NAME is a 3-35 character long string containing only lower case letters digits and dashes.
+    The product name must be prefixed with the organization short name and a dash.
+    """
+    if edit:
+        click.secho("Editing tier and deployable details not implemented yet. Don't use "
+            "the --edit option!", fg='red')
+        sys.exit(1)
+
+    if '-' not in product_name:
+        click.secho("Error: The product name must be prefixed with the organization "
+            "short name and a dash.", fg='red', bold=True)
+        sys.exit(1)
+
+    short_name = product_name.split('-', 1)[0]
+    conf = get_default_drift_config()
+    org = conf.get_table('organizations').find({'short_name': short_name})
+    if not org:
+        click.secho("No organization with short name {} found.".format(short_name), fg='red', bold=True)
+        sys.exit(1)
+
+    organization_name = org[0]['organization_name']
+
+    with TSLocal() as ts:
+        products = ts.get_table('products')
+        entry = {
+            'organization_name': organization_name,
+            'product_name': product_name
+        }
+
+        if edit:
+            edit = click.edit(json.dumps(entry, indent=4), editor='nano')
+            if edit:
+                entry = json.loads(edit)
+        if products.find(entry):
+            click.secho("Product {} already exists!".format(entry['product_name']), fg='red', bold=True)
+            sys.exit(1)
+        products.add(entry)
+
+        _epilogue(ts)
+
+
+@tenant.command()
+@click.argument('tenant-name', type=str)
+@click.option('--details', '-d', help="Edit the tier and deployable details.", is_flag=True)
+def edit(tenant_name, details):
+    """Edit a tenant."""
+    if details:
+        click.secho("Editing tier and deployable details not implemented yet!", fg='red')
+        sys.exit(1)
+
+    with TSLocal() as ts:
+        tenants = ts.get_table('tenant-names')
+        entry = tenants.get({'tenant_name': tenant_name})
+        if not entry:
+            click.secho("tenant {} not found!".format(tenant_name))
+            sys.exit(1)
+
+        edit = click.edit(json.dumps(entry, indent=4), editor='nano')
+        if edit:
+            entry = json.loads(edit)
+            tenants.update(entry)
+
+
 def _enumerate_plugins(entry_group, entry_name):
     """
     Return a list of Python plugins with entry map group and entry point
@@ -1044,11 +1161,15 @@ def _enumerate_plugins(entry_group, entry_name):
         if entry:
             meta = {}
             classifiers = []
+            tags = []
             if dist.has_metadata('PKG-INFO'):
                 for line in dist.get_metadata_lines('PKG-INFO'):
                     key, value = line.split(':', 1)
                     if key == 'Classifier':
-                        classifiers.append(value.strip())
+                        v = value.strip()
+                        classifiers.append(v)
+                        if 'Drift :: Tag :: ' in v:
+                            tags.append(v.replace('Drift :: Tag :: ', '').lower().strip())
                     else:
                         meta[key] = value
 
@@ -1057,6 +1178,7 @@ def _enumerate_plugins(entry_group, entry_name):
                 'entry': entry,
                 'meta': meta,
                 'classifiers': classifiers,
+                'tags': tags,
             }
 
 def tabulate(headers, rows, indent=None, col_padding=None):
@@ -1069,8 +1191,11 @@ def tabulate(headers, rows, indent=None, col_padding=None):
     col_size += [[len(str(row.get(h, ''))) for h in headers] for row in rows]  # Width of col in each row
     col_size = [max(col) for col in zip(*col_size)]  # Find the largest
 
-    # Sort rows on first column
-    rows = sorted(rows, key=lambda i: i[headers[0]])
+    # Sort rows
+    def make_key(row):
+        return ":".join([str(row.get(k, '')) for k in headers])
+
+    rows = sorted(rows, key=make_key)
 
     for row in [headers] + rows:
         click.echo(indent, nl=False)
