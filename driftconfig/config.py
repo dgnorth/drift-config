@@ -95,6 +95,7 @@ products:
     product_name            string, pk
     organization_name       string, fk->organizations, required
     state                   enum initializing|active|disabled|deleted, default=active
+    deployables             array of strings, required
 
 tenant-names:
     # a tenant name is unique across all tiers
@@ -436,9 +437,11 @@ def get_drift_table_store():
         'properties': {
             'deployable_name': {'pattern': r'^([a-z-]){3,20}$'},
             'display_name': {'type': 'string'},
+            'tags': {'type': 'array', 'items': {'type': 'string'}},
         },
-        'required': ['display_name'],
+        'required': ['display_name', 'tags'],
     })
+    deployable_names.add_default_values({'tags': []})
 
     deployables = ts.add_table('deployables')
     deployables.add_primary_key('tier_name,deployable_name')
@@ -462,10 +465,11 @@ def get_drift_table_store():
         'properties': {
             'product_name': {'pattern': r'^([a-z0-9-]){3,35}$'},
             'state': {'enum': ['initializing', 'active', 'disabled', 'deleted']},
+            'deployables': {'type': 'array', 'items': {'type': 'string'}},
         },
-        'required': ['organization_name'],
+        'required': ['organization_name', 'deployables'],
     })
-    products.add_default_values({'state': 'active'})
+    products.add_default_values({'state': 'active', 'deployables': []})
 
     tenant_names = ts.add_table('tenant-names')
     tenant_names.add_primary_key('tenant_name')
@@ -519,21 +523,14 @@ def get_drift_table_store():
 
     platforms = ts.add_table('platforms')
     platforms.set_row_as_file(subfolder_name='authentication')
-    platforms.add_primary_key('tier_name,deployable_name,tenant_name')
-    platforms.add_foreign_key('tier_name', 'tiers')
-    platforms.add_foreign_key('deployable_name', 'deployable-names')
-    platforms.add_foreign_key('tier_name,deployable_name,tenant_name', 'tenants')
+    platforms.add_primary_key('product_name,provider_name')
+    platforms.add_foreign_key('product_name', 'products')
     platforms.add_schema({
         'type': 'object',
         'properties': {
-            'providers': {'type': 'array', 'items': {
-                'type': 'object',
-                'properties': {
-                    'provider_name': {'type': 'string'},
-                    'provider_details': {'type': 'object'},
-                },
-            }},
+            'provider_details': {'type': 'object'},
         },
+        'required': ['provider_details'],
     })
 
     '''
