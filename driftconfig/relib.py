@@ -327,7 +327,8 @@ class Table(object):
         if group_by:
             self._group_by_fields = group_by.split(',')
             if not set(self._group_by_fields).issubset(set(self._pk_fields)):
-                raise TableError("'group_by' fields {} must be part of primary key fields {}.".format(self._group_by_fields, self._pk_fields))
+                raise TableError("In table '{}', group_by fields {} must be part of "
+                    "primary key fields {}.".format(self.name, self._group_by_fields, self._pk_fields))
         else:
             self._group_by_fields = self._pk_fields
 
