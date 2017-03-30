@@ -492,11 +492,7 @@ class Table(object):
         """
         if not self._group_by_fields:
             data = fetch_from_storage(self.get_filename())
-            try:
-                rows = json.loads(data)
-            except Exception:
-                log.error("Error parsing json file %s", self.get_filename())
-                raise
+            rows = jsonloads(data, self.get_filename())
             for row in rows:
                 self.add(row)
         else:
@@ -504,13 +500,13 @@ class Table(object):
             row_per_file = self._group_by_fields == self._pk_fields
             index_file_name = self.get_filename(is_index_file=True)
             index = fetch_from_storage(index_file_name)
-            index = json.loads(index)
+            index = jsonloads(index, index_file_name)
 
             if row_per_file:
                 for primary_key in index:
                     file_name = self.get_filename(row=primary_key)
                     data = fetch_from_storage(file_name)
-                    row = json.loads(data)
+                    row = jsonloads(data, file_name)
                     self.add(row)
             else:
                 # Group one or more rows together for each file.
@@ -522,11 +518,7 @@ class Table(object):
                 for group_key in key_groups.values():
                     file_name = self.get_filename(row=group_key)
                     data = fetch_from_storage(file_name)
-                    try:
-                        rows = json.loads(data)
-                    except Exception:
-                        log.error("Error parsing json file %s", file_name)
-                        raise
+                    rows = jsonloads(data, file_name)
                     for row in rows:
                         self.add(row)
 
@@ -613,7 +605,7 @@ class SingleRowTable(Table):
         Load document data.
         """
         data = fetch_from_storage(self.get_filename())
-        doc = json.loads(data)
+        doc = jsonloads(data, self.get_filename())
         self.add(doc)
 
 
@@ -698,7 +690,7 @@ class TableStore(object):
         Initialize this instance using result from a previous call to
         'get_definition'.
         """
-        data = json.loads(definition)
+        data = jsonloads(definition, "<definition>")
         self.__dict__.update(data)
 
         # TODO: Maintaint proper DAG order of tables during serialization. It can be remedied
@@ -972,7 +964,6 @@ def diff_meta(m1, m2):
     if m1['checksum'] == m2['checksum']:
         return {'identical': True}
 
-
     diff = {}
     diff['identical'] = False
     diff['checksum'] = {'first': m1['checksum'], 'second': m2['checksum']}
@@ -999,3 +990,15 @@ def register(cls):
     """Decorator to register Backend class for a particular URL scheme."""
     Backend.schemes[cls.__scheme__] = cls
     return cls
+
+
+def jsonloads(json_text, filename):
+    """
+    Wrapper for json.loads function. If the json is bad, a proper error
+    is generated.
+    """
+    try:
+        return json.loads(json_text)
+    except Exception:
+        log.error("Error parsing json file %s", filename)
+        raise
