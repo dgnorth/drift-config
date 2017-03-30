@@ -471,36 +471,67 @@ def get_drift_table_store():
     })
     products.add_default_values({'state': 'active', 'deployables': []})
 
-    tenant_names = ts.add_table('tenant-names')
-    tenant_names.add_primary_key('tenant_name,product_name')
-    tenant_names.set_row_as_file(subfolder_name='tenants', group_by='product_name')
-    tenant_names.add_unique_constraint('tenant_name')
-    tenant_names.add_foreign_key('product_name', 'products')
-    tenant_names.add_foreign_key('organization_name', 'organizations')
-    tenant_names.add_foreign_key('tier_name', 'tiers')
-    tenant_names.add_schema({
-        'type': 'object',
-        'properties': {
-            'tenant_name': {'pattern': r'^([a-z0-9-]){3,30}$'},
-            'reserved_at': {'format': 'date-time'},
-            'reserved_by': {'type': 'string'},
-        },
-        'required': ['product_name', 'organization_name', 'tier_name'],
-    })
-    tenant_names.add_default_values({'reserved_at': '@@utcnow'})
+    # Waiting a little bit with fixups of tenant-names and tenants table schema
+    if "temporary fixy fix":
+        tenant_names = ts.add_table('tenant-names')
+        tenant_names.add_primary_key('tenant_name')
+        tenant_names.add_foreign_key('product_name', 'products')
+        tenant_names.add_foreign_key('organization_name', 'organizations')
+        tenant_names.add_schema({
+            'type': 'object',
+            'properties': {
+                'tenant_name': {'pattern': r'^([a-z0-9-]){3,30}$'},
+                'reserved_at': {'format': 'date-time'},
+                'reserved_by': {'type': 'string'},
+            },
+            'required': ['product_name', 'organization_name'],
+        })
+        tenant_names.add_default_values({'reserved_at': '@@utcnow'})
 
-    tenants = ts.add_table('tenants')
-    tenants.add_primary_key('deployable_name,tenant_name')
-    tenants.set_row_as_file(subfolder_name='tenants', group_by='tenant_name')
-    tenants.add_foreign_key('deployable_name', 'deployable-names')
-    tenants.add_foreign_key('tenant_name', 'tenant-names')
-    tenants.add_schema({
-        'type': 'object',
-        'properties': {
-            'state': {'enum': ['initializing', 'active', 'disabled', 'deleted']},
-        },
-    })
-    tenants.add_default_values({'state': 'initializing'})
+        tenants = ts.add_table('tenants')
+        tenants.add_primary_key('tier_name,deployable_name,tenant_name')
+        tenants.set_row_as_file(subfolder_name=tenants.name, group_by='tier_name,tenant_name')
+        tenants.add_foreign_key('tier_name', 'tiers')
+        tenants.add_foreign_key('deployable_name', 'deployable-names')
+        tenants.add_foreign_key('tenant_name', 'tenant-names')
+        tenants.add_schema({
+            'type': 'object',
+            'properties': {
+                'state': {'enum': ['initializing', 'active', 'disabled', 'deleted']},
+            },
+        })
+        tenants.add_default_values({'state': 'initializing'})
+    else:
+        tenant_names = ts.add_table('tenant-names')
+        tenant_names.add_primary_key('tenant_name,product_name')
+        tenant_names.set_row_as_file(subfolder_name='tenants', group_by='product_name')
+        tenant_names.add_unique_constraint('tenant_name')
+        tenant_names.add_foreign_key('product_name', 'products')
+        tenant_names.add_foreign_key('organization_name', 'organizations')
+        tenant_names.add_foreign_key('tier_name', 'tiers')
+        tenant_names.add_schema({
+            'type': 'object',
+            'properties': {
+                'tenant_name': {'pattern': r'^([a-z0-9-]){3,30}$'},
+                'reserved_at': {'format': 'date-time'},
+                'reserved_by': {'type': 'string'},
+            },
+            'required': ['product_name', 'organization_name', 'tier_name'],
+        })
+        tenant_names.add_default_values({'reserved_at': '@@utcnow'})
+
+        tenants = ts.add_table('tenants')
+        tenants.add_primary_key('deployable_name,tenant_name')
+        tenants.set_row_as_file(subfolder_name='tenants', group_by='tenant_name')
+        tenants.add_foreign_key('deployable_name', 'deployable-names')
+        tenants.add_foreign_key('tenant_name', 'tenant-names')
+        tenants.add_schema({
+            'type': 'object',
+            'properties': {
+                'state': {'enum': ['initializing', 'active', 'disabled', 'deleted']},
+            },
+        })
+        tenants.add_default_values({'state': 'initializing'})
 
     public_keys = ts.add_table('public-keys')
     public_keys.set_row_as_file(subfolder_name='authentication')
