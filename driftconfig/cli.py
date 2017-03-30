@@ -561,7 +561,7 @@ def addtenant_command(args):
         'organization_name': args.organization,
         'product_name': args.product,
         'reserved_by': getpass.getuser(),
-        'reserved_at': datetime.utcnow().isoformat(),
+        'reserved_at': datetime.utcnow().isoformat() + 'Z',
     })
 
     print "\nNew tenant record:\n", json.dumps(row, indent=4)
