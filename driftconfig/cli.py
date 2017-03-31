@@ -556,7 +556,7 @@ def addtenant_command(args):
     print _format_domain_info(domain_info)
 
     ts = domain_info['table_store']
-    row = ts.get_table('tenant-names').add({
+    row = ts.get_table('tenant-names').update({
         'tenant_name': args.name,
         'organization_name': args.organization,
         'product_name': args.product,
@@ -862,7 +862,7 @@ def register(deployable_name, tier):
         deployable_names = ts.get_table('deployable-names')
         deployables = ts.get_table('deployables')
 
-        for d in _enumerate_plugins('drift.plugin', 'register_deployable'):
+        for d in _enumerate_plugins('drift.plugin', 'provision'):
             dist = d['dist']
             if deployable_name == dist.key or deployable_name == 'all':
                 summary = d['meta'].get('Summary', "(No description available)")
@@ -881,6 +881,7 @@ def register(deployable_name, tier):
                         if tier_entry['is_live']:
                             row['version'] = str(dist.parsed_version)
                         deployables.update(row)
+                        click.secho("Adding registration:\n" + json.dumps(row, indent=4))
 
         _epilogue(ts)
 
