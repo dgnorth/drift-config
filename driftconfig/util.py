@@ -98,6 +98,12 @@ def get_default_drift_config_and_source():
 
     url = os.environ.get('DRIFT_CONFIG_URL')
     if url:
+        # Enable domain shorthand
+        if ':' not in url:
+            domain = get_domains().get(url)
+            if domain:
+                return domain['table_store'], 'file://' + domain['path']
+
         b = create_backend(url)
         return b.load_table_store(), url
     else:
