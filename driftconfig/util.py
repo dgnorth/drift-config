@@ -100,9 +100,13 @@ def get_default_drift_config_and_source():
     if url:
         # Enable domain shorthand
         if ':' not in url:
-            domain = get_domains().get(url)
+            domains = get_domains()
+            domain = domains.get(url)
             if domain:
                 return domain['table_store'], 'file://' + domain['path']
+            else:
+                raise RuntimeError("No domain named '{}' found on local disk. Available domains: {}.".format(
+                    url, ", ".join(domains.keys())))
 
         b = create_backend(url)
         return b.load_table_store(), url
