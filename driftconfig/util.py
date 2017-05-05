@@ -11,6 +11,11 @@ from driftconfig.relib import get_store_from_url, create_backend
 log = logging.getLogger(__name__)
 
 
+class ConfigNotFound(RuntimeError):
+    """Raised if no config or multiple configs are found."""
+    pass
+
+
 class TenantNotConfigured(RuntimeError):
     """Raised in case a tenant is not found during a call to get_drift_config()."""
     pass
@@ -113,14 +118,14 @@ def get_default_drift_config_and_source():
     else:
         domains = get_domains()
         if len(domains) == 0:
-            raise RuntimeError(
+            raise ConfigNotFound(
                 "No config found in ~/.drift/config. Use 'driftconfig init' command to "
                 "initialize a local config, or add a reference to the config using the "
                 "environment variable 'DRIFT_CONFIG_URL'."
             )
         elif len(domains) != 1:
             domain_names = ", ".join(domains.keys())
-            raise RuntimeError("Multiple Drift configurations found in ~/.drift.config. "
+            raise ConfigNotFound("Multiple Drift configurations found in ~/.drift.config. "
                 "Specify which configuration to use by referencing it in the "
                 "'DRIFT_CONFIG_URL' environment variable, or use or use the --config "
                 " command line argument. Configurations available on local disk: %s."
