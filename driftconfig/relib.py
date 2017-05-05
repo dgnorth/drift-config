@@ -110,8 +110,8 @@ class Table(object):
         else:
             canonicalized = '.'.join([str(primary_key[k]) for k in fields if k in primary_key])
             if not self.PK_FIELDNAME_REGEX.match(canonicalized):
-                raise ConstraintError("Primary key value {!r} didn't match pattern '{}'.".format(
-                    canonicalized, self.PK_FIELDNAME_REGEX.pattern))
+                raise ConstraintError("Primary key value {!r} didn't match pattern '{}' in table '{}' ({}).".format(
+                    canonicalized, self.PK_FIELDNAME_REGEX.pattern, self.name, self.get_filename()))
 
         return canonicalized
 
