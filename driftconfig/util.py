@@ -119,8 +119,12 @@ def get_default_drift_config_and_source():
                 "environment variable 'DRIFT_CONFIG_URL'."
             )
         elif len(domains) != 1:
-            raise RuntimeError("No single candidate found in ~/.drift/config. Specify which "
-                "config to usethe config using the environment variable 'DRIFT_CONFIG_URL'")
+            domain_names = ", ".join(domains.keys())
+            raise RuntimeError("Multiple Drift configurations found in ~/.drift.config. "
+                "Specify which configuration to use by referencing it in the "
+                "'DRIFT_CONFIG_URL' environment variable, or use or use the --config "
+                " command line argument. Configurations available on local disk: %s."
+                "" % domain_names)
         domain = domains.values()[0]
         return domain['table_store'], 'file://' + domain['path']
 
@@ -176,6 +180,13 @@ def get_drift_config(ts=None, tenant_name=None, tier_name=None, deployable_name=
         product = None
         organization = None
 
+    if tier_name and deployable_name:
+        tenant_rows = tenants.find(
+            {'tier_name': tier_name, 'deployable_name': deployable_name, 'state': 'active'}
+        )
+    else:
+        tenant_rows = []
+
     conf = conf_tuple(
         table_store=ts,
         tenant=tenant,
@@ -183,7 +194,7 @@ def get_drift_config(ts=None, tenant_name=None, tier_name=None, deployable_name=
         deployable=ts.get_table('deployables').get({'deployable_name': deployable_name, 'tier_name': tier_name}),
         domain=ts.get_table('domain'),
         tenant_name=tenant_name,
-        tenants=ts.get_table('tenants').find({'tier_name': tier_name, 'deployable_name': deployable_name, 'state': 'active'}),
+        tenants=tenant_rows,
         product=product,
         organization=organization,
         drift_app=drift_app,
@@ -253,4 +264,3 @@ def diff_table_stores(ts1, ts2, verbose=False):
             report['tables'][table_name] = table_diff
 
     return report
-
