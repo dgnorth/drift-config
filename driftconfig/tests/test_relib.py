@@ -166,9 +166,9 @@ class TestRelib(unittest.TestCase):
         self.assertIn("foreign key record in 'table2' not found", str(context.exception))
 
         # Get foreign table row. Only 'blue' row is linked. The 'red' one is orphaned.
-        self.assertEqual([], table1.get_foreign_row(row1, 'table2'))
-        self.assertEqual([blue_row], table1.get_foreign_row(row2, 'table2'))
-        self.assertEqual([blue_row], table1.get_foreign_row(row3, 'table2'))
+        self.assertEqual(None, table1.get_foreign_row(row1, 'table2'))
+        self.assertEqual(blue_row, table1.get_foreign_row(row2, 'table2'))
+        self.assertEqual(blue_row, table1.get_foreign_row(row3, 'table2'))
 
         # Test bad table name in request for foreign row
         with self.assertRaises(TableError) as context:

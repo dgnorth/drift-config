@@ -177,9 +177,9 @@ def get_drift_config(ts=None, tenant_name=None, tier_name=None, deployable_name=
         tenant = None
 
     if tenant:
-        tenant_name = tenants.get_foreign_row(tenant, 'tenant-names')[0]
-        product = ts.get_table('tenant-names').get_foreign_row(tenant_name, 'products')[0]
-        organization = ts.get_table('products').get_foreign_row(product, 'organizations')[0]
+        tenant_name = tenants.get_foreign_row(tenant, 'tenant-names')
+        product = ts.get_table('tenant-names').get_foreign_row(tenant_name, 'products')
+        organization = ts.get_table('products').get_foreign_row(product, 'organizations')
     else:
         tenant_name = None
         product = None

@@ -140,7 +140,7 @@ class Table(object):
                     # Verify foreign row reference, if set.
                     if set(c['foreign_key_fields']).issubset(row):
                         foreign_row = self.get_foreign_row(None, c['table'], c['foreign_key_fields'], _row=row)
-                        if len(foreign_row) < 1:
+                        if foreign_row is None:
                             raise ConstraintError("In table '{}', foreign key record in '{}' not found {}.\nRow data:\n{}".format(
                                 self.name, c['table'], {k: row[k] for k in c['foreign_key_fields']}, json.dumps(row, indent=4)))
 
@@ -391,11 +391,19 @@ class Table(object):
         # Special case where foreign row is a reference to the 'row' itself, which is in the process
         # of being inserted.
         if self.name == table_name and set(search_criteria.items()).issubset(set(row.items())):
-            result = [row]
+            pass  # Just use the row
         else:
-            result = foreign_table.find(search_criteria)
+            # If it's on primary key, use it as it can be must faster than scanning the whole table.
+            if sorted(search_criteria.keys()) == sorted(foreign_table._pk_fields):
+                row = foreign_table.get(search_criteria)
+            else:
+                rows = foreign_table.find(search_criteria)
+                if rows:
+                    row = rows[0]
+                else:
+                    row = None
 
-        return result
+        return row
 
     def find_references(self, ref_row, _refs=None):
         """
@@ -867,11 +875,13 @@ class Backend(object):
             ts._load_from_backend(self)
         return ts
 
-    def save_table_store(self, ts, run_integrity_check=True):
-        if self.default_format == 'json':
+    def save_table_store(self, ts, run_integrity_check=True, file_format=None):
+        file_format = file_format or self.default_format
+
+        if file_format == 'json':
             ts._save_to_backend(self, run_integrity_check=run_integrity_check)
             self.save_data(self.pickle_filename, '')  # An empty pickle file indicates json format.
-        elif self.default_format == 'pickle':
+        elif file_format == 'pickle':
             if run_integrity_check:
                 ts.check_integrity()
             blob = pickle.dumps(ts, protocol=2)
@@ -879,7 +889,7 @@ class Backend(object):
             self.save_data(self.pickle_filename, blob)
             self.done_saving()
         else:
-            raise RuntimeError("Unsupported table store file format '%s'" % self.default_format)
+            raise RuntimeError("Unsupported table store file format '%s'" % file_format)
 
     def start_saving(self):
         pass
