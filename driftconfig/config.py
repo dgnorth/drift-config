@@ -643,7 +643,7 @@ def get_drift_table_store():
 
     # RELEASE MANAGEMENT - THIS SHOULDN'T REALLY BE IN THIS FILE HERE, or what?
     '''
-    routing:
+    instances:
         tier_name               string, pk, fk->tiers
         deployable_name         string, pk, fk->deployables
         autoscaling
@@ -656,6 +656,8 @@ def get_drift_table_store():
     instances = ts.add_table('instances')
     instances.set_subfolder_name('release-mgmt')
     instances.add_primary_key('tier_name,deployable_name')
+    instances.add_foreign_key('tier_name', 'tiers')
+    instances.add_foreign_key('deployable_name', 'deployable-names')
     instances.add_schema({'type': 'object', 'properties': {
         'autoscaling': {'type': 'object', 'properties': {
             'min': {'type': 'integer'},
@@ -667,8 +669,15 @@ def get_drift_table_store():
     }})
 
 
-
     # API ROUTER STUFF - THIS SHOULDN'T REALLY BE IN THIS FILE HERE
+    '''
+    nginx:
+        tier_name               string, pk, fk->tiers
+    '''
+    nginx = ts.add_table('nginx')
+    nginx.add_primary_key('tier_name')
+    nginx.set_subfolder_name('api-router',)
+
     '''
     routing:
         tier_name               string, pk, fk->tiers
@@ -678,9 +687,18 @@ def get_drift_table_store():
     routing = ts.add_table('routing')
     routing.set_subfolder_name('api-router')
     routing.add_primary_key('tier_name,deployable_name')
-    routing.add_schema({'type': 'object', 'properties': {
-        'api': {'type': 'string'},
-    }})
+    routing.add_foreign_key('tier_name', 'tiers')
+    routing.add_foreign_key('deployable_name', 'deployable-names')
+    routing.add_schema({
+        'type': 'object',
+        'properties':
+        {
+            'api': {'type': 'string'},
+            'requires_api_key': {'type': 'boolean'},
+        },
+        'required': ['requires_api_key'],
+    })
+    routing.add_default_values({'requires_api_key': False})
 
 
     '''
