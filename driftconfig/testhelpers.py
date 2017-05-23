@@ -10,12 +10,11 @@ ORG_NAME = 'acme'
 TIER_NAME = 'TIER'
 DEPL_NAME = 'svc'
 PROD_NAME = 'prod'
-TENANT_NAME = 'tenant'
+TENANT_NAME = 'test'
 
 # If serial numbers need to be replaced with letters
 tr_upper = maketrans('0123456789', 'ABCDEFGHIJ')
 tr_lower = maketrans('0123456789', 'abcdefghij')
-
 
 
 def _add(fn, ts, name, config_size, count, **kw):
@@ -203,3 +202,18 @@ def add_tenant(ts, tenant_name, config_size, product_name, organization_name):
             'state': 'active',
         })
 
+
+def get_name(which):
+    """
+    Returns the generated name of a tier, product, org, or tenant.
+    """
+    if which == 'organization':
+        return ORG_NAME
+    elif which == 'tier':
+        return TIER_NAME
+    elif which == 'deployable':
+        return DEPL_NAME
+    elif which == 'product':
+        return '{}-{}'.format(ORG_NAME, PROD_NAME)
+    elif which == 'tenant':
+        return '{}-{}'.format(get_name('product'), TENANT_NAME)
