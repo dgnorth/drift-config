@@ -680,14 +680,12 @@ def get_drift_table_store():
 
     '''
     routing:
-        tier_name               string, pk, fk->tiers
         deployable_name         string, pk, fk->deployables
         api                     string, required
     '''
     routing = ts.add_table('routing')
     routing.set_subfolder_name('api-router')
-    routing.add_primary_key('tier_name,deployable_name')
-    routing.add_foreign_key('tier_name', 'tiers')
+    routing.add_primary_key('deployable_name')
     routing.add_foreign_key('deployable_name', 'deployable-names')
     routing.add_schema({
         'type': 'object',
