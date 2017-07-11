@@ -10,6 +10,16 @@ import logging
 import pkg_resources
 import collections
 
+# pygments is optional for now
+try:
+    got_pygments = True
+    from pygments import highlight, util
+    from pygments.lexers import get_lexer_by_name
+    from pygments.formatters import get_formatter_by_name, get_all_formatters
+    from pygments.styles import get_style_by_name, get_all_styles
+except ImportError:
+    got_pygments = False
+
 from driftconfig.relib import create_backend, get_store_from_url, diff_meta, diff_tables, CHECK_INTEGRITY
 from driftconfig.config import get_drift_table_store, push_to_origin, pull_from_origin, TSTransaction, TSLocal
 from driftconfig.backends import FileBackend
@@ -743,7 +753,7 @@ def info(tier_name):
             sys.exit(1)
         tier = tier[0]
         click.echo("Tier {}:".format(tier['tier_name']))
-        click.echo(json.dumps(tier, indent=4))
+        click.echo(pretty(tier))
 
 
 @tier.command()
@@ -812,6 +822,16 @@ def info():
     click.echo("List of Drift deployable plugins in ", nl=False)
     _header(ts)
     deployables = ts.get_table('deployable-names')
+
+    click.secho("Deployables registered in config:\n", bold=True)
+    tabulate(
+        ['deployable_name', 'display_name', 'tags'],
+        deployables.find(),
+        indent='  ',
+    )
+    registered = [d['deployable_name'] for d in deployables.find()]
+
+    click.secho("\nDeployables registered as plugins on this machine:\n", bold=True)
     for d in _enumerate_plugins('drift.plugin', 'register_deployable'):
         dist, meta, classifiers, tags = d['dist'], d['meta'], d['classifiers'], d['tags']
         click.secho(dist.key, bold=True, nl=False)
@@ -820,6 +840,9 @@ def info():
             click.secho("")
         else:
             click.secho(" (Plugin NOT registered in config DB!)", fg='red')
+
+        if dist.key in registered:
+            registered.remove(dist.key)
 
         assigned = ts.get_table('deployables').find({'deployable_name': dist.key})
         if assigned:
@@ -848,6 +871,9 @@ def info():
             click.secho("\t(meta info missing)")
         click.secho("")
 
+    if registered:
+        click.secho("Note! The following deployables are registered in the config, but are not "
+            "registered as plugins on this machine:\n{}".format(', '.join(registered)))
 
 @deployable.command()
 @click.argument('deployable-name', type=str)
@@ -1220,3 +1246,37 @@ def tabulate(headers, rows, indent=None, col_padding=None):
                 fg = 'black' if row.get('active', True) else 'white'
                 click.secho(str(row.get(h, '')).ljust(width + col_padding), nl=False, fg=fg)
         click.echo()
+
+
+PRETTY_FORMATTER = 'console256'
+PRETTY_STYLE = 'tango'
+
+
+def pretty(ob, lexer=None):
+    """
+    Return a pretty console text representation of 'ob'.
+    If 'ob' is something else than plain text, specify it in 'lexer'.
+
+    If 'ob' is not string, Json lexer is assumed.
+
+    Command line switches can be used to control highlighting and style.
+    """
+    if lexer is None:
+        if isinstance(ob, basestring):
+            lexer = 'text'
+        else:
+            lexer = 'json'
+
+    if lexer == 'json':
+        ob = json.dumps(ob, indent=4, sort_keys=True)
+
+    if got_pygments:
+        lexerob = get_lexer_by_name(lexer)
+        formatter = get_formatter_by_name(PRETTY_FORMATTER, style=PRETTY_STYLE)
+        #from pygments.filters import *
+        #lexerob.add_filter(VisibleWhitespaceFilter())
+        ret = highlight(ob, lexerob, formatter)
+    else:
+        ret = ob
+
+    return ret.rstrip()
