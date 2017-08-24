@@ -8,7 +8,7 @@ import json
 import getpass
 import logging
 import pkg_resources
-import collections
+import operator
 
 # pygments is optional for now
 try:
@@ -823,10 +823,27 @@ def info():
     _header(ts)
     deployables = ts.get_table('deployable-names')
 
-    click.secho("Deployables registered in config:\n", bold=True)
+    click.secho("Deployables and api routes registered in config:\n", bold=True)
+
+    def join_tables(master_table, *tables, **search_criteria):
+        """
+        Joins rows from 'tables' to the rows of 'master_table' and returns them
+        as a single sequence.
+        'search_criteria' is applied to the 'master_table'.
+        """
+        rows = master_table.find(search_criteria)
+        for row in rows:
+            row = row.copy()
+            for table in tables:
+                other = table.get(row)
+                if other:
+                    row.update(other)
+            yield row
+
+
     tabulate(
-        ['deployable_name', 'display_name', 'tags'],
-        deployables.find(),
+        ['deployable_name', 'api', 'requires_api_key', 'display_name', 'tags'],
+        list(join_tables(deployables, ts.get_table('routing'), ts.get_table('deployable-names'))),
         indent='  ',
     )
     registered = [d['deployable_name'] for d in deployables.find()]
@@ -874,6 +891,18 @@ def info():
     if registered:
         click.secho("Note! The following deployables are registered in the config, but are not "
             "registered as plugins on this machine:\n{}".format(', '.join(registered)))
+
+    click.secho("\nDeployables assigned to tiers:\n", bold=True)
+    ta = {}
+    for d in ts.get_table('deployables').find():
+        ta.setdefault(d['tier_name'], []).append(d)
+    for tier_name, dep in ta.items():
+        click.secho("{}:".format(tier_name), bold=True)
+        for d in dep:
+            click.secho(d['deployable_name'], fg='black' if d['is_active'] else 'red', nl=False)
+            click.secho(" ", nl=False)
+        click.secho("\n")
+
 
 @deployable.command()
 @click.argument('deployable-name', type=str)
