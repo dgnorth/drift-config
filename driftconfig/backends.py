@@ -106,9 +106,9 @@ class RedisBackend(Backend):
 
     @classmethod
     def create_from_url_parts(cls, parts, query):
-        db = int(parts.path[1:]) if parts.path else None
+        db = int(query['db'][0]) if 'db' in query else None
         prefix = query['prefix'][0] if 'prefix' in query else None
-        expire_sec = query['expire_sec'][0] if 'expire_sec' in query else None
+        expire_sec = int(query['expire_sec'][0]) if 'expire_sec' in query else None
         return cls(host=parts.hostname, port=parts.port, db=db, prefix=prefix, expire_sec=expire_sec)
 
     def __str__(self):
@@ -130,7 +130,7 @@ class RedisBackend(Backend):
         log.debug("Reading from Redis:%s", key_name)
         data = self.conn.get(key_name)
         if data is None:
-            raise BackendError("Redis cache doesn't have '{}'".format(key_name))
+            raise BackendError("Redis cache doesn't have '{}'. (Is it expired?)".format(key_name))
         return data
 
 

@@ -99,6 +99,17 @@ def get_options(parser):
         action='store', nargs='?',
     )
 
+    # 'cache' command
+    p = subparsers.add_parser(
+        'cache',
+        help='Add config to cache.',
+        description="Add the config to Redis cache ."
+    )
+    p.add_argument(
+        'domain',
+        action='store', nargs='?',
+    )
+
     # 'migrate' command
     p = subparsers.add_parser(
         'migrate',
@@ -328,6 +339,42 @@ def _pull_command(args):
                 local_backend.save_table_store(result['table_store'])
 
             print "Config for {} pulled. Reason: {}".format(domain_name, result['reason'])
+
+
+def cache_command(args):
+    if args.domain:
+        os.environ['DRIFT_CONFIG_URL'] = args.domain
+       
+    ts = get_default_drift_config()
+
+    print "do something with ", ts
+    origin = ts.get_table('domain')['origin']
+    ## not do this: ts = get_store_from_url(origin)
+    domain = ts.get_table('domain').get()
+    if 'cache' not in domain:
+        print "This configuration does not specify a Redis cache.\n"\
+            "Add an entry to the 'domain' table like this:\n"\
+            "\"cache\": \"redis://redis-hostname/\""
+        sys.exit(1)
+
+    cache_url = domain['cache'] + '?prefix={}'.format(domain['domain_name'])
+    b = create_backend(cache_url)
+    b.default_format = 'pickle'
+    b.save_table_store(ts)
+    print "Config saved to: ", cache_url 
+
+    # bench test:
+    def test_redis_config_fetch(count=10):
+        import time
+        import os
+        from driftconfig.util import get_default_drift_config
+        os.environ['DRIFT_CONFIG_URL'] = 'redis://redis.devnorth.dg-api.com/?prefix=dgnorth'
+        t = time.time()
+        for i in xrange(count):
+            ts = get_default_drift_config()
+        t = time.time() - t
+        avg = t / count
+        print "Average time to fetch config from redis: %.1f ms." % (avg * 1000.0)
 
 
 def migrate_command(args):

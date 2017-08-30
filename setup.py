@@ -21,6 +21,8 @@ setup(
     install_requires=[
         'click>=2.0',
         'jsonschema',
+        'boto3',
+        'redis',
     ],
     classifiers=[
         'License :: OSI Approved :: MIT License',

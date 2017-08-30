@@ -1,0 +1,45 @@
+{
+    "DEVNORTH": 
+    {
+    	"s3_bucket": "zappa-devnorth",
+        "tags": 
+        {
+            "tier": "DEVNORTH",
+            "service-name": "drift-config",
+            "service-type": "zappa",
+            "Name": "DEVNORTH-drift-config"
+        },	    	
+	    "vpc_config": 
+	    {
+	        "SubnetIds": [ "subnet-aef280cb", "subnet-8544def2" ],
+	        "SecurityGroupIds": [ "sg-ce4849ab" ]
+	    },
+
+
+
+    	"use_apigateway": false,
+		"events": 
+		[
+			{
+				"function": "driftconfig.triggers.on_config_push",
+				"event_source": 
+				{
+					"arn":  "arn:aws:s3:::relib-test",
+					"events":
+					[
+						"s3:ObjectCreated:*"
+					]
+				}
+			}
+		]
+
+
+
+
+
+
+
+
+
+	}
+}
