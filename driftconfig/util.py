@@ -146,7 +146,8 @@ conf_tuple = collections.namedtuple(
         'tenant',
         'tenants',
         'domain',
-        'drift_app'
+        'drift_app',
+        'source',
     ]
 )
 
@@ -159,7 +160,11 @@ def get_drift_config(ts=None, tenant_name=None, tier_name=None, deployable_name=
     'ts' is the config TableStore object.
     'tenant_name' is the name of the tenant, or None if not applicable.
     """
-    ts = ts or get_default_drift_config()
+    if ts:
+        source = "internal"
+    else:
+        ts, source = get_default_drift_config_and_source()
+
     tenants = ts.get_table('tenants')
 
     # HACK: Until 'flask_config' has been repurposed into 'drift_app' config, we enable a little mapping between
@@ -203,6 +208,7 @@ def get_drift_config(ts=None, tenant_name=None, tier_name=None, deployable_name=
         product=product,
         organization=organization,
         drift_app=drift_app,
+        source=source,
     )
 
     return conf
