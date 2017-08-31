@@ -2,8 +2,10 @@
 '''
 Lambda triggers to keep drift config cached in Redis and such
 '''
-import boto3
-s3_client = boto3.client('s3')
+import os.path
+
+from driftconfig.relib import get_store_from_url, create_backend
+
 
 def on_config_push(event, context):
     """
@@ -11,13 +13,28 @@ def on_config_push(event, context):
     """
 
     # Get the uploaded file's information
-    bucket = event['Records'][0]['s3']['bucket']['name'] # Will be `my-bucket`
-    key = event['Records'][0]['s3']['object']['key'] # Will be the file path of whatever file was uploaded.
+    bucket = event['Records'][0]['s3']['bucket']['name']
+    key = event['Records'][0]['s3']['object']['key']
+    path, filename = os.path.split(key)
+    s3_url = 's3://{}/{}'.format(bucket, path)
 
-    # Get the bytes from S3
-    s3_client.download_file(bucket, key, '/tmp/' + key) # Download this file to writable tmp space.
-    file_bytes = open('/tmp/' + key).read()
-    print "this s3 file got stuff", file_bytes
+    if filename != 'table-store.pickle':
+        print "Drift config cache trigger ignoring file: ", s3_url
+        print "Only 'table-store.pickle' files are loaded."
+        return
+
+    # Get table store. We can't just push the file itself as we need the 'cache'
+    # information from the config itself.
+    ts = get_store_from_url('s3://{}/{}'.format(bucket, path))
+    domain = ts.get_table('domain').get()
+    if 'cache' not in domain:
+        print "Drift config cache trigger ignoring file: ", s3_url
+        print "This configuration does not specify a Redis cache."
+
+    cache_url = domain['cache'] + '?prefix={}'.format(domain['domain_name'])
+    b = create_backend(cache_url)
+    b.save_table_store(ts)
+    print "Config {} saved to {}".format(s3_url, cache_url)
 
 
 '''

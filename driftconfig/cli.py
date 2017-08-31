@@ -346,10 +346,6 @@ def cache_command(args):
         os.environ['DRIFT_CONFIG_URL'] = args.domain
        
     ts = get_default_drift_config()
-
-    print "do something with ", ts
-    origin = ts.get_table('domain')['origin']
-    ## not do this: ts = get_store_from_url(origin)
     domain = ts.get_table('domain').get()
     if 'cache' not in domain:
         print "This configuration does not specify a Redis cache.\n"\
@@ -359,10 +355,10 @@ def cache_command(args):
 
     cache_url = domain['cache'] + '?prefix={}'.format(domain['domain_name'])
     b = create_backend(cache_url)
-    b.default_format = 'pickle'
     b.save_table_store(ts)
     print "Config saved to: ", cache_url 
 
+    '''
     # bench test:
     def test_redis_config_fetch(count=10):
         import time
@@ -375,6 +371,7 @@ def cache_command(args):
         t = time.time() - t
         avg = t / count
         print "Average time to fetch config from redis: %.1f ms." % (avg * 1000.0)
+    '''
 
 
 def migrate_command(args):
