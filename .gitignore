@@ -1,3 +1,7 @@
+# This project
+# Ignore zappa generated zip files
+drift-config*.zip
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

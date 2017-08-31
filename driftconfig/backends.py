@@ -119,7 +119,7 @@ class RedisBackend(Backend):
 
     def save_data(self, file_name, data):
         key_name = self.get_key_name(file_name)
-        log.debug("Adding %s bytes to Redis:%s", len(data), key_name)
+        log.debug("Adding %s bytes to Redis:%s with expiry:%s", len(data), key_name, self.expire_sec)
         self.conn.set(key_name, data)
         if self.expire_sec is not None:
             self.conn.expire(key_name, self.expire_sec)

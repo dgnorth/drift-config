@@ -31,13 +31,29 @@ def on_config_push(event, context):
         print "Drift config cache trigger ignoring file: ", s3_url
         print "This configuration does not specify a Redis cache."
 
-    cache_url = domain['cache'] + '?prefix={}'.format(domain['domain_name'])
+    cache_url = domain['cache'] + '?prefix={}&expire_sec=2592000'.format(domain['domain_name'])
     b = create_backend(cache_url)
     b.save_table_store(ts)
     print "Config {} saved to {}".format(s3_url, cache_url)
 
 
 '''
+    import json
+    import time
+    from driftconfig.relib import get_store_from_url
+    def show_domain(cache_url):
+        prev_domain = None
+        while True:
+            ts  = get_store_from_url(cache_url)
+            domain = ts.get_table('domain').get()
+            if domain != prev_domain:
+                print "Table domain in config changed:"
+                print json.dumps(domain, indent=4)
+                prev_domain = domain
+            time.sleep(0.2)
+
+
+
 Amazon S3 Put Sample Event
 http://docs.aws.amazon.com/lambda/latest/dg/eventsources.html#eventsources-s3-put
 

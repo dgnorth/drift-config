@@ -353,7 +353,7 @@ def cache_command(args):
             "\"cache\": \"redis://redis-hostname/\""
         sys.exit(1)
 
-    cache_url = domain['cache'] + '?prefix={}'.format(domain['domain_name'])
+    cache_url = domain['cache'] + '?prefix={}&expire_sec=2592000'.format(domain['domain_name'])
     b = create_backend(cache_url)
     b.save_table_store(ts)
     print "Config saved to: ", cache_url 
