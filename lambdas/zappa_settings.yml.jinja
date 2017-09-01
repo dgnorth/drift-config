@@ -1,0 +1,39 @@
+---
+{% for tier in tiers %}
+{{ tier.tier_name }}:
+    project_name: drift-config
+    aws_region: {{ tier.aws_region }}  # Location of this lambda
+    environment_variables:
+        S3_ORIGIN_URL: {{ tier.s3_origin_url }}  # The config origin.
+        TIER_NAME: {{ tier.tier_name }}
+    tags:
+        tier: {{ tier.tier_name }}
+        service-name: drift-config
+        service-type: zappa
+        Name: {{ tier.tier_name }}-drift-config        
+    vpc_config:
+        SubnetIds: [{% for subnet in tier.subnets %}{{ subnet }}{{ ", " if not loop.last }}{% endfor %}]
+        SecurityGroupIds: [{% for sg in tier.security_groups %}{{ sg }}{{ ", " if not loop.last }}{% endfor %}]
+    use_apigateway: false
+    events:
+    - 
+        {%- if tier.aws_region == tier.s3_bucket_region %}
+        # The tier is in the same region as the s3 config location so we can set
+        # up an s3:put event trigger.
+        function: driftconfig.lambdas.refresh_cache.on_config_update
+        event_source:
+            arn: arn:aws:s3:::{{ tier.bucket_name }}
+            events: [ 's3:ObjectCreated:*' ]
+        {%- else %}
+        # The tier is in a different region than the s3 config location so we
+        # cannot use an s3:put event trigger. Instead we will poll periodically.
+        function: driftconfig.lambdas.refresh_cache.do_update_cache
+        expression: "rate(1 minute)" # When to execute it (in cron or rate format)
+        {%- endif %}
+
+    # Zappa control parameters
+    s3_bucket: zappa-{{ tier.tier_name.lower() }}
+    log_level: INFO
+
+
+{% endfor %}

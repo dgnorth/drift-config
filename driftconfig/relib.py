@@ -658,7 +658,10 @@ class TableStore(object):
         self._add_metatable()
 
     def __str__(self):
-        return 'TableStore(Origin: {}. Tables: {})'.format(self._origin, len(self._tables))
+        if 'domain' in self._tables:
+            domain = self._tables['domain'].get()
+            origin = domain.get('origin', self._origin)
+        return 'TableStore(Origin: {}. Tables: {})'.format(origin, len(self._tables))
 
     @property
     def meta(self):
@@ -866,14 +869,17 @@ class Backend(object):
         blob = None
         try:
             blob = self.load_data(self.pickle_filename)
-        except:
+        except Exception as e:
             log.info("%s does not contain pickle: %s. Assuming json source.", self, self.pickle_filename)
         if blob:
             ts = pickle.loads(blob)
         else:
             # Try json loading
             ts = TableStore()
-            ts._load_from_backend(self)
+            try:
+                ts._load_from_backend(self)
+            except:
+                raise e
         return ts
 
     def save_table_store(self, ts, run_integrity_check=True, file_format=None):

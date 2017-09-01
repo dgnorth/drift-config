@@ -8,7 +8,6 @@ import json
 import getpass
 import logging
 import pkg_resources
-import operator
 
 # pygments is optional for now
 try:
@@ -22,6 +21,7 @@ except ImportError:
 
 from driftconfig.relib import create_backend, get_store_from_url, diff_meta, diff_tables, CHECK_INTEGRITY
 from driftconfig.config import get_drift_table_store, push_to_origin, pull_from_origin, TSTransaction, TSLocal
+from driftconfig.config import update_cache
 from driftconfig.backends import FileBackend
 from driftconfig.util import config_dir, get_domains, get_default_drift_config, get_default_drift_config_and_source
 
@@ -102,12 +102,16 @@ def get_options(parser):
     # 'cache' command
     p = subparsers.add_parser(
         'cache',
-        help='Add config to cache.',
+        help='Update cache for config.',
         description="Add the config to Redis cache ."
     )
     p.add_argument(
         'domain',
         action='store', nargs='?',
+    )
+    p.add_argument(
+        '-t', '--tier',
+        help="The tier on which to update cache, or all if ommitted."
     )
 
     # 'migrate' command
@@ -344,19 +348,26 @@ def _pull_command(args):
 def cache_command(args):
     if args.domain:
         os.environ['DRIFT_CONFIG_URL'] = args.domain
-       
     ts = get_default_drift_config()
-    domain = ts.get_table('domain').get()
-    if 'cache' not in domain:
-        print "This configuration does not specify a Redis cache.\n"\
-            "Add an entry to the 'domain' table like this:\n"\
-            "\"cache\": \"redis://redis-hostname/\""
-        sys.exit(1)
+    print "Updating cache for '{}' - {}".format(
+        ts.get_table('domain')['domain_name'], ts)
 
-    cache_url = domain['cache'] + '?prefix={}&expire_sec=2592000'.format(domain['domain_name'])
-    b = create_backend(cache_url)
-    b.save_table_store(ts)
-    print "Config saved to: ", cache_url 
+    for tier in ts.get_table('tiers').find():
+        tier_name = tier['tier_name']
+        if args.tier and args.tier.upper() != tier_name:
+            continue
+        click.secho("{}: ".format(tier_name), nl=False, bold=True)
+        try:
+            b = update_cache(ts, tier_name)
+        except Exception as e:
+            if "Timeout" not in str(e):
+                raise
+            click.secho("Updating failed. VPN down? {}".format(e), fg='red', bold=True)
+        else:
+            if b:
+                click.secho("Cache updated on {}.".format(b))
+            else:
+                click.secho("No Redis resource defined for this tier.", fg='red', bold=True)
 
     '''
     # bench test:

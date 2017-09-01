@@ -99,6 +99,7 @@ class RedisBackend(Backend):
             host=host,
             port=port,
             db=db,
+            socket_timeout=5.0,
         )
 
         self.host, self.port, self.db = host, port, db
@@ -109,10 +110,21 @@ class RedisBackend(Backend):
         db = int(query['db'][0]) if 'db' in query else None
         prefix = query['prefix'][0] if 'prefix' in query else None
         expire_sec = int(query['expire_sec'][0]) if 'expire_sec' in query else None
+        prefix = 'drift-config:' + prefix
         return cls(host=parts.hostname, port=parts.port, db=db, prefix=prefix, expire_sec=expire_sec)
 
+    @classmethod
+    def create_from_ts(cls, host, port, domain_name):
+        b = cls(
+            host=host,
+            port=port,
+            prefix='drift-config:' + domain_name,
+            expire_sec=None,  # Never expires
+            )
+        return b
+
     def __str__(self):
-        return "RedisBackend'{}:{}#{}'".format(self.host, self.port, self.db)
+        return "RedisBackend'{}:{}#{}, prefix={}'".format(self.host, self.port, self.db, self.prefix)
 
     def get_key_name(self, file_name):
         return 'relib:{}:{}'.format(self.prefix, file_name)

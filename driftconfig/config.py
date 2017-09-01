@@ -362,6 +362,7 @@ from datetime import datetime
 from driftconfig.relib import TableStore, copy_table_store, create_backend
 import driftconfig.relib
 from driftconfig.util import get_default_drift_config_and_source
+from driftconfig.backends import RedisBackend
 
 log = logging.getLogger(__name__)
 
@@ -978,11 +979,28 @@ def pull_from_origin(local_ts, ignore_if_modified=False, force=False):
     return {'pulled': True, 'table_store': origin_ts, 'reason': 'pulled_from_origin'}
 
 
-def update_cache(ts):
-    cache = ts.get_table('domain').get('cache')
-    if cache:
-        b = create_backend(cache)
-        b.save_table_store(cache)
+def update_cache(ts, tier_name=None):
+    """Push table store 'ts' to its designated Redis cache on tier 'tier_name'."""
+
+    # Note: drift.core.resources.redis module defines where to find default
+    # connection information for a Redis server. We make good use of that here,
+    # but it does mean that this piece of code below is now coupled with
+    # aforementioned module.
+
+    domain = ts.get_table('domain').get()
+    tier = ts.get_table('tiers').get({'tier_name': tier_name})
+    if 'resource_defaults' not in tier:
+        return
+
+    for resource in tier['resource_defaults']:
+        if resource['resource_name'] == 'redis':
+            b = RedisBackend.create_from_ts(
+                host=resource['parameters']['host'],
+                port=resource['parameters']['port'],
+                domain_name=domain['domain_name'],
+                )
+            b.save_table_store(ts)
+            return b
 
 
 class TSTransactionError(RuntimeError):

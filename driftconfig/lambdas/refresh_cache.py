@@ -1,40 +1,43 @@
 # -*- coding: utf-8 -*-
 '''
-Lambda triggers to keep drift config cached in Redis and such
+AWS lambda functions to keep drift config cached in Redis.
 '''
+import os
 import os.path
 
-from driftconfig.relib import get_store_from_url, create_backend
+from driftconfig.relib import get_store_from_url
+from driftconfig.config import update_cache
 
 
-def on_config_push(event, context):
+def on_config_update(event, context):
     """
-    Process config push event
+    Process config update event
     """
 
     # Get the uploaded file's information
-    bucket = event['Records'][0]['s3']['bucket']['name']
     key = event['Records'][0]['s3']['object']['key']
     path, filename = os.path.split(key)
-    s3_url = 's3://{}/{}'.format(bucket, path)
 
     if filename != 'table-store.pickle':
-        print "Drift config cache trigger ignoring file: ", s3_url
-        print "Only 'table-store.pickle' files are loaded."
-        return
+        print "Drift config cache trigger ignoring file: ", key
+        print "Only 'table-store.pickle' files trigger cache updates."
+    else:
+        # We don't care if it's this config in particular that got pushed,
+        # it's harmless to push the config to cache.
+        _push_to_cache(os.environ['S3_ORIGIN_URL'], os.environ['TIER_NAME'])
 
-    # Get table store. We can't just push the file itself as we need the 'cache'
-    # information from the config itself.
-    ts = get_store_from_url('s3://{}/{}'.format(bucket, path))
-    domain = ts.get_table('domain').get()
-    if 'cache' not in domain:
-        print "Drift config cache trigger ignoring file: ", s3_url
-        print "This configuration does not specify a Redis cache."
 
-    cache_url = domain['cache'] + '?prefix={}&expire_sec=2592000'.format(domain['domain_name'])
-    b = create_backend(cache_url)
-    b.save_table_store(ts)
-    print "Config {} saved to {}".format(s3_url, cache_url)
+def do_update_cache(event, context):
+    """Update cache specified in env S3_ORIGIN_URL."""
+    _push_to_cache(os.environ['S3_ORIGIN_URL'], os.environ['TIER_NAME'])
+
+
+def _push_to_cache(origin, tier_name):
+    """Push config  with origin 'origin' to its designated Redis cache."""
+    print "Get config store from url:", origin
+    ts = get_store_from_url(origin)
+    redis_backend = update_cache(ts, tier_name)
+    print "Config {} saved to {}".format(ts, redis_backend)
 
 
 '''

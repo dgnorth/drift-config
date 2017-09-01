@@ -35,13 +35,13 @@ Now we have pyenv and pyenv-virtualenv installed and configured. Next is to pick
 # Let's pick Python 2.7.13 (If this errors, read the error info!)
 pyenv install 2.7.13
 
-# Create virtualenv for this version
+# Create virtualenv for this project
 pyenv shell 2.7.13
-pyenv virtualenv env2713
+pyenv virtualenv drift-config
 
 # Make this new virtualenv the default one for our project.
 # Make sure to execute the following line in the root of drift-config project!
-echo env2713 > .python-version
+echo drift-config > .python-version
 
 # Install project dependencies into the virtualenv
 python setup.py develop
