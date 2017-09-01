@@ -979,14 +979,12 @@ def pull_from_origin(local_ts, ignore_if_modified=False, force=False):
     return {'pulled': True, 'table_store': origin_ts, 'reason': 'pulled_from_origin'}
 
 
-def update_cache(ts, tier_name=None):
-    """Push table store 'ts' to its designated Redis cache on tier 'tier_name'."""
-
+def get_redis_cache_backend(ts, tier_name):
+    """Returns cache backend for tier 'tier_name' in 'ts'."""
     # Note: drift.core.resources.redis module defines where to find default
     # connection information for a Redis server. We make good use of that here,
     # but it does mean that this piece of code below is now coupled with
     # aforementioned module.
-
     domain = ts.get_table('domain').get()
     tier = ts.get_table('tiers').get({'tier_name': tier_name})
     if 'resource_defaults' not in tier:
@@ -994,13 +992,20 @@ def update_cache(ts, tier_name=None):
 
     for resource in tier['resource_defaults']:
         if resource['resource_name'] == 'redis':
-            b = RedisBackend.create_from_ts(
+            b = RedisBackend.create_from_server_info(
                 host=resource['parameters']['host'],
                 port=resource['parameters']['port'],
                 domain_name=domain['domain_name'],
                 )
-            b.save_table_store(ts)
-            return b
+            return b    
+
+def update_cache(ts, tier_name):
+    """Push table store 'ts' to its designated Redis cache on tier 'tier_name'."""
+
+    b = get_redis_cache_backend(ts, tier_name)
+    if b:
+        b.save_table_store(ts)
+    return b
 
 
 class TSTransactionError(RuntimeError):

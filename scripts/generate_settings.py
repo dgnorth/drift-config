@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 import urlparse
+from datetime import datetime
 
 import boto3
 import click
 from jinja2 import Environment, PackageLoader
 from driftconfig.util import get_drift_config, ConfigNotFound, get_domains
 from driftconfig.relib import get_store_from_url
+from driftconfig.config import push_to_origin, get_redis_cache_backend
 
 
 class Globals(object):
@@ -14,10 +16,11 @@ class Globals(object):
 @click.command()
 #@click.group()
 @click.option('--verbose', '-v', is_flag=True, help='Enables verbose mode.')
+@click.option('--test', '-t', is_flag=True, help='Run a test suite.')
 @click.version_option('1.0')
 @click.pass_context
 @click.argument('config-urls', type=str, nargs=-1)
-def cli(ctx, config_urls, verbose):
+def cli(ctx, config_urls, verbose, test):
     """Generate settings for Zappa lambdas.
     pass in bobo
     """
@@ -56,7 +59,7 @@ def cli(ctx, config_urls, verbose):
     tiers = {}
     for ts in table_stores:
         domain = ts.get_table('domain').get()
-        for tier in ts.get_table('tiers').find():  
+        for tier in ts.get_table('tiers').find():
             tier_name = tier['tier_name']
             s3_origin_url = domain['origin']
 
@@ -109,9 +112,14 @@ def cli(ctx, config_urls, verbose):
                 'bucket_name': bucket_name,
                 'subnets': subnets,
                 'security_groups': security_groups,
+                '_ts': ts,
             }
             tiers[tier_name] = tier_args
-      
+
+    if test:
+        _run_sanity_check(tiers)
+        return
+
     env = Environment(loader=PackageLoader('driftconfig', package_path='templates'))
     template = env.get_template('zappa_settings.yml.jinja')
     zappa_settings_text = template.render(tiers=tiers.values())
@@ -124,6 +132,35 @@ def cli(ctx, config_urls, verbose):
     click.secho("zappa_settings.yml generated. Run 'zappa deploy' or zappa update'"
         " for each of the tiers, or use the -all switch to zap them all.")
     print pretty("Example: zappa update -s zappa_settings.yml -all", 'bash')
+
+
+def _run_sanity_check(tiers):
+    for tier_name, tier in tiers.items():
+        ts = tier['_ts']
+        print "Testing {} from {}".format(tier_name, ts)
+
+        domain = ts.get_table('domain').get()
+        domain['_dctest'] = datetime.utcnow().isoformat() + 'Z'
+        result = push_to_origin(ts, force=False)
+        if not result['pushed']:
+            print "Couldn't run test on {} from {}: {}".format(tier_name, ts, result['reason'])
+            continue
+
+        b = get_redis_cache_backend(ts, tier_name) 
+        if not b:
+            print "Couldn't get cache backend on {} from {}.".format(tier_name, ts)
+        else:
+            try:
+                ts2 = b.load_table_store()
+            except Exception as e:
+                if "Timeout" not in str(e):
+                    raise
+                print "Cache check failed. Redis connection timeout."
+                continue
+                
+            domain2 = ts2.get_table('domain').get()
+            if domain['_dctest'] != domain2.get('_dctest'):
+                print "Cache check failed while comparing {} to {}.".format(domain['_dctest'], domain2.get('_dctest'))
 
 
 if __name__ == '__main__':

@@ -37,11 +37,13 @@ pyenv install 2.7.13
 
 # Create virtualenv for this project
 pyenv shell 2.7.13
-pyenv virtualenv drift-config
+pyenv virtualenv drift-config-env
 
 # Make this new virtualenv the default one for our project.
 # Make sure to execute the following line in the root of drift-config project!
-echo drift-config > .python-version
+pyenv local drift-config-env
+
+# Restart you shell or do some exec "$SHELL" magic or something.
 
 # Install project dependencies into the virtualenv
 python setup.py develop
@@ -57,12 +59,14 @@ Run `python generate_settings.py` script found under */scripts*. It will generat
 To deploy for the first time, run:
 
 ```bash
+pyenv local drift-config-env
 zappa deploy -s zappa_settings.yml --all
 ```
 
 If there are changes to any of the tier config that may affect the lambda triggers, or the lambda functions themselves have been changed, the Zappa project needs to be updated on AWS:
 
 ```bash
+pyenv local drift-config-env
 zappa update -s zappa_settings.yml --all
 ```
 

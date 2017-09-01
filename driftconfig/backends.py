@@ -114,7 +114,7 @@ class RedisBackend(Backend):
         return cls(host=parts.hostname, port=parts.port, db=db, prefix=prefix, expire_sec=expire_sec)
 
     @classmethod
-    def create_from_ts(cls, host, port, domain_name):
+    def create_from_server_info(cls, host, port, domain_name):
         b = cls(
             host=host,
             port=port,
