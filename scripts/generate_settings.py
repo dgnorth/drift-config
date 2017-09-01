@@ -112,7 +112,7 @@ def cli(ctx, config_urls, verbose):
             }
             tiers[tier_name] = tier_args
       
-    env = Environment(loader=PackageLoader('lambdas', ''))
+    env = Environment(loader=PackageLoader('driftconfig', package_path='templates'))
     template = env.get_template('zappa_settings.yml.jinja')
     zappa_settings_text = template.render(tiers=tiers.values())
     
@@ -123,7 +123,7 @@ def cli(ctx, config_urls, verbose):
 
     click.secho("zappa_settings.yml generated. Run 'zappa deploy' or zappa update'"
         " for each of the tiers, or use the -all switch to zap them all.")
-    print pretty("zappa update -s zappa_settings.yml -all", 'bash')
+    print pretty("Example: zappa update -s zappa_settings.yml -all", 'bash')
 
 
 if __name__ == '__main__':

@@ -1,10 +1,10 @@
 # drift-config
 
 
-# Redis Cache Daemon Setup
+# Redis Cache triggers and tasks
 Drift config with an S3 based origin can be cached in a Redis DB with a very high concurrency. An AWS lambda will monitor the S3 bucket and update the cache when there is an update.
 
-The labmda is set up using [Zappa](https://github.com/Miserlou/Zappa). The Zappa config file is generated from a template which sets the S3 bucket name (origin), subnet id's and security group id's of the selected drift tier.
+The lambda is set up using [Zappa](https://github.com/Miserlou/Zappa). The Zappa config file is generated from a template which sets the S3 bucket name (origin), subnet id's and security group id's of the selected drift tier.
 
 #### Preparing local development environment
 
@@ -50,27 +50,19 @@ python setup.py develop
 pip install zappa
 ```
 
-#### Create the zappa project
+#### Deploying the lambda code
 
-Usage:
+Run `python generate_settings.py` script found under */scripts*. It will generate a Zappa settings file called *zappa_settings.yml* which includes cache update triggers and tasks for all tiers.
+
+To deploy for the first time, run:
 
 ```bash
-driftconfig makezappa <tier name>
+zappa deploy -s zappa_settings.yml --all
 ```
 
-A file named `zappa_settings.json` is generated. This file is not part of the project and is excluded from the repository.
-
-Once that is done, use the zappa command line to deploy and update:
-
-For first time deployment on a tier:
+If there are changes to any of the tier config that may affect the lambda triggers, or the lambda functions themselves have been changed, the Zappa project needs to be updated on AWS:
 
 ```bash
-zappa deploy <tier name>
-```
-
-Subsequent updates:
-
-```bash
-zappa update <tier name>
+zappa update -s zappa_settings.yml --all
 ```
 

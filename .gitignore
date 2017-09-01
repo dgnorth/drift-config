@@ -1,6 +1,7 @@
 # This project
 # Ignore zappa generated zip files
 drift-config*.zip
+zappa_settings.yml
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
