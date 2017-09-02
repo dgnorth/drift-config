@@ -83,6 +83,9 @@ celerybeat-schedule
 # dotenv
 .env
 
+# PyCharm
+.idea
+
 # virtualenv
 venv/
 ENV/
