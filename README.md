@@ -45,6 +45,9 @@ pyenv local drift-config-env
 
 # Restart you shell or do some exec "$SHELL" magic or something.
 
+# pip install requirements, but skip eggs because they break
+pip install --no-binary egg -r requirements.txt
+
 # Install project dependencies into the virtualenv
 python setup.py develop
 
