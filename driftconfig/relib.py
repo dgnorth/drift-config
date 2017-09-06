@@ -868,7 +868,9 @@ class Backend(object):
     def load_table_store(self):
         blob = None
         try:
+            self.start_loading()
             blob = self.load_data(self.pickle_filename)
+            self.done_loading()
         except Exception as e:
             log.info("%s does not contain pickle: %s. Assuming json source.", self, self.pickle_filename)
         if blob:

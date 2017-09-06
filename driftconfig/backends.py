@@ -52,7 +52,7 @@ class S3Backend(Backend):
 
     def save_data(self, file_name, data):
         return self._save_data_with_bucket_logic(file_name, data, try_create_bucket=True)
-    
+
     def _save_data_with_bucket_logic(self, file_name, data, try_create_bucket):
         from botocore.client import ClientError
         f = StringIO.StringIO(data)
@@ -108,10 +108,11 @@ class RedisBackend(Backend):
     @classmethod
     def create_from_url_parts(cls, parts, query):
         db = int(query['db'][0]) if 'db' in query else None
-        prefix = query['prefix'][0] if 'prefix' in query else None
+        prefix = query['prefix'][0] if 'prefix' in query else ''
         expire_sec = int(query['expire_sec'][0]) if 'expire_sec' in query else None
         prefix = 'drift-config:' + prefix
-        return cls(host=parts.hostname, port=parts.port, db=db, prefix=prefix, expire_sec=expire_sec)
+        b = cls(host=parts.hostname, port=parts.port, db=db, prefix=prefix, expire_sec=expire_sec)
+        return b  # ZipEncoded(b)
 
     @classmethod
     def create_from_server_info(cls, host, port, domain_name):
@@ -121,7 +122,7 @@ class RedisBackend(Backend):
             prefix='drift-config:' + domain_name,
             expire_sec=None,  # Never expires
             )
-        return b
+        return b  # ZipEncoded(b)
 
     def __str__(self):
         return "RedisBackend'{}:{}#{}, prefix={}'".format(self.host, self.port, self.db, self.prefix)
