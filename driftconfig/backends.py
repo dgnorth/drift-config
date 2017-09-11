@@ -110,7 +110,6 @@ class RedisBackend(Backend):
         db = int(query['db'][0]) if 'db' in query else None
         prefix = query['prefix'][0] if 'prefix' in query else ''
         expire_sec = int(query['expire_sec'][0]) if 'expire_sec' in query else None
-        prefix = 'drift-config:' + prefix
         b = cls(host=parts.hostname, port=parts.port, db=db, prefix=prefix, expire_sec=expire_sec)
         return b  # ZipEncoded(b)
 
@@ -145,6 +144,10 @@ class RedisBackend(Backend):
         if data is None:
             raise BackendError("Redis cache doesn't have '{}'. (Is it expired?)".format(key_name))
         return data
+
+
+    def get_url(self):
+        return "redis://{}:{}/{}?prefix={}".format(self.host, self.port, self.db, self.prefix)
 
 
 @register
