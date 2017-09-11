@@ -118,7 +118,7 @@ class RedisBackend(Backend):
         b = cls(
             host=host,
             port=port,
-            prefix='drift-config:' + domain_name,
+            prefix=domain_name,
             expire_sec=None,  # Never expires
             )
         return b  # ZipEncoded(b)
@@ -127,7 +127,7 @@ class RedisBackend(Backend):
         return "RedisBackend'{}:{}#{}, prefix={}'".format(self.host, self.port, self.db, self.prefix)
 
     def get_key_name(self, file_name):
-        return 'relib:{}:{}'.format(self.prefix, file_name)
+        return 'relib:drift-config:{}:{}'.format(self.prefix, file_name)
 
     def save_data(self, file_name, data):
         key_name = self.get_key_name(file_name)
