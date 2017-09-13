@@ -880,7 +880,7 @@ class Backend(object):
             ts = TableStore()
             try:
                 ts._load_from_backend(self)
-            except:
+            except Exception as e:
                 raise e
         return ts
 
