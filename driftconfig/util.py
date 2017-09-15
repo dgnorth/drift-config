@@ -211,6 +211,11 @@ def get_drift_config(ts=None, tenant_name=None, tier_name=None, deployable_name=
         source=source,
     )
 
+    # Make sure if tier name was specified, that it actually exists.
+    if tier_name and conf.tier is None:
+        raise RuntimeError(
+            "Tier '{}' not found in config '{}'.".format(tier_name, conf.domain['domain_name']))
+
     return conf
 
 
