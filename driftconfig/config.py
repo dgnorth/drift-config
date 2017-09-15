@@ -678,6 +678,44 @@ def get_drift_table_store():
     nginx = ts.add_table('nginx')
     nginx.add_primary_key('tier_name')
     nginx.set_subfolder_name('api-router',)
+    nginx.add_schema({'type': 'object', 'properties': {
+        'worker_rlimit_nofile': {'type': 'integer'},
+        'worker_connections': {'type': 'integer'},
+        'api_key_passthrough':
+        {
+            'type': 'array',
+            'items':
+            {
+                'type': 'object',
+                'properties':
+                {
+                    'key_name': {'type': 'string'},
+                    'key_value': {'type': 'string'},
+                    'product_name': {'type': 'string'},
+                },
+                'required': ['key_name', 'key_value', 'product_name'],
+            }
+        },
+    }})
+
+    ''' a yaml representation would be:
+    ---
+    type: object
+    properties:
+      worker_connections: {type: integer}
+      worker_rlimit_nofile: {type: integer}
+      api_key_passthrough:
+        type: array
+        items:
+          type: object
+          required: [key_name, key_value ,product_name]
+          properties:
+            key_name: {type: string}
+            key_value: {type: string}
+            product_name: {type: string}
+
+    '''
+
 
     '''
     routing:
@@ -997,7 +1035,7 @@ def get_redis_cache_backend(ts, tier_name):
                 port=resource['parameters']['port'],
                 domain_name=domain['domain_name'],
                 )
-            return b    
+            return b
 
 def update_cache(ts, tier_name):
     """Push table store 'ts' to its designated Redis cache on tier 'tier_name'."""
