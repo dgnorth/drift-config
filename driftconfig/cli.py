@@ -927,7 +927,7 @@ def info():
                 if assignment['is_active']:
                     click.secho("")
                 else:
-                    click.secho(" [inactive]", fg='gray')
+                    click.secho(" [inactive]", fg='white')
 
         click.secho("\tTags: {}".format(', '.join(tags)))
         click.secho("\tVersion: {}".format(dist.parsed_version))
