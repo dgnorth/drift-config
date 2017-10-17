@@ -924,6 +924,26 @@ def get_drift_table_store():
     })
     gameservers_instances.add_default_values({'gameserver_instance_id': '@@identity'})
 
+
+
+    '''
+    metrics:
+        tier_name               string, pk, fk->tiers
+        deployable_name         string, pk, fk->deployables
+    '''
+    metrics = ts.add_table('metrics')
+    metrics.add_primary_key('tenant_name')
+    metrics.add_foreign_key('tenant_name', 'tenant-names')
+    gameservers_instances.add_schema({
+        'type': 'object',
+        'properties':
+        {
+            's3_bucket': {'type': 'string'},
+        },
+        'required': ['s3_bucket'],
+    })
+
+
     # END OF TABLE DEFS
 
     definition = ts.get_definition()

@@ -10,13 +10,13 @@
         tier: {{ tier.tier_name }}
         service-name: drift-config
         service-type: zappa
-        Name: {{ tier.tier_name }}-drift-config        
+        Name: {{ tier.tier_name }}-drift-config
     vpc_config:
         SubnetIds: [{% for subnet in tier.subnets %}{{ subnet }}{{ ", " if not loop.last }}{% endfor %}]
         SecurityGroupIds: [{% for sg in tier.security_groups %}{{ sg }}{{ ", " if not loop.last }}{% endfor %}]
     use_apigateway: false
     events:
-    - 
+    -
         {%- if tier.aws_region == tier.s3_bucket_region %}
         # The tier is in the same region as the s3 config location so we can set
         # up an s3:put event trigger.
@@ -32,7 +32,7 @@
         {%- endif %}
 
     # Zappa control parameters
-    s3_bucket: zappa-{{ tier.tier_name.lower() }}
+    s3_bucket: zappa-driftconfig-{{ tier.organization_name }}-{{ tier.tier_name.lower() }}
     log_level: INFO
 
 

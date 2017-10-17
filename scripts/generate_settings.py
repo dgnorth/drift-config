@@ -61,6 +61,11 @@ def cli(ctx, config_urls, verbose, test):
         domain = ts.get_table('domain').get()
         for tier in ts.get_table('tiers').find():
             tier_name = tier['tier_name']
+
+            if 'organization_name' not in tier:
+                click.secho("Note: Tier {} does not define 'organization_name'. Skipping.".format(tier_name))
+                continue
+
             s3_origin_url = domain['origin']
 
             if tier_name in tiers:
@@ -89,14 +94,14 @@ def cli(ctx, config_urls, verbose, test):
             print "Connecting to AWS region {} to gather subnets and security group.".format(aws_region)
             ec2 = boto3.resource('ec2', aws_region)
             filters = [
-                {'Name': 'tag:tier', 'Values':[ tier_name]}, 
+                {'Name': 'tag:tier', 'Values':[ tier_name]},
                 {'Name': 'tag:Name', 'Values': [tier_name+'-private-subnet-1', tier_name+'-private-subnet-2']}
                 ]
             subnets=list(ec2.subnets.filter(Filters=filters))
             subnets = [subnet.id for subnet in subnets]
 
             filters = [
-                {'Name': 'tag:tier', 'Values':[ tier_name]}, 
+                {'Name': 'tag:tier', 'Values':[ tier_name]},
                 {'Name': 'tag:Name', 'Values': [tier_name+'-private-sg']}
                 ]
 
@@ -107,6 +112,7 @@ def cli(ctx, config_urls, verbose, test):
             tier_args = {
                 's3_origin_url': s3_origin_url,
                 'tier_name': tier_name,
+                'organization_name': tier['organization_name'],
                 'aws_region': aws_region,
                 's3_bucket_region': s3_bucket_region,
                 'bucket_name': bucket_name,
@@ -123,7 +129,7 @@ def cli(ctx, config_urls, verbose, test):
     env = Environment(loader=PackageLoader('driftconfig', package_path='templates'))
     template = env.get_template('zappa_settings.yml.jinja')
     zappa_settings_text = template.render(tiers=tiers.values())
-    
+
     from driftconfig.cli import pretty
     print pretty(zappa_settings_text, 'yaml')
     with open('zappa_settings.yml', 'w') as f:
@@ -146,7 +152,7 @@ def _run_sanity_check(tiers):
             print "Couldn't run test on {} from {}: {}".format(tier_name, ts, result['reason'])
             continue
 
-        b = get_redis_cache_backend(ts, tier_name) 
+        b = get_redis_cache_backend(ts, tier_name)
         if not b:
             print "Couldn't get cache backend on {} from {}.".format(tier_name, ts)
         else:
@@ -157,7 +163,7 @@ def _run_sanity_check(tiers):
                     raise
                 print "Cache check failed. Redis connection timeout."
                 continue
-                
+
             domain2 = ts2.get_table('domain').get()
             if domain['_dctest'] != domain2.get('_dctest'):
                 print "Cache check failed while comparing {} to {}.".format(domain['_dctest'], domain2.get('_dctest'))
