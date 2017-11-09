@@ -4,7 +4,7 @@ ReLib Backends
 '''
 import logging
 import os
-import StringIO
+import io
 from urlparse import urlparse
 import zipfile
 
@@ -55,7 +55,7 @@ class S3Backend(Backend):
 
     def _save_data_with_bucket_logic(self, file_name, data, try_create_bucket):
         from botocore.client import ClientError
-        f = StringIO.StringIO(data)
+        f = io.StringIO(data)
         key_name = self.get_key_name(file_name)
         log.debug("Uploading %s bytes to s3://%s/%s", len(data), self.bucket_name, key_name)
         try:
@@ -75,7 +75,7 @@ class S3Backend(Backend):
     def load_data(self, file_name):
         key_name = self.get_key_name(file_name)
         log.debug("Downloading s3://%s/%s", self.bucket_name, key_name)
-        f = StringIO.StringIO()
+        f = io.StringIO()
         self.s3_client.download_fileobj(self.bucket_name, key_name, f)
         return f.getvalue()
 
@@ -241,14 +241,14 @@ class ZipEncoded(Backend):
         self.aggregate = aggregate
 
     def start_saving(self):
-        self._fp = StringIO.StringIO()
+        self._fp = io.StringIO()
         self._zipfile = zipfile.ZipFile(self._fp, mode='w', compression=zipfile.ZIP_DEFLATED)
 
     def done_saving(self):
         self.aggregate.save_data("_zipped.zip", self._fp.getvalue())
 
     def start_loading(self):
-        self._fp = StringIO.StringIO()
+        self._fp = io.StringIO()
         self._fp.write(self.aggregate.load_data("_zipped.zip"))
         self._fp.seek(0)
         self._zipfile = zipfile.ZipFile(self._fp)
