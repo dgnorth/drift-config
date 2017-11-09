@@ -935,7 +935,7 @@ def get_drift_table_store():
     metrics = ts.add_table('metrics')
     metrics.add_primary_key('tenant_name')
     metrics.add_foreign_key('tenant_name', 'tenant-names')
-    gameservers_instances.add_schema({
+    metrics.add_schema({
         'type': 'object',
         'properties':
         {
