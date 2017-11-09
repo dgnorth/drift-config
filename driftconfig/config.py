@@ -453,6 +453,7 @@ def get_drift_table_store():
         'properties': {
             'release': {'type': 'string'},
             'is_active': {'type': 'boolean'},
+            'reason_inactive': {'type': 'string'},
         },
         'required': ['is_active'],
     })
