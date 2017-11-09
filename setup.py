@@ -29,7 +29,7 @@ setup(
     ],
     tests_require=[
         'werkzeug',
-    ]
+    ],
     classifiers=[
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python',
