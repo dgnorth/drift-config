@@ -125,10 +125,10 @@ def get_default_drift_config_and_source():
             )
         elif len(domains) != 1:
             domain_names = ", ".join(domains.keys())
-            raise ConfigNotFound("Multiple Drift configurations found in ~/.drift.config. "
+            raise ConfigNotFound("Multiple Drift configurations found in ~/.drift/config.\n"
                 "Specify which configuration to use by referencing it in the "
-                "'DRIFT_CONFIG_URL' environment variable, or use or use the --config "
-                " command line argument. Configurations available on local disk: %s."
+                "'DRIFT_CONFIG_URL' environment variable.\n"
+                "Configurations available on local disk: %s."
                 "" % domain_names)
         domain = domains.values()[0]
         return domain['table_store'], 'file://' + domain['path']
