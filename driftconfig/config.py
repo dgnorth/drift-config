@@ -530,7 +530,9 @@ def get_drift_table_store():
         tenants.add_schema({
             'type': 'object',
             'properties': {
-                'state': {'enum': ['initializing', 'active', 'disabled', 'deleted']},
+                'state': {'enum': [
+                    'initializing', 'active', 'disabled', 'uninitializing', 'deleted',
+                ]},
             },
         })
         tenants.add_default_values({'state': 'initializing'})
