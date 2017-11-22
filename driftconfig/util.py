@@ -5,6 +5,7 @@ import collections
 import sys
 import os
 import os.path
+import getpass
 
 from driftconfig.relib import get_store_from_url, create_backend
 
@@ -280,3 +281,81 @@ def diff_table_stores(ts1, ts2, verbose=False):
             report['tables'][table_name] = table_diff
 
     return report
+
+
+def define_tenant(ts, tenant_name, product_name, tier_name):
+    """
+    Defines a new tenant or updates/refreshes a current one.
+    Table store 'ts' is updated accordingly.
+
+    If 'tenant_name' does not exist, a new tenant record is created in 'tenant-names' table
+    and new record is created in 'tenants' for each deployable that is enabled for
+    the product identified by 'product_name'.
+
+    If 'tenant_name' exists, and deployables for the product have changed (new one added or
+    a current one removed), the 'tenants' table will be updated accordingly. In case of new
+    deployable a new record will simply be added. In case a deployable is inactive or removed
+    from the given product, the tenant record for the deployable will be put in state 'disabled'
+    or 'deleted' respectively.
+    """
+    products = ts.get_table('products')
+    product = products.get({'product_name': product_name})
+    if not product:
+        raise RuntimeError("Product '{}' not found.".format(product_name))
+
+    organization = products.get_foreign_row(product, 'organizations')
+
+    if '-' in tenant_name:
+        org_short_name = tenant_name.split('-', 1)[0]
+        if org_short_name != organization['short_name']:
+            raise RuntimeError("Tenant name '{}' must be prefixed with '{}'.".format(
+                tenant_name, org_short_name)
+            )
+    else:
+        tenant_name = '{}-{}'.format(organization['short_name'], tenant_name)
+
+    tenant_names = ts.get_table('tenant-names')
+    if not tenant_names.get({'tenant_name': tenant_name}):
+        row = tenant_names.add({
+            'tenant_name': tenant_name,
+            'organization_name': organization['organization_name'],
+            'product_name': product_name,
+            'reserved_by': getpass.getuser(),
+            'reserved_at': datetime.utcnow().isoformat() + 'Z',
+        })
+
+    # Make a list of active and inactive deployables associated with the given product.
+    active_deployables = []
+    inactive_deployables = []
+    deployables = ts.get_table('deployables')
+    for deployable_name in product['deployables']:
+        deployable = deployables.get({'tier_name': tier_name, 'deployable_name': deployable_name})
+        if deployable:
+            if deployable['is_active']:
+                active_deployables.append(deployable_name)
+            else:
+                inactive_deployables.append(deployable_name)
+
+    tenants = ts.get_table('tenants')
+
+    # Deactivate/delete deployables if needed
+    for tenant in tenants.find({'tier_name': tier_name, 'tenant_name': tenant_name}):
+        if tenant['deployable_name'] in inactive_deployables:
+            tenant['state'] = 'disabled'
+        elif tenant['deployable_name'] not in active_deployables:
+            tenant['state'] = 'uninitializing'  # Signal de-provision of resources.
+
+    # Activate/associate deployables if needed
+    for deployable_name in active_deployables:
+        pk = {
+            'tier_name': tier_name,
+            'deployable_name': deployable_name,
+            'tenant_name': tenant_name
+        }
+        tenant = tenants.get(pk)
+        if tenant:
+            tenant['state'] = 'active'
+        else:
+            # State is set to 'initializing' by default signaling provisioning of resources.
+            tenants.add(pk)
+

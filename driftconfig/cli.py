@@ -215,41 +215,6 @@ def get_options(parser):
         nargs='?'
     )
 
-    # 'addtenant' command
-    p = subparsers.add_parser(
-        'addtenant',
-        help='Add a new tenant',
-    )
-    p.add_argument(
-        'domain',
-    )
-    p.add_argument(
-        '-n', '--name',
-        required=True, help="Short name to identify the tenant.",
-    )
-    p.add_argument(
-        '-t', '--tier',
-        required=True, help="The name of the tier."
-    )
-    p.add_argument(
-        '-o', '--organization',
-        required=True, help="The name of the organization."
-    )
-    p.add_argument(
-        '-p', '--product',
-        required=True, help="The name of the product."
-    )
-    p.add_argument(
-        '--preview',
-        action='store_true',
-        help="Preview the action."
-    )
-    p.add_argument(
-        '-d', '--deployables',
-        nargs='*',
-        help="One or more deployables to create the tenant on."
-    )
-
 
 def init_command(args):
     print "Initializing config from", args.source
@@ -557,56 +522,6 @@ def diff_command(args):
                     tablediff = diff_tables(t1, t2)
                     print "\nTable diff for", table_name, "\n(first=local, second=origin):"
                     print json.dumps(tablediff, indent=4, sort_keys=True)
-
-
-def addtenant_command(args):
-
-    print "Adding a new tenant."
-    print "  Domain:      ", args.domain
-    print "  Tenant:      ", args.name
-    print "  Tier:        ", args.tier
-    print "  Organization:", args.organization
-    print "  Product:     ", args.product
-    print "  Deployables: ", args.deployables
-
-    domain_info = get_domains(user_dir=args.user_dir).get(args.domain)
-    if not domain_info:
-        print "The domain '{}'' is not found locally. Run 'init' to fetch it.".format(args.domain)
-        sys.exit(1)
-
-    print _format_domain_info(domain_info)
-
-    ts = domain_info['table_store']
-    row = ts.get_table('tenant-names').update({
-        'tenant_name': args.name,
-        'organization_name': args.organization,
-        'product_name': args.product,
-        'reserved_by': getpass.getuser(),
-        'reserved_at': datetime.utcnow().isoformat() + 'Z',
-    })
-
-    print "\nNew tenant record:\n", json.dumps(row, indent=4)
-
-    if args.deployables:
-        print "Associating with deployables:"
-        tenants = ts.get_table('tenants')
-        for deployable_name in args.deployables:
-            row = tenants.add({
-                'tier_name': args.tier,
-                'tenant_name': args.name,
-                'deployable_name': deployable_name
-            })
-            print json.dumps(row, indent=4)
-
-    if args.preview:
-        print "Previewing only. Exiting now."
-        sys.exit(0)
-
-    # Save it locally
-    local_store = create_backend('file://' + config_dir(args.domain, user_dir=args.user_dir))
-    local_store.save_table_store(ts)
-    print "Changes to config saved at {}.".format(local_store)
-    print "Remember to push changes to persist them."
 
 
 def run_command(args):
@@ -1145,86 +1060,6 @@ def info(tenant_name):
 
         click.secho("Tenant {s.BRIGHT}{}{s.NORMAL}:".format(tenant_name, **styles))
         click.echo(json.dumps(tenant, indent=4))
-
-
-@tenant.command()
-@click.argument('tenant-name', type=str)
-@click.argument('product-name', type=str)
-@click.option('--edit', '-e', help="Use editor to modify the entry.", is_flag=True)
-def add(tenant_name, product_name, edit):
-    """Add a new tenant.\n
-    TENANT_NAME is a 3-30 character long string containing only lower case letters digits and dashes.
-    The tenant name must be prefixed with the organization short name and a dash.
-    PRODUCT_NAME is the product which the tenant is associated with.
-    """
-    if edit:
-        click.secho("Editing tier and deployable details not implemented yet. Don't use "
-            "the --edit option!", fg='red')
-        sys.exit(1)
-
-    if '-' not in tenant_name:
-        click.secho("Error: The tenant name must be prefixed with the organization "
-            "short name and a dash.", fg='red', bold=True)
-        sys.exit(1)
-
-    short_name = tenant_name.split('-', 1)[0]
-    conf = get_default_drift_config()
-    org = conf.get_table('organizations').find({'short_name': short_name})
-    if not org:
-        click.secho("No organization with short name {} found.".format(short_name), fg='red', bold=True)
-        sys.exit(1)
-
-    organization_name = org[0]['organization_name']
-    product = conf.get_table('products').find({'product_name': product_name})
-    if not product:
-        click.secho("No product named {} found.".format(product_name), fg='red', bold=True)
-        sys.exit(1)
-    product = product[0]
-
-
-    with TSLocal() as ts:
-        click.secho("Creating tenant {} for product {}.".format(tenant_name, product_name))
-        tenant_names = ts.get_table('tenant-names')
-        entry = {
-            'tenant_name': tenant_name,
-            'organization_name': organization_name,
-            'product_name': product_name,
-            'reserved_by': getpass.getuser(),
-            'reserved_at': datetime.utcnow().isoformat() + 'Z',
-        }
-
-        if edit:
-            edit = click.edit(json.dumps(entry, indent=4), editor='nano')
-            if edit:
-                entry = json.loads(edit)
-        if tenant_names.find(entry):
-            click.secho("Tenant {} already exists!".format(tenant_name), fg='red', bold=True)
-            sys.exit(1)
-        tenant_names.add(entry)
-
-        _epilogue(ts)
-
-
-@tenant.command()
-@click.argument('tenant-name', type=str)
-@click.option('--details', '-d', help="Edit the tenant and deployable details.", is_flag=True)
-def edit(tenant_name, details):
-    """Edit a tenant."""
-    if details:
-        click.secho("Editing tenant and deployable details not implemented yet!", fg='red')
-        sys.exit(1)
-
-    with TSLocal() as ts:
-        tenants = ts.get_table('tenant-names')
-        entry = tenants.get({'tenant_name': tenant_name})
-        if not entry:
-            click.secho("tenant {} not found!".format(tenant_name))
-            sys.exit(1)
-
-        edit = click.edit(json.dumps(entry, indent=4), editor='nano')
-        if edit:
-            entry = json.loads(edit)
-            tenants.update(entry)
 
 
 def _enumerate_plugins(entry_group, entry_name):
