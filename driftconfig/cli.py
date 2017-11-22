@@ -195,43 +195,19 @@ def get_options(parser):
         action='store', help="Display name."
     )
 
-    # 'add' command
-    p = subparsers.add_parser(
-        'add',
-        help='Add a new entry to the config database.',
-    )
-    p.add_argument(
-        'entry-type',
-        action='store',
-        help="The entry type.",
-        choices=['tier', 'deployable', 'organization', 'product'],
-    )
-    p.add_argument(
-        'entry-name',
-        action='store',
-        help="The entry name",
-    )
-    p.add_argument(
-        'values',
-        action='store',
-        help="Extra values",
-        nargs='*'
-    )
-
-    def _add_action(p):
-        p.add_argument(
-            'action',
-            action='store', help="Action to perform.",
-            default='info',
-            choices=['info', 'add', 'update', 'delete'],
-        )
-
     # 'tier' command
     p = subparsers.add_parser(
         'tier',
         description='Add a new entry to the config database.',
     )
-    _add_action(p)
+
+    p.add_argument(
+        'action',
+        action='store', help="Action to perform.",
+        default='info',
+        choices=['info', 'add', 'update', 'delete'],
+    )
+
     p.add_argument(
         'name',
         action='store',
@@ -504,26 +480,6 @@ _ENTRY_TO_TABLE_NAME = {
     'product': 'products',
 }
 
-def add_command(args):
-    extra = {}
-    for kv in args.values:
-        if '=' not in kv:
-            print "'values' argument must be of the format key=value, not {}".format(kv)
-            sys.exit(1)
-        k, v = kv.split('=', 1)
-        if v.lower() == 'true':
-            v = True
-        elif v.lower() == 'false':
-            v = False
-        elif v.replace('.', '', 1).isdigit() and not v.isdigit():
-            v = float(v)
-        elif v.isdigit():
-            v = int(v)
-        extra[k] = v
-
-    with TSTransaction() as ts:
-        table = ts.get_table(_ENTRY_TO_TABLE_NAME[args.get('entry-type')])
-        print "got table", table
 
 def tier_command(args):
     if args.name is None and args.action != 'info':
