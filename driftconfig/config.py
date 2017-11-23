@@ -97,6 +97,11 @@ products:
     state                   enum initializing|active|disabled|deleted, default=active
     deployables             array of strings, required
 
+product-tiers:
+    product_name            string, pk, fk->products
+    tier_name               string, pk, fk->tiers
+    is_active               boolean default=true
+
 tenant-names:
     # a tenant name is unique across all tiers
     tenant_name             string, pk
@@ -473,6 +478,19 @@ def get_drift_table_store():
     })
     products.add_default_values({'state': 'active', 'deployables': []})
 
+    product_tiers = ts.add_table('product-tiers')
+    product_tiers.add_primary_key('product_name,tier_name')
+    product_tiers.add_foreign_key('product_name', 'products')
+    product_tiers.add_foreign_key('tier_name', 'tiers')
+    product_tiers.add_schema({
+        'type': 'object',
+        'properties': {
+            'is_active': {'type': 'boolean'},
+        },
+        'required': ['is_active'],
+    })
+    product_tiers.add_default_values({'is_active': False})
+
     # Waiting a little bit with fixups of tenant-names and tenants table schema
     if "temporary fixy fix":
         tenant_names = ts.add_table('tenant-names')
@@ -501,7 +519,9 @@ def get_drift_table_store():
         tenants.add_schema({
             'type': 'object',
             'properties': {
-                'state': {'enum': ['initializing', 'active', 'disabled', 'deleted']},
+                'state': {'enum': [
+                    'initializing', 'active', 'disabled', 'uninitializing', 'deleted'
+                ]},
             },
         })
         tenants.add_default_values({'state': 'initializing'})
