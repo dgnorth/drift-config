@@ -283,20 +283,12 @@ def diff_table_stores(ts1, ts2, verbose=False):
     return report
 
 
-def define_tenant(ts, tenant_name, product_name, tier_name):
+def prepare_tenant_name(ts, tenant_name, product_name):
     """
-    Defines a new tenant or updates/refreshes a current one.
-    Table store 'ts' is updated accordingly.
-
-    If 'tenant_name' does not exist, a new tenant record is created in 'tenant-names' table
-    and new record is created in 'tenants' for each deployable that is enabled for
-    the product identified by 'product_name'.
-
-    If 'tenant_name' exists, and deployables for the product have changed (new one added or
-    a current one removed), the 'tenants' table will be updated accordingly. In case of new
-    deployable a new record will simply be added. In case a deployable is inactive or removed
-    from the given product, the tenant record for the deployable will be put in state 'disabled'
-    or 'deleted' respectively.
+    Prepares a tenant name by prefixing it with the product shortname and returns the
+    product and organization record associated with it. The value of 'tenant_name' may
+    already contain the prefix.
+    Returns a dict of 'tenant_name', 'product' and 'organization'.
     """
     products = ts.get_table('products')
     product = products.get({'product_name': product_name})
@@ -313,6 +305,37 @@ def define_tenant(ts, tenant_name, product_name, tier_name):
             )
     else:
         tenant_name = '{}-{}'.format(organization['short_name'], tenant_name)
+
+    return {
+        'tenant_name': tenant_name,
+        'product': product,
+        'organization': organization,
+    }
+
+
+def define_tenant(ts, tenant_name, product_name, tier_name):
+    """
+    Defines a new tenant or updates/refreshes a current one.
+    Table store 'ts' is updated accordingly.
+
+    If 'tenant_name' does not exist, a new tenant record is created in 'tenant-names' table
+    and new record is created in 'tenants' for each deployable that is enabled for
+    the product identified by 'product_name'.
+
+    If 'tenant_name' exists, and deployables for the product have changed (new one added or
+    a current one removed), the 'tenants' table will be updated accordingly. In case of new
+    deployable a new record will simply be added. In case a deployable is inactive or removed
+    from the given product, the tenant record for the deployable will be put in state 'disabled'
+    or 'deleted' respectively.
+
+    Returns same dict as 'prepare_tenant_name' with addition of 'report' which contains a
+    list of [deployable_name, state] tuples indicating state of each deployable for this
+    tenant after the creation/update command.
+    """
+    prep = prepare_tenant_name(ts=ts, tenant_name=tenant_name, product_name=product_name)
+    tenant_name = prep['tenant_name']
+    product = prep['product']
+    organization = prep['organization']
 
     tenant_names = ts.get_table('tenant-names')
     if not tenant_names.get({'tenant_name': tenant_name}):
@@ -337,13 +360,17 @@ def define_tenant(ts, tenant_name, product_name, tier_name):
                 inactive_deployables.append(deployable_name)
 
     tenants = ts.get_table('tenants')
+    report = []  # List of tuple of deployable name and current state.
 
     # Deactivate/delete deployables if needed
     for tenant in tenants.find({'tier_name': tier_name, 'tenant_name': tenant_name}):
-        if tenant['deployable_name'] in inactive_deployables:
+        deployable_name = tenant['deployable_name']
+        if deployable_name in inactive_deployables:
             tenant['state'] = 'disabled'
-        elif tenant['deployable_name'] not in active_deployables:
+            report.append([deployable_name, 'disabled'])
+        elif deployable_name not in active_deployables:
             tenant['state'] = 'uninitializing'  # Signal de-provision of resources.
+            report.append([deployable_name, 'uninitializing'])
 
     # Activate/associate deployables if needed
     for deployable_name in active_deployables:
@@ -354,8 +381,16 @@ def define_tenant(ts, tenant_name, product_name, tier_name):
         }
         tenant = tenants.get(pk)
         if tenant:
-            tenant['state'] = 'active'
+            # If tenant isn't already active, signal it for provisioning of resources.
+            if tenant['state']  != 'active':
+                tenant['state'] = 'initializing'
+                report.append([deployable_name, 'initializing'])
+            else:
+                report.append([deployable_name, 'active'])
         else:
             # State is set to 'initializing' by default signaling provisioning of resources.
             tenants.add(pk)
+            report.append([deployable_name, 'initializing'])
 
+    prep['report'] = report
+    return prep
