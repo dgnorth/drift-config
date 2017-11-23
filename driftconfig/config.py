@@ -479,10 +479,12 @@ def get_drift_table_store():
         tenant_names.add_primary_key('tenant_name')
         tenant_names.add_foreign_key('product_name', 'products')
         tenant_names.add_foreign_key('organization_name', 'organizations')
+        tenant_names.add_unique_constraint('alias')
         tenant_names.add_schema({
             'type': 'object',
             'properties': {
                 'tenant_name': {'pattern': r'^([a-z0-9-]){3,30}$'},
+                'alias': {'pattern': r'^([a-z0-9-]){3,30}$'},
                 'reserved_at': {'format': 'date-time'},
                 'reserved_by': {'type': 'string'},
             },
