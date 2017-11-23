@@ -847,7 +847,7 @@ def register(deployable_name, tier):
             dist = d['dist']
             if deployable_name == dist.key or deployable_name == 'all':
                 summary = d['meta'].get('Summary', "(No description available)")
-                row = {'deployable_name': dist.key, 'display_name': summary}
+                row = {'deployable_name': dist.key, 'display_name': summary.strip()}
                 deployable_names.update(row)
                 click.secho("{} added/updated.".format(dist.key))
                 for tier_entry in ts.get_table('tiers').find():
