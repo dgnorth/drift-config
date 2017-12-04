@@ -394,3 +394,41 @@ def define_tenant(ts, tenant_name, product_name, tier_name):
 
     prep['report'] = report
     return prep
+
+
+def refresh_tenants(ts, tenant_name=None, tier_name=None):
+    """
+    Refreshes config info for a tenant by calling define_tenant().
+    If 'tenant_name' is set, only that tenant is refreshed.
+    If 'tier_name' is set, only tenants defined on that tier are refreshed.
+    """
+    if tier_name:
+        tiers = [tier_name]
+    else:
+        crit = {'tenant_name': tenant_name} if tenant_name else {}
+        tiers = set(t['tier_name'] for t in  ts.get_table('tenants').find(crit))
+
+    if tenant_name:
+        tenant_names = [tenant_name]
+    else:
+        crit = {'tier_name': tier_name} if tier_name else {}
+        tenant_names = set(t['tenant_name'] for t in  ts.get_table('tenants').find(crit))
+
+    print "RGUMRNTEENTS ARE", tenant_name,  tier_name
+    print "tiers and tenants:", tiers, tenant_names
+
+
+    for tenant in ts.get_table('tenants').find():
+        if tenant['tier_name'] not in tiers:
+            continue
+        if tenant['tenant_name'] not in tenant_names:
+            continue
+
+        tenant_info = ts.get_table('tenant-names').get({'tenant_name': tenant['tenant_name']})
+
+        yield define_tenant(
+            ts=ts,
+            tenant_name=tenant['tenant_name'],
+            product_name=tenant_info['product_name'],
+            tier_name=tenant['tier_name']
+        )
