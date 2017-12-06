@@ -414,7 +414,6 @@ def refresh_tenants(ts, tenant_name=None, tier_name=None):
         crit = {'tier_name': tier_name} if tier_name else {}
         tenant_names = set(t['tenant_name'] for t in  ts.get_table('tenants').find(crit))
 
-    print "RGUMRNTEENTS ARE", tenant_name,  tier_name
     print "tiers and tenants:", tiers, tenant_names
 
 
