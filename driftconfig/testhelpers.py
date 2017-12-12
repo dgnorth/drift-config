@@ -182,25 +182,30 @@ def add_product(ts, product_name, config_size, organization_name):
         }})
 
 
-def add_tenant(ts, tenant_name, config_size, product_name, organization_name):
+def add_tenant(ts, tenant_name_prefix, config_size, product_name, organization_name):
 
-    tenant_name = '{}-{}'.format(product_name, tenant_name)
+    for tier in ts.get_table('tiers').find():
+        tenant_name = '{}-{}'.format(product_name, tenant_name_prefix)
+        tier_name = tier['tier_name']
+        if config_size['num_tiers'] != 1:
+            tenant_name += '-{}'.format(tier_name.lower())
 
-    # Define a tenant
-    ts.get_table('tenant-names').add({
-        'tenant_name': tenant_name,
-        'product_name': product_name,
-        'organization_name': organization_name,
-    })
-
-    # Associate tenant on all tiers with all deployables
-    for deployable in ts.get_table('deployables').find():
-        ts.get_table('tenants').add({
-            'tier_name': deployable['tier_name'],
-            'deployable_name': deployable['deployable_name'],
+        # Define a tenant
+        ts.get_table('tenant-names').add({
             'tenant_name': tenant_name,
-            'state': 'active',
+            'product_name': product_name,
+            'organization_name': organization_name,
+            'tier_name': tier_name,
         })
+
+        # Associate tenant with every deployable
+        for deployable in ts.get_table('deployables').find({'tier_name': tier_name}):
+            ts.get_table('tenants').add({
+                'tier_name': deployable['tier_name'],
+                'deployable_name': deployable['deployable_name'],
+                'tenant_name': tenant_name,
+                'state': 'active',
+            })
 
 
 def get_name(which):

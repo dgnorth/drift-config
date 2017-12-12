@@ -285,7 +285,7 @@ def diff_table_stores(ts1, ts2, verbose=False):
 
 def prepare_tenant_name(ts, tenant_name, product_name):
     """
-    Prepares a tenant name by prefixing it with the product shortname and returns the
+    Prepares a tenant name by prefixing it with the organization shortname and returns the
     product and organization record associated with it. The value of 'tenant_name' may
     already contain the prefix.
     Returns a dict of 'tenant_name', 'product' and 'organization'.
@@ -337,12 +337,14 @@ def define_tenant(ts, tenant_name, product_name, tier_name):
     product = prep['product']
     organization = prep['organization']
 
+    # Add a record to 'tenant-names' if needed.
     tenant_names = ts.get_table('tenant-names')
     if not tenant_names.get({'tenant_name': tenant_name}):
         row = tenant_names.add({
             'tenant_name': tenant_name,
             'organization_name': organization['organization_name'],
             'product_name': product_name,
+            'tier_name': tier_name,
             'reserved_by': getpass.getuser(),
             'reserved_at': datetime.utcnow().isoformat() + 'Z',
         })
@@ -358,6 +360,11 @@ def define_tenant(ts, tenant_name, product_name, tier_name):
                 active_deployables.append(deployable_name)
             else:
                 inactive_deployables.append(deployable_name)
+        else:
+            raise RuntimeError(
+                "Deployable '{}' defined for product '{}' is not found in table 'deployables'.".format(
+                    deployable_name, product_name)
+            )
 
     tenants = ts.get_table('tenants')
     report = []  # List of tuple of deployable name and current state.

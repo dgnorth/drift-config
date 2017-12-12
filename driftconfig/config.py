@@ -97,16 +97,13 @@ products:
     state                   enum initializing|active|disabled|deleted, default=active
     deployables             array of strings, required
 
-product-tiers:
-    product_name            string, pk, fk->products
-    tier_name               string, pk, fk->tiers
-    is_active               boolean default=true
 
 tenant-names:
     # a tenant name is unique across all tiers
     tenant_name             string, pk
     product_name            string, fk->products, required
     organization_name       string, fk->organizations, required
+    tier_name               string, pk, fk->tiers
     reserved_at             date-time, default=@@utcnow
     reserved_by             string
 
@@ -478,25 +475,13 @@ def get_drift_table_store():
     })
     products.add_default_values({'state': 'active', 'deployables': []})
 
-    product_tiers = ts.add_table('product-tiers')
-    product_tiers.add_primary_key('product_name,tier_name')
-    product_tiers.add_foreign_key('product_name', 'products')
-    product_tiers.add_foreign_key('tier_name', 'tiers')
-    product_tiers.add_schema({
-        'type': 'object',
-        'properties': {
-            'is_active': {'type': 'boolean'},
-        },
-        'required': ['is_active'],
-    })
-    product_tiers.add_default_values({'is_active': False})
-
     # Waiting a little bit with fixups of tenant-names and tenants table schema
     if "temporary fixy fix":
         tenant_names = ts.add_table('tenant-names')
         tenant_names.add_primary_key('tenant_name')
         tenant_names.add_foreign_key('product_name', 'products')
         tenant_names.add_foreign_key('organization_name', 'organizations')
+        tenant_names.add_foreign_key('tier_name', 'tiers')
         # this constraint doesn't support null values: tenant_names.add_unique_constraint('alias')
         tenant_names.add_schema({
             'type': 'object',
@@ -506,7 +491,7 @@ def get_drift_table_store():
                 'reserved_at': {'format': 'date-time'},
                 'reserved_by': {'type': 'string'},
             },
-            'required': ['product_name', 'organization_name'],
+            'required': ['product_name', 'organization_name', 'tier_name'],
         })
         tenant_names.add_default_values({'reserved_at': '@@utcnow'})
 
