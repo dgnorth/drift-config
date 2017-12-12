@@ -785,7 +785,7 @@ def get_drift_table_store():
             'key_type': {'enum': ['product', 'custom']},
             'custom_data': {'type': 'string'},
         },
-        'required': ['product_name', 'in_use', 'key_type'],
+        'required': ['in_use', 'key_type'],
     })
     keys.add_default_values({'in_use': True, 'create_date': '@@utcnow', 'key_type': 'product'})
 
