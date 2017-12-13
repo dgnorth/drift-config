@@ -128,10 +128,11 @@ class Table(object):
 
         if check_constraints:
             for c in self._constraints:
-                if c['type'] in ['primary_key', 'unique'] and not set(c['fields']).issubset(row):
+                if c['type'] == 'primary_key' and not set(c['fields']).issubset(row):
                     raise ConstraintError("In table '{}', row violates constraint {}: {}".format(self._table_name, c, row))
 
-                if c['type'] == 'unique' and check_unique:
+                # Do unique check but allow for "null" values or omitted field.
+                if c['type'] == 'unique' and check_unique and set(c['fields']).issubset(row):
                     # Check for duplicates
                     search_criteria = {k: row[k] for k in c['fields']}
                     found = self.find(search_criteria)

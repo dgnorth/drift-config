@@ -482,7 +482,7 @@ def get_drift_table_store():
         tenant_names.add_foreign_key('product_name', 'products')
         tenant_names.add_foreign_key('organization_name', 'organizations')
         tenant_names.add_foreign_key('tier_name', 'tiers')
-        # this constraint doesn't support null values: tenant_names.add_unique_constraint('alias')
+        tenant_names.add_unique_constraint('alias')
         tenant_names.add_schema({
             'type': 'object',
             'properties': {

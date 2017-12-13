@@ -73,10 +73,6 @@ class TestRelib(unittest.TestCase):
         with self.assertRaises(ConstraintError) as context:
             table1.add({'bogus_field': 'dummy'})
 
-        # Test missing unique field
-        with self.assertRaises(ConstraintError) as context:
-            table1.add({'pk_field': 123})
-
         # Test successfull row inserts
         row1 = table1.add({'pk_field': 1, 'unique_field': 'iamunique1', 'tag': 'red'})
         row2 = table1.add({'pk_field': 2, 'unique_field': 'iamunique2', 'tag': 'blue'})
