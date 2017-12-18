@@ -440,11 +440,11 @@ def get_drift_table_store():
         'properties': {
             'deployable_name': {'pattern': r'^([a-z-]){3,20}$'},
             'display_name': {'type': 'string'},
-            'tags': {'type': 'array', 'items': {'type': 'string'}},
+            'resources': {'type': 'array', 'item': 'string'},
         },
-        'required': ['display_name', 'tags'],
+        'required': ['display_name', 'resources'],
     })
-    deployable_names.add_default_values({'tags': []})
+    deployable_names.add_default_values({'resources': []})
 
     deployables = ts.add_table('deployables')
     deployables.add_primary_key('tier_name,deployable_name')
@@ -459,7 +459,7 @@ def get_drift_table_store():
         },
         'required': ['is_active'],
     })
-    deployables.add_default_values({'is_active': False})
+    deployables.add_default_values({'is_active': True})
 
     products = ts.add_table('products')
     products.add_primary_key('product_name')
@@ -745,7 +745,7 @@ def get_drift_table_store():
         },
         'required': ['requires_api_key'],
     })
-    routing.add_default_values({'requires_api_key': False})
+    routing.add_default_values({'requires_api_key': True})
 
 
     '''
