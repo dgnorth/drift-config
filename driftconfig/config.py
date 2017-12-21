@@ -538,7 +538,11 @@ def get_drift_table_store():
             'type': 'object',
             'properties': {
                 'state': {'enum': [
-                    'initializing', 'active', 'disabled', 'uninitializing', 'deleted',
+                    'initializing',  # Tenant resources are being provisioned
+                    'active',  # Tenant resources are online and accessible
+                    'disabled',  # Tenant resources are offline and not accessible
+                    'uninitializing',  # Tenant resources are being unprovisoned/deleted.
+                    'deleted',  # Tenant resources have been deleted.
                 ]},
             },
         })
