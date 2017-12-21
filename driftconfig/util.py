@@ -6,6 +6,7 @@ import sys
 import os
 import os.path
 import getpass
+import importlib
 
 from driftconfig.relib import get_store_from_url, create_backend
 
@@ -282,8 +283,9 @@ def define_tenant(ts, tenant_name, product_name, tier_name):
 
     # Add a record to 'tenant-names' if needed.
     tenant_names = ts.get_table('tenant-names')
-    if not tenant_names.get({'tenant_name': tenant_name}):
-        row = tenant_names.add({
+    tenant_master_row = tenant_names.get({'tenant_name': tenant_name})
+    if not tenant_master_row:
+        tenant_master_row = tenant_names.add({
             'tenant_name': tenant_name,
             'organization_name': organization['organization_name'],
             'product_name': product_name,
@@ -291,6 +293,8 @@ def define_tenant(ts, tenant_name, product_name, tier_name):
             'reserved_by': getpass.getuser(),
             'reserved_at': datetime.utcnow().isoformat() + 'Z',
         })
+
+    prep['tenant_master_row'] = tenant_master_row
 
     # Make a list of active and inactive deployables associated with the given product.
     active_deployables = []
@@ -355,13 +359,46 @@ def define_tenant(ts, tenant_name, product_name, tier_name):
             legacy_resource_name = resource_name.rsplit('.', 1)[1]
 
             # Update the tenants attributes but leave current ones intact
+            resource_attribs = tenant.setdefault(legacy_resource_name, {})
             for k, v in tier['resources'][resource_name].items():
-                tenant[legacy_resource_name].setdefault(k, v)
+                resource_attribs.setdefault(k, v)
 
-            report_row.setdefault('resources', {})[resource_name] = tenant[legacy_resource_name]
+            report_row.setdefault('resources', {})[resource_name] = resource_attribs
 
     prep['report'] = report
     return prep
+
+
+def provision_tenant_resources(ts, tenant_name, deployable_name=None):
+    """
+    Calls resource provisioning functions for tenant 'tenant_name'.
+    If 'deployable_name' is set, only the resource modules for that deployable
+    are called.
+    """
+    tenant_info = ts.get_table('tenant-names').get({'tenant_name': tenant_name})
+    crit = {'tenant_name': tenant_name, 'tier_name': tenant_info['tier_name']}
+    if deployable_name:
+        crit['deployable_name'] = deployable_name
+    configurations = ts.get_table('tenants').find(crit)
+
+    for tenant_config in configurations:
+        # LEGACY SUPPORT: Need to look up the actual resource module name
+        depl = ts.get_table('deployable-names').get({'deployable_name': tenant_config['deployable_name']})
+        for resource_module in depl['resources']:
+            legacy_resource_name = resource_module.rsplit('.', 1)[1]
+            resource_attributes = tenant_config[legacy_resource_name]
+            m = importlib.import_module(resource_module)
+            if hasattr(m, 'provision_resource'):
+                m.provision_resource(
+                    ts=ts,
+                    tenant_config=tenant_config,
+                    attributes=resource_attributes,
+                )
+
+        if tenant_config['state'] == 'initializing':
+            tenant_config['state'] = 'active'
+        elif tenant_config['state'] == 'uninitializing':
+            tenant_config['state'] = 'deleted'
 
 
 def refresh_tenants(ts, tenant_name=None, tier_name=None):
