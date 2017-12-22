@@ -671,17 +671,17 @@ def provision_tenant_command(args):
             sys.exit(1)
 
         # Refresh for good measure
-        result = define_tenant(
+        define_tenant(
             ts=ts,
             tenant_name=tenant_name,
             product_name=tenant_info['product_name'],
             tier_name=tenant_info['tier_name'],
         )
 
-        provision_tenant_resources(ts=ts, tenant_name=tenant_name)
+        report = provision_tenant_resources(ts=ts, tenant_name=tenant_name, preview=args.preview)
 
-    #print "Result:"
-    #print pretty(result)
+    print "Result:"
+    print pretty(report)
     if args.preview:
         print "\nPreview changes only, not committing to origin."
         sys.exit(0)

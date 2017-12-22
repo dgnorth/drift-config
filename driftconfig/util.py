@@ -369,11 +369,12 @@ def define_tenant(ts, tenant_name, product_name, tier_name):
     return prep
 
 
-def provision_tenant_resources(ts, tenant_name, deployable_name=None):
+def provision_tenant_resources(ts, tenant_name, deployable_name=None, preview=False):
     """
     Calls resource provisioning functions for tenant 'tenant_name'.
     If 'deployable_name' is set, only the resource modules for that deployable
     are called.
+    If 'preview' then the provision_resource() callback function is not called.
     """
     tenant_info = ts.get_table('tenant-names').get({'tenant_name': tenant_name})
     crit = {'tenant_name': tenant_name, 'tier_name': tenant_info['tier_name']}
@@ -381,24 +382,44 @@ def provision_tenant_resources(ts, tenant_name, deployable_name=None):
         crit['deployable_name'] = deployable_name
     configurations = ts.get_table('tenants').find(crit)
 
+    report = {
+        'tenant_name': tenant_name,
+        'deployables': {},
+    }
+
     for tenant_config in configurations:
         # LEGACY SUPPORT: Need to look up the actual resource module name
         depl = ts.get_table('deployable-names').get({'deployable_name': tenant_config['deployable_name']})
+        depl_report = {
+            'resources': {}
+        }
+        report['deployables'][tenant_config['deployable_name']] = depl_report
+
         for resource_module in depl['resources']:
             legacy_resource_name = resource_module.rsplit('.', 1)[1]
             resource_attributes = tenant_config[legacy_resource_name]
             m = importlib.import_module(resource_module)
-            if hasattr(m, 'provision_resource'):
-                m.provision_resource(
+            if hasattr(m, 'provision_resource') and not preview:
+                result = m.provision_resource(
                     ts=ts,
                     tenant_config=tenant_config,
                     attributes=resource_attributes,
                 )
+            else:
+                result = None
+
+            depl_report['resources'][resource_module] = result
+
+        depl_report['old_state'] = tenant_config['state']
 
         if tenant_config['state'] == 'initializing':
             tenant_config['state'] = 'active'
         elif tenant_config['state'] == 'uninitializing':
             tenant_config['state'] = 'deleted'
+
+        depl_report['new_state'] = tenant_config['state']
+
+    return report
 
 
 def refresh_tenants(ts, tenant_name=None, tier_name=None):
