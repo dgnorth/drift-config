@@ -656,6 +656,7 @@ class TableStore(object):
         self._tables = collections.OrderedDict()
         self._tableorder = []  # Table order, because of DAG
         self._origin = 'clean'
+        self._lock_meta = False  # Safeguard updates to meta data.
         self._add_metatable()
 
     def __str__(self):
@@ -813,6 +814,9 @@ class TableStore(object):
 
     def refresh_metadata(self):
         """Refreshes local meta data and returns a tuple of old and new metadata."""
+        if self._lock_meta:
+            raise RuntimeError("Can't refresh metadata as it's safeguarded.")
+
         old = copy.deepcopy(self.meta.get())
         backend = create_backend('memory://' + datetime.utcnow().isoformat() + 'Z')
         backend.save_table_store(self)
@@ -950,7 +954,9 @@ def copy_table_store(table_store):
     """"Returns a stand-alone copy of 'table_store'."""
     backend = create_backend('memory://' + datetime.utcnow().isoformat() + 'Z')
     backend.save_table_store(table_store)
-    return backend.load_table_store()
+    ts = backend.load_table_store()
+    ts._lock_meta = False
+    return ts
 
 
 def diff_tables(t1, t2):
