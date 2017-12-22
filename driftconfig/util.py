@@ -351,7 +351,7 @@ def define_tenant(ts, tenant_name, product_name, tier_name):
             tenant = tenants.add(pk)
             report_row = add_report(deployable_name, 'initializing')
 
-        # Initialize/update tenant resource config using default tier values.
+        # Initialize/update tenant resource config using default tier or deployables values.
         depl_names = ts.get_table('deployable-names').get({'deployable_name': deployable_name})
         tier = ts.get_table('tiers').get({'tier_name': tier_name})
         for resource_name in depl_names['resources']:
@@ -360,7 +360,14 @@ def define_tenant(ts, tenant_name, product_name, tier_name):
 
             # Update the tenants attributes but leave current ones intact
             resource_attribs = tenant.setdefault(legacy_resource_name, {})
+
+            # Apply tier defaults
             for k, v in tier['resources'][resource_name].items():
+                resource_attribs.setdefault(k, v)
+
+            # Apply deployable defaults
+            deployable_defaults = depl_names['resource_attributes'].get(resource_name, {})
+            for k, v in deployable_defaults.items():
                 resource_attribs.setdefault(k, v)
 
             report_row.setdefault('resources', {})[resource_name] = resource_attribs
