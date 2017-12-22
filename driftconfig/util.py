@@ -383,7 +383,7 @@ def provision_tenant_resources(ts, tenant_name, deployable_name=None, preview=Fa
     configurations = ts.get_table('tenants').find(crit)
 
     report = {
-        'tenant_name': tenant_name,
+        'tenant': tenant_info,
         'deployables': {},
     }
 
