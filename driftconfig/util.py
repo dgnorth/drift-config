@@ -394,6 +394,8 @@ def provision_tenant_resources(ts, tenant_name, deployable_name=None, preview=Fa
         'deployables': {},
     }
 
+    log.info("Provisioning tenant '%s'", tenant_name)
+
     for tenant_config in configurations:
         # LEGACY SUPPORT: Need to look up the actual resource module name
         depl = ts.get_table('deployable-names').get({'deployable_name': tenant_config['deployable_name']})
@@ -402,20 +404,33 @@ def provision_tenant_resources(ts, tenant_name, deployable_name=None, preview=Fa
         }
         report['deployables'][tenant_config['deployable_name']] = depl_report
 
-        for resource_module in depl['resources']:
-            legacy_resource_name = resource_module.rsplit('.', 1)[1]
-            resource_attributes = tenant_config[legacy_resource_name]
-            m = importlib.import_module(resource_module)
-            if hasattr(m, 'provision_resource') and not preview:
-                result = m.provision_resource(
-                    ts=ts,
-                    tenant_config=tenant_config,
-                    attributes=resource_attributes,
-                )
-            else:
-                result = None
+        log.info("  Deployable: '%s'", tenant_config['deployable_name'])
 
-            depl_report['resources'][resource_module] = result
+        for dryrun in [True, False]:
+            for resource_module in depl['resources']:
+                legacy_resource_name = resource_module.rsplit('.', 1)[1]
+                resource_attributes = tenant_config[legacy_resource_name]
+                m = importlib.import_module(resource_module)
+                has_provision_method = hasattr(m, 'provision_resource')
+
+                if has_provision_method:
+                    log.info("  -> %s", resource_module)
+
+                if dryrun:  # Just verifying that all the resource modules can load properly
+                    if hasattr(m, 'provision_resource_precheck'):
+                        m.provision_resource_precheck()
+                    continue
+
+                if has_provision_method and not preview:
+                    result = m.provision_resource(
+                        ts=ts,
+                        tenant_config=tenant_config,
+                        attributes=resource_attributes,
+                    )
+                else:
+                    result = None
+
+                depl_report['resources'][resource_module] = result
 
         depl_report['old_state'] = tenant_config['state']
 
