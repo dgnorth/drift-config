@@ -6,6 +6,7 @@ import sys
 import os
 import os.path
 import getpass
+import importlib
 
 from driftconfig.relib import get_store_from_url, create_backend
 
@@ -61,7 +62,7 @@ def get_domains(user_dir=False, skip_errors=False):
                 ts = get_store_from_url('file://' + path)
             except Exception as e:
                 if skip_errors:
-                    print "Note: '{}' is not a config folder, or is corrupt. ({}).".format(path, e)
+                    log.warning("Note: '%s' is not a config folder or is corrupt. (%s).", path, e)
                     continue
                 else:
                     raise
@@ -226,69 +227,6 @@ def get_drift_config(ts=None, tenant_name=None, tier_name=None, deployable_name=
     return conf
 
 
-def diff_table_stores(ts1, ts2, verbose=False):
-
-    report = {}
-
-    try:
-        from jsondiff import diff
-    except ImportError as e:
-        diff = None
-        print "Can't import jsondiff' library:", e
-        print "To get diffs, run this: pip install jsondiff"
-
-    # Just to keep things fresh, refresh both table stores
-    ts1.refresh_metadata()
-    ts2.refresh_metadata()
-
-    def timediff_is_older(t1, t2):
-        """Returns the time diff sans secs, and if 't1' is older than 't2'."""
-        t1 = datetime.strptime(t1, '%Y-%m-%dT%H:%M:%S.%fZ')
-        t2 = datetime.strptime(t2, '%Y-%m-%dT%H:%M:%S.%fZ')
-        if t1 < t2:
-            return str(t2 - t1).split('.', 1)[0], True
-        else:
-            return str(t1 - t2).split('.', 1)[0], False
-
-    if ts1.meta['last_modified'] == ts2.meta['last_modified']:
-        report['last_modified'] = ts1.meta['last_modified']
-    else:
-        td, is_older = timediff_is_older(ts1.meta['last_modified'], ts2.meta['last_modified'])
-        report['last_modified_diff'] = td, is_older, ts1.meta['last_modified'], ts2.meta['last_modified']
-
-    report['tables'] = {}
-
-    for table_name in ts1.tables:
-        table_diff = {}
-
-        try:
-            t1, t2 = ts1.get_table(table_name), ts2.get_table(table_name)
-        except KeyError as e:
-            print "Can't compare table '{}' as it's missing from origin.".format(table_name)
-            continue
-
-        t1_meta, t2_meta = ts1.get_table_metadata(table_name), ts2.get_table_metadata(table_name)
-        is_older = False
-        if t1_meta['last_modified'] != t2_meta['last_modified']:
-            td, is_older = timediff_is_older(t1_meta['last_modified'], t2_meta['last_modified'])
-            table_diff['last_modified'] = td, is_older, t1_meta['last_modified'], t2_meta['last_modified']
-
-        if t1_meta['md5'] != t2_meta['md5']:
-            diffdump = None
-            if diff:
-                if is_older:
-                    diffdump = diff(t1.find(), t2.find(), syntax='symmetric', marshal=True)
-                else:
-                    diffdump = diff(t2.find(), t1.find(), syntax='symmetric', marshal=True)
-
-            table_diff['md5'] = diffdump, is_older, t1_meta['md5'], t2_meta['md5']
-
-        if table_diff or verbose:
-            report['tables'][table_name] = table_diff
-
-    return report
-
-
 def prepare_tenant_name(ts, tenant_name, product_name):
     """
     Prepares a tenant name by prefixing it with the organization shortname and returns the
@@ -345,8 +283,9 @@ def define_tenant(ts, tenant_name, product_name, tier_name):
 
     # Add a record to 'tenant-names' if needed.
     tenant_names = ts.get_table('tenant-names')
-    if not tenant_names.get({'tenant_name': tenant_name}):
-        row = tenant_names.add({
+    tenant_master_row = tenant_names.get({'tenant_name': tenant_name})
+    if not tenant_master_row:
+        tenant_master_row = tenant_names.add({
             'tenant_name': tenant_name,
             'organization_name': organization['organization_name'],
             'product_name': product_name,
@@ -354,6 +293,8 @@ def define_tenant(ts, tenant_name, product_name, tier_name):
             'reserved_by': getpass.getuser(),
             'reserved_at': datetime.utcnow().isoformat() + 'Z',
         })
+
+    prep['tenant_master_row'] = tenant_master_row
 
     # Make a list of active and inactive deployables associated with the given product.
     active_deployables = []
@@ -373,17 +314,22 @@ def define_tenant(ts, tenant_name, product_name, tier_name):
             )
 
     tenants = ts.get_table('tenants')
-    report = []  # List of tuple of deployable name and current state.
+    report = []  # List of deployable names and current state.
+
+    def add_report(deployable_name, state):
+        report_row = {'deployable_name': deployable_name, 'state': state}
+        report.append(report_row)
+        return report_row
 
     # Deactivate/delete deployables if needed
     for tenant in tenants.find({'tier_name': tier_name, 'tenant_name': tenant_name}):
         deployable_name = tenant['deployable_name']
         if deployable_name in inactive_deployables:
             tenant['state'] = 'disabled'
-            report.append([deployable_name, 'disabled'])
+            add_report(deployable_name, 'disabled')
         elif deployable_name not in active_deployables:
             tenant['state'] = 'uninitializing'  # Signal de-provision of resources.
-            report.append([deployable_name, 'uninitializing'])
+            add_report(deployable_name, 'uninitializing')
 
     # Activate/associate deployables if needed
     for deployable_name in active_deployables:
@@ -395,18 +341,107 @@ def define_tenant(ts, tenant_name, product_name, tier_name):
         tenant = tenants.get(pk)
         if tenant:
             # If tenant isn't already active, signal it for provisioning of resources.
-            if tenant['state']  != 'active':
+            if tenant['state'] != 'active':
                 tenant['state'] = 'initializing'
-                report.append([deployable_name, 'initializing'])
+                report_row = add_report(deployable_name, 'initializing')
             else:
-                report.append([deployable_name, 'active'])
+                report_row = add_report(deployable_name, 'active')
         else:
             # State is set to 'initializing' by default signaling provisioning of resources.
-            tenants.add(pk)
-            report.append([deployable_name, 'initializing'])
+            tenant = tenants.add(pk)
+            report_row = add_report(deployable_name, 'initializing')
+
+        # Initialize/update tenant resource config using default tier or deployables values.
+        depl_names = ts.get_table('deployable-names').get({'deployable_name': deployable_name})
+        tier = ts.get_table('tiers').get({'tier_name': tier_name})
+        for resource_name in depl_names['resources']:
+            # LEGACY SUPPORT: Shorten resource name to its last bit
+            legacy_resource_name = resource_name.rsplit('.', 1)[1]
+
+            # Update the tenants attributes but leave current ones intact
+            resource_attribs = tenant.setdefault(legacy_resource_name, {})
+
+            # Apply tier defaults
+            for k, v in tier['resources'][resource_name].items():
+                resource_attribs.setdefault(k, v)
+
+            # Apply deployable defaults
+            deployable_defaults = depl_names['resource_attributes'].get(resource_name, {})
+            for k, v in deployable_defaults.items():
+                resource_attribs.setdefault(k, v)
+
+            report_row.setdefault('resources', {})[resource_name] = resource_attribs
 
     prep['report'] = report
     return prep
+
+
+def provision_tenant_resources(ts, tenant_name, deployable_name=None, preview=False):
+    """
+    Calls resource provisioning functions for tenant 'tenant_name'.
+    If 'deployable_name' is set, only the resource modules for that deployable
+    are called.
+    If 'preview' then the provision_resource() callback function is not called.
+    """
+    tenant_info = ts.get_table('tenant-names').get({'tenant_name': tenant_name})
+    crit = {'tenant_name': tenant_name, 'tier_name': tenant_info['tier_name']}
+    if deployable_name:
+        crit['deployable_name'] = deployable_name
+    configurations = ts.get_table('tenants').find(crit)
+
+    report = {
+        'tenant': tenant_info,
+        'deployables': {},
+    }
+
+    log.info("Provisioning tenant '%s'", tenant_name)
+
+    for tenant_config in configurations:
+        # LEGACY SUPPORT: Need to look up the actual resource module name
+        depl = ts.get_table('deployable-names').get({'deployable_name': tenant_config['deployable_name']})
+        depl_report = {
+            'resources': {}
+        }
+        report['deployables'][tenant_config['deployable_name']] = depl_report
+
+        log.info("  Deployable: '%s'", tenant_config['deployable_name'])
+
+        for dryrun in [True, False]:
+            for resource_module in depl['resources']:
+                legacy_resource_name = resource_module.rsplit('.', 1)[1]
+                resource_attributes = tenant_config[legacy_resource_name]
+                m = importlib.import_module(resource_module)
+                has_provision_method = hasattr(m, 'provision_resource')
+
+                if has_provision_method:
+                    log.info("  -> %s", resource_module)
+
+                if dryrun:  # Just verifying that all the resource modules can load properly
+                    if hasattr(m, 'provision_resource_precheck'):
+                        m.provision_resource_precheck()
+                    continue
+
+                if has_provision_method and not preview:
+                    result = m.provision_resource(
+                        ts=ts,
+                        tenant_config=tenant_config,
+                        attributes=resource_attributes,
+                    )
+                else:
+                    result = None
+
+                depl_report['resources'][resource_module] = result
+
+        depl_report['old_state'] = tenant_config['state']
+
+        if tenant_config['state'] == 'initializing':
+            tenant_config['state'] = 'active'
+        elif tenant_config['state'] == 'uninitializing':
+            tenant_config['state'] = 'deleted'
+
+        depl_report['new_state'] = tenant_config['state']
+
+    return report
 
 
 def refresh_tenants(ts, tenant_name=None, tier_name=None):
@@ -419,16 +454,13 @@ def refresh_tenants(ts, tenant_name=None, tier_name=None):
         tiers = [tier_name]
     else:
         crit = {'tenant_name': tenant_name} if tenant_name else {}
-        tiers = set(t['tier_name'] for t in  ts.get_table('tenants').find(crit))
+        tiers = set(t['tier_name'] for t in ts.get_table('tenants').find(crit))
 
     if tenant_name:
         tenant_names = [tenant_name]
     else:
         crit = {'tier_name': tier_name} if tier_name else {}
-        tenant_names = set(t['tenant_name'] for t in  ts.get_table('tenants').find(crit))
-
-    print "tiers and tenants:", tiers, tenant_names
-
+        tenant_names = set(t['tenant_name'] for t in ts.get_table('tenants').find(crit))
 
     for tenant in ts.get_table('tenants').find():
         if tenant['tier_name'] not in tiers:

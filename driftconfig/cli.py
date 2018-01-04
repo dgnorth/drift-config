@@ -5,17 +5,15 @@ import sys
 from datetime import datetime, timedelta
 import time
 import json
-import getpass
 import logging
 import pkg_resources
 
 # pygments is optional for now
 try:
     got_pygments = True
-    from pygments import highlight, util
+    from pygments import highlight
     from pygments.lexers import get_lexer_by_name
-    from pygments.formatters import get_formatter_by_name, get_all_formatters
-    from pygments.styles import get_style_by_name, get_all_styles
+    from pygments.formatters import get_formatter_by_name
 except ImportError:
     got_pygments = False
 
@@ -23,7 +21,9 @@ from driftconfig.relib import create_backend, get_store_from_url, diff_meta, dif
 from driftconfig.config import get_drift_table_store, push_to_origin, pull_from_origin, TSTransaction, TSLocal
 from driftconfig.config import update_cache
 from driftconfig.backends import FileBackend
-from driftconfig.util import config_dir, get_domains, get_default_drift_config, get_default_drift_config_and_source
+from driftconfig.util import config_dir, get_domains, get_default_drift_config, get_default_drift_config_and_source, \
+    define_tenant, prepare_tenant_name, provision_tenant_resources
+
 
 log = logging.getLogger(__name__)
 
@@ -174,6 +174,75 @@ def get_options(parser):
         '-d', '--details',
         action='store_true',
         help='Do a detailed diff on modified tables.'
+    )
+
+
+
+    # MIGRATED FROM drift-admin tenant command suite
+    # The create command
+    p = subparsers.add_parser(
+        'create-tenant',
+        help="Create a new tenant for a given product.",
+        description="Create a new tenant for a given product."
+    )
+    p.add_argument(
+        'tenant-name',
+        action='store',
+        help="Name of the tenant.",
+    )
+    p.add_argument(
+        'product-name',
+        action='store',
+        help="Name of the product.",
+    )
+    p.add_argument(
+        'tier-name',
+        action='store',
+        help="Name of the tier.",
+    )
+    p.add_argument('--config',
+        help="Specify which config source to use. Will override 'DRIFT_CONFIG_URL' environment variable."
+    )
+    p.add_argument(
+        "--preview", help="Only preview the changes, do not commit to origin.", action="store_true"
+    )
+
+    # The refresh command
+    p = subparsers.add_parser(
+        'refresh-tenant',
+        help="Refresh tenant.",
+        description="Refresh a tenants on a tier."
+    )
+    p.add_argument(
+        'tenant-name',
+        action='store',
+        help="Name of the tenant.",
+        nargs='?',
+    )
+    p.add_argument('--config',
+        help="Specify which config source to use. Will override 'DRIFT_CONFIG_URL' environment variable."
+    )
+    p.add_argument(
+        "--preview", help="Only preview the changes, do not commit to origin.", action="store_true"
+    )
+
+    # The provision command
+    p = subparsers.add_parser(
+        'provision-tenant',
+        help="Provision tenant.",
+        description="Provision and prepare resources for a tenant."
+    )
+    p.add_argument(
+        'tenant-name',
+        action='store',
+        help="Name of the tenant.",
+        nargs='?',
+    )
+    p.add_argument('--config',
+        help="Specify which config source to use. Will override 'DRIFT_CONFIG_URL' environment variable."
+    )
+    p.add_argument(
+        "--preview", help="Only preview the changes, do not commit to origin.", action="store_true"
     )
 
     # CRUD command suite -------------------------------------------
@@ -522,6 +591,100 @@ def diff_command(args):
                     tablediff = diff_tables(t1, t2)
                     print "\nTable diff for", table_name, "\n(first=local, second=origin):"
                     print json.dumps(tablediff, indent=4, sort_keys=True)
+
+
+def create_tenant_command(args):
+
+    tier_name = vars(args)['tier-name']
+    if args.config:
+        os.environ['DRIFT_CONFIG_URL'] = args.config
+
+    with TSTransaction(commit_to_origin=not args.preview) as ts:
+        prep = prepare_tenant_name(
+            ts=ts,
+            tenant_name=vars(args)['tenant-name'],
+            product_name=vars(args)['product-name']
+        )
+        tenant_name = prep['tenant_name']
+
+        tenant = ts.get_table('tenant-names').get({'tenant_name': tenant_name})
+        if tenant:
+            if tenant['tier_name'] != tier_name:
+                print "Tenant '{}' is on tier '{}'. Exiting.".format(tenant_name, tenant['tier_name'])
+                sys.exit(1)
+
+            print "Tenant '{}' already exists. Refreshing it for tier '{}'...".format(
+                tenant_name, tier_name)
+
+        result = define_tenant(
+            ts=ts,
+            tenant_name=tenant_name,
+            product_name=prep['product']['product_name'],
+            tier_name=tier_name
+        )
+
+    print "Tenant '{}' created/refreshed on tier '{}'.".format(tenant_name, tier_name)
+    print pretty(result)
+    if args.preview:
+        print "\nPreview changes only, not committing to origin."
+        sys.exit(0)
+
+
+def refresh_tenant_command(args):
+
+    tenant_name = vars(args)['tenant-name']
+    print "Refreshing '{}':".format(tenant_name)
+    if args.config:
+        os.environ['DRIFT_CONFIG_URL'] = args.config
+
+    with TSTransaction(commit_to_origin=not args.preview) as ts:
+        tenant_info = ts.get_table('tenant-names').get({'tenant_name': tenant_name})
+        if not tenant_info:
+            print "Tenant '{}' not found!".format(tenant_name)
+            sys.exit(1)
+
+        result = define_tenant(
+            ts=ts,
+            tenant_name=tenant_name,
+            product_name=tenant_info['product_name'],
+            tier_name=tenant_info['tier_name'],
+        )
+
+    print "Result:"
+    print pretty(result)
+    if args.preview:
+        print "\nPreview changes only, not committing to origin."
+        sys.exit(0)
+
+
+def provision_tenant_command(args):
+
+    tenant_name = vars(args)['tenant-name']
+    print "Provisioning '{}':".format(tenant_name)
+    if args.config:
+        os.environ['DRIFT_CONFIG_URL'] = args.config
+
+    with TSTransaction(commit_to_origin=not args.preview) as ts:
+        tenant_info = ts.get_table('tenant-names').get({'tenant_name': tenant_name})
+        if not tenant_info:
+            print "Tenant '{}' not found!".format(tenant_name)
+            sys.exit(1)
+
+        # Refresh for good measure
+        define_tenant(
+            ts=ts,
+            tenant_name=tenant_name,
+            product_name=tenant_info['product_name'],
+            tier_name=tenant_info['tier_name'],
+        )
+
+        report = provision_tenant_resources(ts=ts, tenant_name=tenant_name, preview=args.preview)
+
+    print "Result:"
+    print pretty(report)
+    if args.preview:
+        print "\nPreview changes only, not committing to origin."
+        sys.exit(0)
 
 
 def run_command(args):
