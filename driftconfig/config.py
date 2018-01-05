@@ -441,6 +441,7 @@ def get_drift_table_store():
             'deployable_name': {'pattern': r'^([a-z-]){3,20}$'},
             'display_name': {'type': 'string'},
             'resources': {'type': 'array', 'item': 'string'},
+            'resource_attributes': {'type': 'object'},
         },
         'required': ['display_name', 'resources'],
     })
@@ -738,7 +739,7 @@ def get_drift_table_store():
     '''
     routing = ts.add_table('routing')
     routing.set_subfolder_name('api-router')
-    routing.add_primary_key('tier_name,deployable_name')
+    routing.add_primary_key('deployable_name')
     routing.add_foreign_key('deployable_name', 'deployable-names')
     routing.add_schema({
         'type': 'object',
