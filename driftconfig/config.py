@@ -1030,7 +1030,10 @@ def push_to_origin(local_ts, force=False, _first=False, _origin_crc=None):
 
     old, new = local_ts.refresh_metadata()
 
-    if local_ts.meta['checksum'] == origin_ts.meta['checksum'] and old == new and not force:
+    if origin_ts is not None:
+        crc_match = local_ts.meta['checksum'] == origin_ts.meta['checksum']
+
+    if crc_match and old == new and not force:
         return {'pushed': True, 'reason': 'push_skipped_crc_match'}
 
     # Always turn on all integrity check when saving to origin
