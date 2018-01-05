@@ -893,141 +893,43 @@ def deployable(repo):
 @deployable.command()
 def info():
     """Show deployable registration info."""
-    click.secho("Registered Drift deployable plugins:")
-
-    # setuptools distribution object:
-    # http://setuptools.readthedocs.io/en/latest/pkg_resources.html#distribution-objects
-    # 'activate', 'as_requirement', 'check_version_conflict', 'clone', 'egg_name', 'extras',
-    # 'from_filename', 'from_location', 'get_entry_info', 'get_entry_map', 'has_version',
-    # 'hashcmp', 'insert_on', 'key', 'load_entry_point', 'location', 'parsed_version',
-    # 'platform', 'precedence', 'project_name', 'py_version', 'requires', 'version'
-
-    # setuptools entry point object:
-    # http://setuptools.readthedocs.io/en/latest/pkg_resources.html#entrypoint-objects
-    # 'attrs', 'dist', 'extras', 'load', 'module_name', 'name', 'parse', 'parse_group',
-    # 'parse_map', 'pattern', 'require', 'resolve'
-
     ts = get_default_drift_config()
     click.echo("List of Drift deployable plugins in ", nl=False)
     _header(ts)
     deployables = ts.get_table('deployable-names')
 
-    click.secho("Deployables and api routes registered in config:\n", bold=True)
+    click.secho("Deployables and api routes:\n", bold=True)
 
-    def join_tables(master_table, *tables, **search_criteria):
+    def join_tables(master_table, tables, search_criteria=None, cb=None):
         """
         Joins rows from 'tables' to the rows of 'master_table' and returns them
         as a single sequence.
         'search_criteria' is applied to the 'master_table'.
         """
-        rows = master_table.find(search_criteria)
+        rows = master_table.find(search_criteria or {})
         for row in rows:
             row = row.copy()
             for table in tables:
                 other = table.get(row)
                 if other:
                     row.update(other)
+            if cb:
+                cb(row)
             yield row
 
+    def cb(row):
+        """Generate list of tier names using info from 'deployables' table."""
+        crit = {'deployable_name': row['deployable_name'], 'is_active': True}
+        tiers = [d['tier_name'] for d in ts.get_table('deployables').find(crit)]
+        row['tiers'] = ', '.join(sorted(tiers))
 
-    tabulate(
-        ['deployable_name', 'api', 'requires_api_key', 'display_name', 'tags'],
-        list(join_tables(deployables, ts.get_table('routing'), ts.get_table('deployable-names'))),
-        indent='  ',
+    head = ['deployable_name', 'api', 'requires_api_key', 'tiers', 'display_name']
+    rows = join_tables(
+        master_table=deployables,
+        tables=[ts.get_table('routing'), ts.get_table('deployable-names')],
+        cb=cb,
     )
-    registered = [d['deployable_name'] for d in deployables.find()]
-
-    click.secho("\nDeployables registered as plugins on this machine:\n", bold=True)
-    for d in _enumerate_plugins('drift.plugin', 'register_deployable'):
-        dist, meta, classifiers, tags = d['dist'], d['meta'], d['classifiers'], d['tags']
-        click.secho(dist.key, bold=True, nl=False)
-        entry = deployables.get({'deployable_name': dist.key})
-        if entry:
-            click.secho("")
-        else:
-            click.secho(" (Plugin NOT registered in config DB!)", fg='red')
-
-        if dist.key in registered:
-            registered.remove(dist.key)
-
-        assigned = ts.get_table('deployables').find({'deployable_name': dist.key})
-        if assigned:
-            click.secho("\tTier assignment:")
-            for assignment in assigned:
-                if 'version' in assignment:
-                    click.secho("\t\t{tier_name} [{version}]".format(**assignment), nl=False)
-                else:
-                    click.secho("\t\t{tier_name}".format(**assignment), nl=False)
-                if assignment['is_active']:
-                    click.secho("")
-                else:
-                    click.secho(" [inactive]", fg='white')
-
-        click.secho("\tTags: {}".format(', '.join(tags)))
-        click.secho("\tVersion: {}".format(dist.parsed_version))
-
-        if meta:
-            for key in ['Author', 'Summary']:
-                if key in meta:
-                    click.secho("\t{}:{}".format(key, meta[key]))
-            for classifier in classifiers:
-                if 'Programming Language' in classifier and classifier.count('::') == 1:
-                    click.secho("\t{}".format(classifier))
-        else:
-            click.secho("\t(meta info missing)")
-        click.secho("")
-
-    if registered:
-        click.secho("Note! The following deployables are registered in the config, but are not "
-            "registered as plugins on this machine:\n{}".format(', '.join(registered)))
-
-    click.secho("\nDeployables assigned to tiers:\n", bold=True)
-    ta = {}
-    for d in ts.get_table('deployables').find():
-        ta.setdefault(d['tier_name'], []).append(d)
-    for tier_name, dep in ta.items():
-        click.secho("{}:".format(tier_name), bold=True)
-        for d in dep:
-            click.secho(d['deployable_name'], fg='black' if d['is_active'] else 'red', nl=False)
-            click.secho(" ", nl=False)
-        click.secho("\n")
-
-
-@deployable.command()
-@click.argument('deployable-name', type=str)
-@click.option('--tier', '-t', type=str, multiple=True,
-    help="Associate deployable to a tier. You can repeat this option for multiple tiers. "
-    "Specify 'all' to associate with all available tiers.")
-def register(deployable_name, tier):
-    """Add or update the registration of a deployable plugin.\n
-    DEPLOYABLE_NAME is the name of the plugin to register. Specify 'all' to register all plugins."""
-    tiers = tier  # The 'tier' option is a list, so find a better name for it.
-    with TSLocal() as ts:
-        deployable_names = ts.get_table('deployable-names')
-        deployables = ts.get_table('deployables')
-
-        for d in _enumerate_plugins('drift.plugin', 'provision'):
-            dist = d['dist']
-            if deployable_name == dist.key or deployable_name == 'all':
-                summary = d['meta'].get('Summary', "(No description available)")
-                row = {'deployable_name': dist.key, 'display_name': summary.strip()}
-                deployable_names.update(row)
-                click.secho("{} added/updated.".format(dist.key))
-                for tier_entry in ts.get_table('tiers').find():
-                    if tier_entry['tier_name'] in tiers or 'all' in tiers:
-                        row = {
-                            'tier_name': tier_entry['tier_name'],
-                            'deployable_name': dist.key,
-                            'is_active': True,
-                            'tags': d['tags'],
-                        }
-                        # By default, live tiers use version affinity
-                        if tier_entry['is_live']:
-                            row['version'] = str(dist.parsed_version)
-                        deployables.update(row)
-                        click.secho("Adding registration:\n" + json.dumps(row, indent=4))
-
-        _epilogue(ts)
+    tabulate(head, list(rows), indent='  ')
 
 
 @cli.group()
@@ -1224,39 +1126,6 @@ def info(tenant_name):
         click.secho("Tenant {s.BRIGHT}{}{s.NORMAL}:".format(tenant_name, **styles))
         click.echo(json.dumps(tenant, indent=4))
 
-
-def _enumerate_plugins(entry_group, entry_name):
-    """
-    Return a list of Python plugins with entry map group and entry point
-    name matching 'entry_group' and 'entry_name'.
-    """
-    ws = pkg_resources.WorkingSet()
-    distributions, errors = ws.find_plugins(pkg_resources.Environment())
-    for dist in distributions:
-        entry_map = dist.get_entry_map()
-        entry = entry_map.get(entry_group, {}).get(entry_name)
-        if entry:
-            meta = {}
-            classifiers = []
-            tags = []
-            if dist.has_metadata('PKG-INFO'):
-                for line in dist.get_metadata_lines('PKG-INFO'):
-                    key, value = line.split(':', 1)
-                    if key == 'Classifier':
-                        v = value.strip()
-                        classifiers.append(v)
-                        if 'Drift :: Tag :: ' in v:
-                            tags.append(v.replace('Drift :: Tag :: ', '').lower().strip())
-                    else:
-                        meta[key] = value
-
-            yield {
-                'dist': dist,
-                'entry': entry,
-                'meta': meta,
-                'classifiers': classifiers,
-                'tags': tags,
-            }
 
 def tabulate(headers, rows, indent=None, col_padding=None):
     """Pretty print tabular data."""
