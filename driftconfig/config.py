@@ -87,6 +87,7 @@ deployable-names:
 deployables:
     tier_name               string, pk, fk->tiers
     deployable_name         string, pk, fk->deployables
+    version                 string
     is_active               boolean, default=false
 
 
@@ -94,12 +95,15 @@ products:
     product_name            string, pk
     organization_name       string, fk->organizations, required
     state                   enum initializing|active|disabled|deleted, default=active
+    deployables             array of strings, required
+
 
 tenant-names:
     # a tenant name is unique across all tiers
     tenant_name             string, pk
     product_name            string, fk->products, required
     organization_name       string, fk->organizations, required
+    tier_name               string, pk, fk->tiers
     reserved_at             date-time, default=@@utcnow
     reserved_by             string
 
@@ -251,7 +255,7 @@ authentication:
     keys
         issued              datetime
         expires             datetime
-        pub_rsa             string
+        public_key          string
         private_key         string      (note, this entry only accessible to the issuing service)
 
     authentications
@@ -355,12 +359,12 @@ aws commands extend service/deployable:
 
 '''
 import logging
-import os
 from datetime import datetime
 
-from driftconfig.relib import TableStore, BackendError, get_store_from_url, copy_table_store, create_backend, load_meta_from_backend
-from driftconfig.backends import FileBackend, S3Backend, RedisBackend
-from driftconfig.util import get_domains
+from driftconfig.relib import TableStore, copy_table_store, create_backend
+import driftconfig.relib
+from driftconfig.util import get_default_drift_config_and_source
+from driftconfig.backends import RedisBackend
 
 log = logging.getLogger(__name__)
 
@@ -436,9 +440,11 @@ def get_drift_table_store():
         'properties': {
             'deployable_name': {'pattern': r'^([a-z-]){3,20}$'},
             'display_name': {'type': 'string'},
+            'tags': {'type': 'array', 'items': {'type': 'string'}},
         },
-        'required': ['display_name'],
+        'required': ['display_name', 'tags'],
     })
+    deployable_names.add_default_values({'tags': []})
 
     deployables = ts.add_table('deployables')
     deployables.add_primary_key('tier_name,deployable_name')
@@ -447,7 +453,9 @@ def get_drift_table_store():
     deployables.add_schema({
         'type': 'object',
         'properties': {
+            'release': {'type': 'string'},
             'is_active': {'type': 'boolean'},
+            'reason_inactive': {'type': 'string'},
         },
         'required': ['is_active'],
     })
@@ -461,40 +469,80 @@ def get_drift_table_store():
         'properties': {
             'product_name': {'pattern': r'^([a-z0-9-]){3,35}$'},
             'state': {'enum': ['initializing', 'active', 'disabled', 'deleted']},
+            'deployables': {'type': 'array', 'items': {'type': 'string'}},
         },
-        'required': ['organization_name'],
+        'required': ['organization_name', 'deployables'],
     })
-    products.add_default_values({'state': 'active'})
+    products.add_default_values({'state': 'active', 'deployables': []})
 
-    tenant_names = ts.add_table('tenant-names')
-    tenant_names.add_primary_key('tenant_name')
-    tenant_names.add_foreign_key('product_name', 'products')
-    tenant_names.add_foreign_key('organization_name', 'organizations')
-    tenant_names.add_schema({
-        'type': 'object',
-        'properties': {
-            'tenant_name': {'pattern': r'^([a-z0-9-]){3,30}$'},
-            'reserved_at': {'format': 'date-time'},
-            'reserved_by': {'type': 'string'},
-        },
-        'required': ['product_name', 'organization_name'],
-    })
-    tenant_names.add_default_values({'reserved_at': '@@utcnow'})
+    # Waiting a little bit with fixups of tenant-names and tenants table schema
+    if "temporary fixy fix":
+        tenant_names = ts.add_table('tenant-names')
+        tenant_names.add_primary_key('tenant_name')
+        tenant_names.add_foreign_key('product_name', 'products')
+        tenant_names.add_foreign_key('organization_name', 'organizations')
+        tenant_names.add_foreign_key('tier_name', 'tiers')
+        tenant_names.add_unique_constraint('alias')
+        tenant_names.add_schema({
+            'type': 'object',
+            'properties': {
+                'tenant_name': {'pattern': r'^([a-z0-9-]){3,30}$'},
+                'alias': {'pattern': r'^([a-z0-9-]){3,30}$'},
+                'reserved_at': {'format': 'date-time'},
+                'reserved_by': {'type': 'string'},
+            },
+            'required': ['product_name', 'organization_name', 'tier_name'],
+        })
+        tenant_names.add_default_values({'reserved_at': '@@utcnow'})
 
-    tenants = ts.add_table('tenants')
-    tenants.add_primary_key('tier_name,deployable_name,tenant_name')
-    tenants.set_row_as_file(subfolder_name=tenants.name, group_by='tier_name,tenant_name')
-    tenants.add_foreign_key('tier_name', 'tiers')
-    tenants.add_foreign_key('deployable_name', 'deployable-names')
-    tenants.add_foreign_key('tenant_name', 'tenant-names')
-    tenants.add_schema({
-        'type': 'object',
-        'properties': {
-            'description': {'type': 'string'},
-            'state': {'enum': ['initializing', 'active', 'disabled', 'deleted']},
-        },
-    })
-    tenants.add_default_values({'state': 'initializing'})
+        tenants = ts.add_table('tenants')
+        tenants.add_primary_key('tier_name,deployable_name,tenant_name')
+        tenants.set_row_as_file(subfolder_name=tenants.name, group_by='tier_name,tenant_name')
+        tenants.add_foreign_key('tier_name', 'tiers')
+        tenants.add_foreign_key('deployable_name', 'deployable-names')
+        tenants.add_foreign_key('tenant_name', 'tenant-names')
+        tenants.add_schema({
+            'type': 'object',
+            'properties': {
+                'state': {'enum': [
+                    'initializing', 'active', 'disabled', 'uninitializing', 'deleted'
+                ]},
+            },
+        })
+        tenants.add_default_values({'state': 'initializing'})
+    else:
+        tenant_names = ts.add_table('tenant-names')
+        tenant_names.add_primary_key('tenant_name,product_name')
+        tenant_names.set_row_as_file(subfolder_name='tenants', group_by='product_name')
+        tenant_names.add_unique_constraint('tenant_name')
+        tenant_names.add_foreign_key('product_name', 'products')
+        tenant_names.add_foreign_key('organization_name', 'organizations')
+        tenant_names.add_foreign_key('tier_name', 'tiers')
+        tenant_names.add_schema({
+            'type': 'object',
+            'properties': {
+                'tenant_name': {'pattern': r'^([a-z0-9-]){3,30}$'},
+                'reserved_at': {'format': 'date-time'},
+                'reserved_by': {'type': 'string'},
+            },
+            'required': ['product_name', 'organization_name', 'tier_name'],
+        })
+        tenant_names.add_default_values({'reserved_at': '@@utcnow'})
+
+        tenants = ts.add_table('tenants')
+        tenants.add_primary_key('deployable_name,tenant_name')
+        tenants.set_row_as_file(subfolder_name='tenants', group_by='tenant_name')
+        tenants.add_foreign_key('deployable_name', 'deployable-names')
+        tenants.add_foreign_key('tenant_name', 'tenant-names')
+        tenants.add_schema({
+            'type': 'object',
+            'properties': {
+                'state': {'enum': [
+                    'initializing', 'active', 'disabled', 'uninitializing', 'deleted',
+                ]},
+            },
+        })
+        tenants.add_default_values({'state': 'initializing'})
 
     public_keys = ts.add_table('public-keys')
     public_keys.set_row_as_file(subfolder_name='authentication')
@@ -509,7 +557,7 @@ def get_drift_table_store():
                 'properties': {
                     'issued': {'format': 'date-time'},
                     'expires': {'format': 'date-time'},
-                    'pub_rsa': {'type': 'string'},
+                    'public_key': {'type': 'string'},
                     'private_key': {'type': 'string'},
                 },
             }},
@@ -518,21 +566,14 @@ def get_drift_table_store():
 
     platforms = ts.add_table('platforms')
     platforms.set_row_as_file(subfolder_name='authentication')
-    platforms.add_primary_key('tier_name,deployable_name,tenant_name')
-    platforms.add_foreign_key('tier_name', 'tiers')
-    platforms.add_foreign_key('deployable_name', 'deployable-names')
-    platforms.add_foreign_key('tier_name,deployable_name,tenant_name', 'tenants')
+    platforms.add_primary_key('product_name,provider_name')
+    platforms.add_foreign_key('product_name', 'products')
     platforms.add_schema({
         'type': 'object',
         'properties': {
-            'providers': {'type': 'array', 'items': {
-                'type': 'object',
-                'properties': {
-                    'provider_name': {'type': 'string'},
-                    'provider_details': {'type': 'object'},
-                },
-            }},
+            'provider_details': {'type': 'object'},
         },
+        'required': ['provider_details'],
     })
 
     '''
@@ -611,12 +652,11 @@ def get_drift_table_store():
     users_acl.add_foreign_key('tenant_name', 'tenant-names')
 
 
-    # API ROUTER STUFF - THIS SHOULDN'T REALLY BE IN THIS FILE HERE
+    # RELEASE MANAGEMENT - THIS SHOULDN'T REALLY BE IN THIS FILE HERE, or what?
     '''
-    routing:
+    instances:
         tier_name               string, pk, fk->tiers
         deployable_name         string, pk, fk->deployables
-        api                     string, required
         autoscaling
             min                 integer
             max                 integer
@@ -624,11 +664,12 @@ def get_drift_table_store():
             instance_type       string, required
         release_version         string
     '''
-    routing = ts.add_table('routing')
-    routing.set_subfolder_name('api-router')
-    routing.add_primary_key('tier_name,deployable_name')
-    routing.add_schema({'type': 'object', 'properties': {
-        'api': {'type': 'string'},
+    instances = ts.add_table('instances')
+    instances.set_subfolder_name('release-mgmt')
+    instances.add_primary_key('tier_name,deployable_name')
+    instances.add_foreign_key('tier_name', 'tiers')
+    instances.add_foreign_key('deployable_name', 'deployable-names')
+    instances.add_schema({'type': 'object', 'properties': {
         'autoscaling': {'type': 'object', 'properties': {
             'min': {'type': 'integer'},
             'max': {'type': 'integer'},
@@ -637,6 +678,74 @@ def get_drift_table_store():
         }},
         'release_version': {'type': 'string'},
     }})
+
+
+    # API ROUTER STUFF - THIS SHOULDN'T REALLY BE IN THIS FILE HERE
+    '''
+    nginx:
+        tier_name               string, pk, fk->tiers
+    '''
+    nginx = ts.add_table('nginx')
+    nginx.add_primary_key('tier_name')
+    nginx.set_subfolder_name('api-router',)
+    nginx.add_schema({'type': 'object', 'properties': {
+        'worker_rlimit_nofile': {'type': 'integer'},
+        'worker_connections': {'type': 'integer'},
+        'api_key_passthrough':
+        {
+            'type': 'array',
+            'items':
+            {
+                'type': 'object',
+                'properties':
+                {
+                    'key_name': {'type': 'string'},
+                    'key_value': {'type': 'string'},
+                    'product_name': {'type': 'string'},
+                },
+                'required': ['key_name', 'key_value', 'product_name'],
+            }
+        },
+    }})
+
+    ''' a yaml representation would be:
+    ---
+    type: object
+    properties:
+      worker_connections: {type: integer}
+      worker_rlimit_nofile: {type: integer}
+      api_key_passthrough:
+        type: array
+        items:
+          type: object
+          required: [key_name, key_value ,product_name]
+          properties:
+            key_name: {type: string}
+            key_value: {type: string}
+            product_name: {type: string}
+
+    '''
+
+
+    '''
+    routing:
+        deployable_name         string, pk, fk->deployables
+        api                     string, required
+    '''
+    routing = ts.add_table('routing')
+    routing.set_subfolder_name('api-router')
+    routing.add_primary_key('tier_name,deployable_name')
+    routing.add_foreign_key('deployable_name', 'deployable-names')
+    routing.add_schema({
+        'type': 'object',
+        'properties':
+        {
+            'api': {'type': 'string'},
+            'requires_api_key': {'type': 'boolean'},
+        },
+        'required': ['requires_api_key'],
+    })
+    routing.add_default_values({'requires_api_key': False})
 
 
     '''
@@ -661,7 +770,7 @@ def get_drift_table_store():
             'key_type': {'enum': ['product', 'custom']},
             'custom_data': {'type': 'string'},
         },
-        'required': ['product_name', 'in_use', 'key_type'],
+        'required': ['in_use', 'key_type'],
     })
     keys.add_default_values({'in_use': True, 'create_date': '@@utcnow', 'key_type': 'product'})
 
@@ -825,25 +934,32 @@ def get_drift_table_store():
     })
     gameservers_instances.add_default_values({'gameserver_instance_id': '@@identity'})
 
+
+
+    '''
+    metrics:
+        tier_name               string, pk, fk->tiers
+        deployable_name         string, pk, fk->deployables
+    '''
+    metrics = ts.add_table('metrics')
+    metrics.add_primary_key('tenant_name')
+    metrics.add_foreign_key('tenant_name', 'tenant-names')
+    metrics.add_schema({
+        'type': 'object',
+        'properties':
+        {
+            's3_bucket': {'type': 'string'},
+        },
+        'required': ['s3_bucket'],
+    })
+
+
     # END OF TABLE DEFS
 
     definition = ts.get_definition()
     new_ts = TableStore()
     new_ts.init_from_definition(definition)
     return new_ts
-
-
-class Check():
-
-    def __init__(self, ts):
-        self._ts_original = ts
-
-    def __enter__(self):
-        self._ts_copy = copy_table_store(self._ts_original)
-        return self._ts_copy
-
-    def __exit__(self, *args):
-        copy_table_store(self._ts_copy)
 
 
 def load_from_origin(origin_backend):
@@ -855,15 +971,7 @@ def load_from_origin(origin_backend):
     return ts
 
 
-def save_to_origin(ts, origin_backend):
-    from cPickle import dumps
-    blob = dumps(ts, protocol=2)
-    origin_backend.start_saving()
-    blob = origin_backend.save_data('table-store.pickle', blob)
-    origin_backend.done_saving()
-
-
-def push_to_origin(local_ts, force=False):
+def push_to_origin(local_ts, force=False, _first=False):
     """
     Pushed 'local_ts' to origin.
     Returns a dict with 'pushed' as True or False depending on success.
@@ -881,18 +989,25 @@ def push_to_origin(local_ts, force=False):
     the time difference between the changes.
 
     To force a push to a modified origin, set 'force' = True.
+
+    If 'skip_cache' is true, the cache, if defined for the table store, will
+    not be updated.
+
+    '_first' is used internally, and indicates it's the first time the table
+    store is pushed.
     """
     origin = local_ts.get_table('domain')['origin']
     origin_backend = create_backend(origin)
-    try:
-        ###origin_ts = load_meta_from_backend(origin_backend)
-        origin_ts = load_from_origin(origin_backend)
-    except Exception as e:
-        log.warning("Can't load meta info from %s: %s", origin_backend, repr(e))
-        crc_match = True
-        force = True
+    if _first:
+        crc_match = force = True
     else:
-        crc_match = local_ts.meta['checksum'] == origin_ts.meta['checksum']
+        try:
+            origin_ts = origin_backend.load_table_store()
+        except Exception as e:
+            log.warning("Can't load table store from %s: %s", origin_backend, repr(e))
+            crc_match = force = True
+        else:
+            crc_match = local_ts.meta['checksum'] == origin_ts.meta['checksum']
 
     if not force and not crc_match:
         local_modified = parse_8601(local_ts.meta['last_modified'])
@@ -904,16 +1019,21 @@ def push_to_origin(local_ts, force=False):
     if crc_match and old == new and not force:
         return {'pushed': True, 'reason': 'push_skipped_crc_match'}
 
-    ###local_ts.save_to_backend(origin_backend)
-    save_to_origin(local_ts, origin_backend)
+    # Always turn on all integrity check when saving to origin
+    tmp = driftconfig.relib.CHECK_INTEGRITY
+    driftconfig.relib.CHECK_INTEGRITY = ['pk', 'fk', 'unique', 'schema', 'constraints']
+    try:
+        origin_backend.save_table_store(local_ts)
+    finally:
+        driftconfig.relib.CHECK_INTEGRITY = tmp
+
     return {'pushed': True, 'reason': 'pushed_to_origin'}
 
 
 def pull_from_origin(local_ts, ignore_if_modified=False, force=False):
     origin = local_ts.get_table('domain')['origin']
     origin_backend = create_backend(origin)
-    ##origin_meta = load_meta_from_backend(origin_backend)
-    origin_meta = load_from_origin(origin_backend)
+    origin_meta = origin_backend.load_table_store()
     old, new = local_ts.refresh_metadata()
 
     if old != new and not ignore_if_modified:
@@ -923,9 +1043,37 @@ def pull_from_origin(local_ts, ignore_if_modified=False, force=False):
     if crc_match and not force:
         return {'pulled': True, 'table_store': local_ts, 'reason': 'pull_skipped_crc_match'}
 
-    ###origin_ts = TableStore(origin_backend)
     origin_ts = origin_meta
     return {'pulled': True, 'table_store': origin_ts, 'reason': 'pulled_from_origin'}
+
+
+def get_redis_cache_backend(ts, tier_name):
+    """Returns cache backend for tier 'tier_name' in 'ts'."""
+    # Note: drift.core.resources.redis module defines where to find default
+    # connection information for a Redis server. We make good use of that here,
+    # but it does mean that this piece of code below is now coupled with
+    # aforementioned module.
+    domain = ts.get_table('domain').get()
+    tier = ts.get_table('tiers').get({'tier_name': tier_name})
+    if 'resource_defaults' not in tier:
+        return
+
+    for resource in tier['resource_defaults']:
+        if resource['resource_name'] == 'redis':
+            b = RedisBackend.create_from_server_info(
+                host=resource['parameters']['host'],
+                port=resource['parameters']['port'],
+                domain_name=domain['domain_name'],
+                )
+            return b
+
+def update_cache(ts, tier_name):
+    """Push table store 'ts' to its designated Redis cache on tier 'tier_name'."""
+
+    b = get_redis_cache_backend(ts, tier_name)
+    if b:
+        b.save_table_store(ts)
+    return b
 
 
 class TSTransactionError(RuntimeError):
@@ -933,41 +1081,53 @@ class TSTransactionError(RuntimeError):
 
 
 class TSTransaction(object):
-    def __init__(self, url=None):
-        self._url = url
+    def __init__(self, commit_to_origin=True, write_to_scratch=True):
+        self._commit_to_origin = commit_to_origin
+        self._write_to_scratch = write_to_scratch
         self._ts = None
 
     def __enter__(self):
-        if self._url:
-            self._ts = get_store_from_url(self._url)
-        else:
-            domains = get_domains().values()
-            if len(domains) != 1:
-                raise RuntimeError("Can't figure out a single local table store: {}".format(d for d in domains))
-            self._ts = domains[0]["table_store"]  # Assume 1 domain
-            self._url = 'file://' + domains[0]['path']
-            result = pull_from_origin(self._ts)
-            if not result['pulled']:
-                e = TSTransactionError("Can't pull latest table store: {}".format(result['reason']))
-                e.result = result
-                raise e
-            self._ts =  result['table_store']
-
+        self._ts, self._url = get_default_drift_config_and_source()
+        result = pull_from_origin(self._ts)
+        if not result['pulled']:
+            e = TSTransactionError("Can't pull latest table store: {}".format(result['reason']))
+            e.result = result
+            raise e
+        self._ts = result['table_store']
         return self._ts
 
     def __exit__(self, exc, value, traceback):
         if exc:
             return False
 
-        result = push_to_origin(self._ts)
-        if not result['pushed']:
-            e = TSTransactionError("Can't push to origin: {}".format(result))
-            e.result = result
-            raise e
+        if self._commit_to_origin:
+            result = push_to_origin(self._ts)
+            if not result['pushed']:
+                e = TSTransactionError("Can't push to origin: {}".format(result))
+                e.result = result
+                raise e
 
-        # Write back to source
+        if self._write_to_scratch:
+            # Update cache if applicable
+            source_backend = create_backend(self._url)
+            source_backend.save_table_store(self._ts)
+
+
+class TSLocal(object):
+    def __init__(self):
+        self._ts = None
+
+    def __enter__(self):
+        self._ts, self._url = get_default_drift_config_and_source()
+        return self._ts
+
+    def __exit__(self, exc, value, traceback):
+        if exc:
+            return False
+
+        # Update cache if applicable
         source_backend = create_backend(self._url)
-        self._ts.save_to_backend(source_backend)
+        source_backend.save_table_store(self._ts)
 
 
 def parse_8601(s):

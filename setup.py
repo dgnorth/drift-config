@@ -1,7 +1,8 @@
 import re
 import ast
 from setuptools import setup
-
+from pip.req import parse_requirements
+import pip.download
 
 _version_re = re.compile(r'__version__\s+=\s+(.*)')
 
@@ -18,8 +19,16 @@ setup(
     url='https://github.com/dgnorth/drift-config',
     packages=['driftconfig'],
     description='Drift Configuration Management.',
+
+    # the conditional on i.req avoids the error:
+    # distutils.errors.DistutilsError: Could not find suitable distribution for Requirement.parse('None')
     install_requires=[
-        'click>=2.0',
+        str(i.req)
+        for i in parse_requirements('requirements.txt', session=pip.download.PipSession())
+        if i.req
+    ],
+    tests_require=[
+        'werkzeug',
     ],
     classifiers=[
         'License :: OSI Approved :: MIT License',
@@ -28,5 +37,6 @@ setup(
     entry_points='''
         [console_scripts]
         driftconfig=driftconfig.cli:main
+        dconf=driftconfig.cli:cli
     '''
 )

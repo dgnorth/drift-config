@@ -97,12 +97,12 @@ local_store = create_backend('file://./~/.drift/config/' + domain_name)
 print "LOCAL STORE BACKEND IS", local_store, local_store.get_url()
 
 
-ts.save_to_backend(local_store)
+local_store.save_table_store(ts)
 
-ts.save_to_backend(s3_store)
+s3_store.save_table_store(ts)
 #redis_store.save(ts)
 
-ts = TableStore(local_store)
+ts = local_store.load_table_store()
 print "whee got ts", ts
 
 '''

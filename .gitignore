@@ -1,3 +1,8 @@
+# This project
+# Ignore zappa generated zip files
+drift-config*.zip
+zappa_settings.yml
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -77,6 +82,9 @@ celerybeat-schedule
 
 # dotenv
 .env
+
+# PyCharm
+.idea
 
 # virtualenv
 venv/

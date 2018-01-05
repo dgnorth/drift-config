@@ -4,7 +4,7 @@ ReLib Backends
 '''
 import logging
 import os
-import StringIO
+from StringIO import StringIO
 from urlparse import urlparse
 import zipfile
 
@@ -20,6 +20,7 @@ class S3Backend(Backend):
     """
 
     __scheme__ = 's3'
+    default_format = 'pickle'
 
     def __init__(self, bucket_name, folder_name, region_name=None, etag=None):
         import boto3
@@ -50,20 +51,31 @@ class S3Backend(Backend):
         return '{}/{}'.format(self.folder_name, file_name)
 
     def save_data(self, file_name, data):
-        f = StringIO.StringIO(data)
+        return self._save_data_with_bucket_logic(file_name, data, try_create_bucket=True)
+
+    def _save_data_with_bucket_logic(self, file_name, data, try_create_bucket):
+        from botocore.client import ClientError
+        f = StringIO(data)
         key_name = self.get_key_name(file_name)
         log.debug("Uploading %s bytes to s3://%s/%s", len(data), self.bucket_name, key_name)
-        self.s3_client.upload_fileobj(
-            f,
-            self.bucket_name,
-            key_name,
-            ExtraArgs={'ContentType': 'application/json'},
-        )
+        try:
+            self.s3_client.upload_fileobj(
+                f,
+                self.bucket_name,
+                key_name,
+                ExtraArgs={'ContentType': 'application/json'},
+            )
+        except ClientError as e:
+            if 'NoSuchBucket' in str(e) and try_create_bucket:
+                self.s3_client.create_bucket(Bucket=self.bucket_name)
+                return self._save_data_with_bucket_logic(file_name, data, try_create_bucket=False)
+            else:
+                raise
 
     def load_data(self, file_name):
         key_name = self.get_key_name(file_name)
         log.debug("Downloading s3://%s/%s", self.bucket_name, key_name)
-        f = StringIO.StringIO()
+        f = StringIO()
         self.s3_client.download_fileobj(self.bucket_name, key_name, f)
         return f.getvalue()
 
@@ -72,6 +84,7 @@ class S3Backend(Backend):
 class RedisBackend(Backend):
 
     __scheme__ = 'redis'
+    default_format = 'pickle'
 
     def __init__(self, host=None, port=None, db=None, prefix=None, expire_sec=None):
         import redis
@@ -81,30 +94,44 @@ class RedisBackend(Backend):
         self.prefix = prefix or ''
         self.expire_sec = expire_sec
 
+
         self.conn = redis.StrictRedis(
             host=host,
             port=port,
             db=db,
+            socket_timeout=5.0,
         )
 
         self.host, self.port, self.db = host, port, db
+        log.debug("%s initialized.", self)
 
     @classmethod
     def create_from_url_parts(cls, parts, query):
-        db = int(parts.path) if parts.path else None
-        prefix = query['prefix'][0] if 'prefix' in query else None
-        expire_sec = query['expire_sec'][0] if 'expire_sec' in query else None
-        return cls(host=parts.hostname, port=parts.port, db=db, prefix=prefix, expire_sec=expire_sec)
+        db = int(query['db'][0]) if 'db' in query else None
+        prefix = query['prefix'][0] if 'prefix' in query else ''
+        expire_sec = int(query['expire_sec'][0]) if 'expire_sec' in query else None
+        b = cls(host=parts.hostname, port=parts.port, db=db, prefix=prefix, expire_sec=expire_sec)
+        return b  # ZipEncoded(b)
+
+    @classmethod
+    def create_from_server_info(cls, host, port, domain_name):
+        b = cls(
+            host=host,
+            port=port,
+            prefix=domain_name,
+            expire_sec=None,  # Never expires
+            )
+        return b  # ZipEncoded(b)
 
     def __str__(self):
-        return "RedisBackend'{}:{}#{}'".format(self.host, self.port, self.db)
+        return "RedisBackend'{}:{}#{}, prefix={}'".format(self.host, self.port, self.db, self.prefix)
 
     def get_key_name(self, file_name):
-        return 'relib:{}:{}'.format(self.prefix, file_name)
+        return 'relib:drift-config:{}:{}'.format(self.prefix, file_name)
 
     def save_data(self, file_name, data):
         key_name = self.get_key_name(file_name)
-        log.debug("Adding %s bytes to Redis:%s", len(data), key_name)
+        log.debug("Adding %s bytes to Redis:%s with expiry:%s", len(data), key_name, self.expire_sec)
         self.conn.set(key_name, data)
         if self.expire_sec is not None:
             self.conn.expire(key_name, self.expire_sec)
@@ -115,8 +142,12 @@ class RedisBackend(Backend):
         log.debug("Reading from Redis:%s", key_name)
         data = self.conn.get(key_name)
         if data is None:
-            raise BackendError("Redis cache doesn't have '{}'".format(key_name))
+            raise BackendError("Redis cache doesn't have '{}'. (Is it expired?)".format(key_name))
         return data
+
+
+    def get_url(self):
+        return "redis://{}:{}/{}?prefix={}".format(self.host, self.port, self.db, self.prefix)
 
 
 @register
@@ -210,14 +241,14 @@ class ZipEncoded(Backend):
         self.aggregate = aggregate
 
     def start_saving(self):
-        self._fp = StringIO.StringIO()
+        self._fp = StringIO()
         self._zipfile = zipfile.ZipFile(self._fp, mode='w', compression=zipfile.ZIP_DEFLATED)
 
     def done_saving(self):
         self.aggregate.save_data("_zipped.zip", self._fp.getvalue())
 
     def start_loading(self):
-        self._fp = StringIO.StringIO()
+        self._fp = StringIO()
         self._fp.write(self.aggregate.load_data("_zipped.zip"))
         self._fp.seek(0)
         self._zipfile = zipfile.ZipFile(self._fp)

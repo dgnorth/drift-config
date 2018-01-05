@@ -15,6 +15,10 @@ import copy
 from urlparse import urlparse, parse_qs
 import hashlib
 from datetime import datetime
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 
 from schemautil import check_schema
 
@@ -23,7 +27,7 @@ log = logging.getLogger(__name__)
 
 # Global integrity check switches.
 # TODO: Add unit tests to check proper functionality of these flags.
-CHECK_INTEGRITY = ['pk', 'fk', 'unique', 'schema']
+CHECK_INTEGRITY = ['pk', 'fk', 'unique', 'schema', 'constraints']
 
 
 class RelibError(RuntimeError):
@@ -104,10 +108,11 @@ class Table(object):
         if len(fields) == 1 and isinstance(primary_key[fields[0]], (int, long, float)):
             canonicalized = primary_key[fields[0]]
         else:
+            for k in fields:
+                if k in primary_key and not self.PK_FIELDNAME_REGEX.match(str(primary_key[k])):
+                    raise ConstraintError("Primary key value {!r} didn't match pattern '{}' in table '{}'.".format(
+                        primary_key[k], self.PK_FIELDNAME_REGEX.pattern, self.name))
             canonicalized = '.'.join([str(primary_key[k]) for k in fields if k in primary_key])
-            if not self.PK_FIELDNAME_REGEX.match(canonicalized):
-                raise ConstraintError("Primary key value {!r} didn't match pattern '{}'.".format(
-                    canonicalized, self.PK_FIELDNAME_REGEX.pattern))
 
         return canonicalized
 
@@ -119,24 +124,27 @@ class Table(object):
         check_fk = 'fk' in CHECK_INTEGRITY
         check_unique = 'unique' in CHECK_INTEGRITY
         check_schema_ = 'schema' in CHECK_INTEGRITY
+        check_constraints = 'constraints' in CHECK_INTEGRITY
 
-        for c in self._constraints:
-            if c['type'] in ['primary_key', 'unique'] and not set(c['fields']).issubset(row):
-                raise ConstraintError("In table '{}', row violates constraint {}: {}".format(self._table_name, c, row))
+        if check_constraints:
+            for c in self._constraints:
+                if c['type'] == 'primary_key' and not set(c['fields']).issubset(row):
+                    raise ConstraintError("In table '{}', row violates constraint {}: {}".format(self._table_name, c, row))
 
-            if c['type'] == 'unique' and check_unique:
-                # Check for duplicates
-                search_criteria = {k: row[k] for k in c['fields']}
-                found = self.find(search_criteria)
-                if len(found):
-                    raise ConstraintError("Unique constraint violation on {} because of {}.".format(search_criteria, found))
-            elif c['type'] == 'foreign_key' and check_fk:
-                # Verify foreign row reference, if set.
-                if set(c['foreign_key_fields']).issubset(row):
-                    foreign_row = self.get_foreign_row(None, c['table'], c['foreign_key_fields'], _row=row)
-                    if len(foreign_row) < 1:
-                        raise ConstraintError("In table '{}', foreign key record in '{}' not found {}.\nRow data:\n{}".format(
-                            self.name, c['table'], {k: row[k] for k in c['foreign_key_fields']}, json.dumps(row, indent=4)))
+                # Do unique check but allow for "null" values or omitted field.
+                if c['type'] == 'unique' and check_unique and set(c['fields']).issubset(row):
+                    # Check for duplicates
+                    search_criteria = {k: row[k] for k in c['fields']}
+                    found = self.find(search_criteria)
+                    if len(found):
+                        raise ConstraintError("Unique constraint violation on {} because of {}.".format(search_criteria, found))
+                elif c['type'] == 'foreign_key' and check_fk:
+                    # Verify foreign row reference, if set.
+                    if set(c['foreign_key_fields']).issubset(row):
+                        foreign_row = self.get_foreign_row(None, c['table'], c['foreign_key_fields'], _row=row)
+                        if foreign_row is None:
+                            raise ConstraintError("In table '{}', foreign key record in '{}' not found {}.\nRow data:\n{}".format(
+                                self.name, c['table'], {k: row[k] for k in c['foreign_key_fields']}, json.dumps(row, indent=4)))
 
         # Check Json schema format compliance
         if check_schema_:
@@ -197,6 +205,21 @@ class Table(object):
         if not check_only:
             self._rows[row_key] = row
         return row
+
+    def update(self, row):
+        """
+        Same as add() but will update the row if it already exists.
+        """
+        # Turn off primary key violation and unique contraint check temporarily
+        tmp = CHECK_INTEGRITY[:]
+        if 'pk' in CHECK_INTEGRITY:
+            CHECK_INTEGRITY.remove('pk')
+        if 'unique' in CHECK_INTEGRITY:
+            CHECK_INTEGRITY.remove('unique')
+        try:
+            return self.add(row)
+        finally:
+            CHECK_INTEGRITY[:] = tmp
 
     def get(self, primary_key):
         """
@@ -306,7 +329,8 @@ class Table(object):
         if group_by:
             self._group_by_fields = group_by.split(',')
             if not set(self._group_by_fields).issubset(set(self._pk_fields)):
-                raise TableError("'group_by' fields {} must be part of primary key fields {}.".format(self._group_by_fields, self._pk_fields))
+                raise TableError("In table '{}', group_by fields {} must be part of "
+                    "primary key fields {}.".format(self.name, self._group_by_fields, self._pk_fields))
         else:
             self._group_by_fields = self._pk_fields
 
@@ -369,11 +393,19 @@ class Table(object):
         # Special case where foreign row is a reference to the 'row' itself, which is in the process
         # of being inserted.
         if self.name == table_name and set(search_criteria.items()).issubset(set(row.items())):
-            result = [row]
+            pass  # Just use the row
         else:
-            result = foreign_table.find(search_criteria)
+            # If it's on primary key, use it as it can be must faster than scanning the whole table.
+            if sorted(search_criteria.keys()) == sorted(foreign_table._pk_fields):
+                row = foreign_table.get(search_criteria)
+            else:
+                rows = foreign_table.find(search_criteria)
+                if rows:
+                    row = rows[0]
+                else:
+                    row = None
 
-        return result
+        return row
 
     def find_references(self, ref_row, _refs=None):
         """
@@ -470,11 +502,7 @@ class Table(object):
         """
         if not self._group_by_fields:
             data = fetch_from_storage(self.get_filename())
-            try:
-                rows = json.loads(data)
-            except Exception:
-                print "Error parsing json file", self.get_filename()
-                raise
+            rows = jsonloads(data, self.get_filename())
             for row in rows:
                 self.add(row)
         else:
@@ -482,13 +510,13 @@ class Table(object):
             row_per_file = self._group_by_fields == self._pk_fields
             index_file_name = self.get_filename(is_index_file=True)
             index = fetch_from_storage(index_file_name)
-            index = json.loads(index)
+            index = jsonloads(index, index_file_name)
 
             if row_per_file:
                 for primary_key in index:
                     file_name = self.get_filename(row=primary_key)
                     data = fetch_from_storage(file_name)
-                    row = json.loads(data)
+                    row = jsonloads(data, file_name)
                     self.add(row)
             else:
                 # Group one or more rows together for each file.
@@ -500,11 +528,7 @@ class Table(object):
                 for group_key in key_groups.values():
                     file_name = self.get_filename(row=group_key)
                     data = fetch_from_storage(file_name)
-                    try:
-                        rows = json.loads(data)
-                    except Exception:
-                        print "Error parsing json file", file_name
-                        raise
+                    rows = jsonloads(data, file_name)
                     for row in rows:
                         self.add(row)
 
@@ -591,7 +615,7 @@ class SingleRowTable(Table):
         Load document data.
         """
         data = fetch_from_storage(self.get_filename())
-        doc = json.loads(data)
+        doc = jsonloads(data, self.get_filename())
         self.add(doc)
 
 
@@ -624,7 +648,7 @@ class TableStore(object):
     TS_DEF_FILENAME = '#tsdef.json'
     TS_META_TABLENAME = '#tsmeta'
 
-    def __init__(self, backend=None):
+    def __init__(self):
         """
         Initialize TableStore. If 'backend' is set, it will load definition and data from
         that backend.
@@ -633,11 +657,12 @@ class TableStore(object):
         self._tableorder = []  # Table order, because of DAG
         self._origin = 'clean'
         self._add_metatable()
-        if backend:
-            self.load_from_backend(backend)
 
     def __str__(self):
-        return 'TableStore(Origin: {}. Tables: {})'.format(self._origin, len(self._tables))
+        if 'domain' in self._tables:
+            domain = self._tables['domain'].get()
+            origin = domain.get('origin', self._origin)
+        return 'TableStore(Origin: {}. Tables: {})'.format(origin, len(self._tables))
 
     @property
     def meta(self):
@@ -678,7 +703,7 @@ class TableStore(object):
         Initialize this instance using result from a previous call to
         'get_definition'.
         """
-        data = json.loads(definition)
+        data = jsonloads(definition, "<definition>")
         self.__dict__.update(data)
 
         # TODO: Maintaint proper DAG order of tables during serialization. It can be remedied
@@ -707,11 +732,12 @@ class TableStore(object):
             return
 
         b = DictBackend()
-        self.save_to_backend(b, run_integrity_check=False)
+        b.save_table_store(self, run_integrity_check=False)
+        ##self.save_to_backend(b, run_integrity_check=False)
         # Serializing in a table store will in fact run all the integrity checks.
-        TableStore(b)  # This will trigger any constraint or schema violations.
+        b.load_table_store()  # This will trigger any constraint or schema violations.
 
-    def save_to_backend(self, backend, force=False, run_integrity_check=True):
+    def _save_to_backend(self, backend, force=False, run_integrity_check=True):
         """
         Save this table store definition and table data to 'backend'.
 
@@ -753,7 +779,7 @@ class TableStore(object):
 
         backend.done_saving()
 
-    def load_from_backend(self, backend, skip_definition=False):
+    def _load_from_backend(self, backend, skip_definition=False):
         """
         Initialize this table store using data from 'backend'.
 
@@ -789,7 +815,7 @@ class TableStore(object):
         """Refreshes local meta data and returns a tuple of old and new metadata."""
         old = copy.deepcopy(self.meta.get())
         backend = create_backend('memory://' + datetime.utcnow().isoformat() + 'Z')
-        self.save_to_backend(backend)
+        backend.save_table_store(self)
         new = self.meta.get()
         if old != new:
             # If something changed, bump the version and timestamp
@@ -831,19 +857,49 @@ class TableStore(object):
         })
 
 
-def load_meta_from_backend(backend):
-    """Load TableStore from 'backend' that contains only the meta info."""
-    ts = TableStore()
-    ts.meta.load(backend.load_data)
-    return ts
-
-
 class Backend(object):
     """
     Backend is used to serialize table definition and data.
     """
 
     schemes = {}  # Backend registry using url scheme as key.
+    pickle_filename = 'table-store.pickle'
+    default_format = 'json'  # Default table store file format for the backend.
+
+    def load_table_store(self):
+        blob = None
+        try:
+            self.start_loading()
+            blob = self.load_data(self.pickle_filename)
+            self.done_loading()
+        except Exception as e:
+            log.info("%s does not contain pickle: %s. Assuming json source.", self, self.pickle_filename)
+        if blob:
+            ts = pickle.loads(blob)
+        else:
+            # Try json loading
+            ts = TableStore()
+            try:
+                ts._load_from_backend(self)
+            except Exception as e:
+                raise e
+        return ts
+
+    def save_table_store(self, ts, run_integrity_check=True, file_format=None):
+        file_format = file_format or self.default_format
+
+        if file_format == 'json':
+            ts._save_to_backend(self, run_integrity_check=run_integrity_check)
+            self.save_data(self.pickle_filename, '')  # An empty pickle file indicates json format.
+        elif file_format == 'pickle':
+            if run_integrity_check:
+                ts.check_integrity()
+            blob = pickle.dumps(ts, protocol=2)
+            self.start_saving()
+            self.save_data(self.pickle_filename, blob)
+            self.done_saving()
+        else:
+            raise RuntimeError("Unsupported table store file format '%s'" % file_format)
 
     def start_saving(self):
         pass
@@ -886,14 +942,15 @@ def create_backend(url):
 
 
 def get_store_from_url(url):
-    return TableStore(create_backend(url))
+    b = create_backend(url)
+    return b.load_table_store()
 
 
 def copy_table_store(table_store):
     """"Returns a stand-alone copy of 'table_store'."""
     backend = create_backend('memory://' + datetime.utcnow().isoformat() + 'Z')
-    table_store.save_to_backend(backend)
-    return TableStore(backend)
+    backend.save_table_store(table_store)
+    return backend.load_table_store()
 
 
 def diff_tables(t1, t2):
@@ -924,9 +981,8 @@ def diff_tables(t1, t2):
 
 def diff_meta(m1, m2):
     """Return a diff report on two meta tables."""
-    if m1 == m2:
+    if m1['checksum'] == m2['checksum']:
         return {'identical': True}
-
 
     diff = {}
     diff['identical'] = False
@@ -954,3 +1010,15 @@ def register(cls):
     """Decorator to register Backend class for a particular URL scheme."""
     Backend.schemes[cls.__scheme__] = cls
     return cls
+
+
+def jsonloads(json_text, filename):
+    """
+    Wrapper for json.loads function. If the json is bad, a proper error
+    is generated.
+    """
+    try:
+        return json.loads(json_text)
+    except Exception:
+        log.error("Error parsing json file %s", filename)
+        raise

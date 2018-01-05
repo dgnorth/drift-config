@@ -73,10 +73,6 @@ class TestRelib(unittest.TestCase):
         with self.assertRaises(ConstraintError) as context:
             table1.add({'bogus_field': 'dummy'})
 
-        # Test missing unique field
-        with self.assertRaises(ConstraintError) as context:
-            table1.add({'pk_field': 123})
-
         # Test successfull row inserts
         row1 = table1.add({'pk_field': 1, 'unique_field': 'iamunique1', 'tag': 'red'})
         row2 = table1.add({'pk_field': 2, 'unique_field': 'iamunique2', 'tag': 'blue'})
@@ -166,9 +162,9 @@ class TestRelib(unittest.TestCase):
         self.assertIn("foreign key record in 'table2' not found", str(context.exception))
 
         # Get foreign table row. Only 'blue' row is linked. The 'red' one is orphaned.
-        self.assertEqual([], table1.get_foreign_row(row1, 'table2'))
-        self.assertEqual([blue_row], table1.get_foreign_row(row2, 'table2'))
-        self.assertEqual([blue_row], table1.get_foreign_row(row3, 'table2'))
+        self.assertEqual(None, table1.get_foreign_row(row1, 'table2'))
+        self.assertEqual(blue_row, table1.get_foreign_row(row2, 'table2'))
+        self.assertEqual(blue_row, table1.get_foreign_row(row3, 'table2'))
 
         # Test bad table name in request for foreign row
         with self.assertRaises(TableError) as context:
@@ -301,11 +297,11 @@ class TestRelib(unittest.TestCase):
 
         # Also, make sure the check is run before serializing out.
         with self.assertRaises(ConstraintError) as context:
-            ts.save_to_backend(DictBackend())
+            DictBackend().save_table_store(ts)
         self.assertIn("foreign key record in 'continents' not found", str(context.exception))
 
     def test_find_references(self):
-        
+
         ts = TableStore()
 
         # Make three tables which all have master-detail relationship and use
@@ -330,7 +326,7 @@ class TestRelib(unittest.TestCase):
         t2r1 = t2.add({'middle_id': 51, 'm1': 1, 'm2': 'a', 'middle_unique_id': 'unique_51'})  # Has two 'detail' row refs.
         t2r2 = t2.add({'middle_id': 52, 'm1': 1, 'm2': 'a', 'middle_unique_id': 'unique_52'})  # Has two 'detail' row refs.
         t2r3 = t2.add({'middle_id': 53, 'm1': 2, 'm2': 'b', 'middle_unique_id': 'unique_53'})  # Has two 'detail' row refs.
-                
+
         t3 = ts.add_table('detail')
         t3.add_primary_key('detail_id')
         t3.add_foreign_key('middle_unique_id', 'middle')
@@ -431,10 +427,10 @@ class TestRelib(unittest.TestCase):
 
             ts = make_store(populate=True, row_as_file=row_as_file)
             storage = {}
-            ts.save_to_backend(DictBackend(storage))
+            DictBackend(storage).save_table_store(ts)
             storage = json.loads(json.dumps(storage))  # Do a quick json "leakage" check.
             ts_check = make_store(populate=False, row_as_file=row_as_file)
-            ts_check.load_from_backend(DictBackend(storage))
+            ts_check._load_from_backend(DictBackend(storage))
 
             # The original and the clone should be identical
             for table_name in ts.tables:
@@ -444,7 +440,7 @@ class TestRelib(unittest.TestCase):
             table_orig = ts.get_table('continents')
             table_check = make_store(populate=False, row_as_file=row_as_file).get_table('continents')
             storage = {}
-            ts.save_to_backend(DictBackend(storage))
+            DictBackend(storage).save_table_store(ts)
             table_check.load(lambda file_name: storage[file_name])
             self.assertEqual(table_orig._rows, table_check._rows)
 
@@ -464,9 +460,9 @@ class TestRelib(unittest.TestCase):
         for group_by in ['key1', 'key1,key2', 'key1,key3', 'key3,key1,key2']:
             ts = make_multi(populate=True, group_by=group_by)
             storage = {}
-            ts.save_to_backend(DictBackend(storage))
+            DictBackend(storage).save_table_store(ts)
             table_check = make_multi(populate=False, group_by=group_by)
-            table_check.load_from_backend(DictBackend(storage))
+            table_check._load_from_backend(DictBackend(storage))
             self.assertEqual(ts.get_table('multikey')._rows, table_check.get_table('multikey')._rows)
 
     def test_tablestore_definition(self):
@@ -499,18 +495,18 @@ class TestRelib(unittest.TestCase):
 
         for row_as_file in False, True:
             ts = make_store(populate=True, row_as_file=row_as_file)
-            ts.save_to_backend(backend)
+            backend.save_table_store(ts)
 
             # Load it back in
             ts_check = make_store(populate=False, row_as_file=row_as_file)
-            ts_check.load_from_backend(backend)
+            ts_check._load_from_backend(backend)
 
             # The original and the clone should be identical
             for table_name in ts.tables:
                 self.assertEqual(ts.get_table(table_name)._rows, ts_check.get_table(table_name)._rows)
 
             # Load it in clean
-            ts_check = TableStore(backend)
+            ts_check = backend.load_table_store()
             for table_name in ts.tables:
                 self.assertEqual(ts.get_table(table_name)._rows, ts_check.get_table(table_name)._rows)
 
