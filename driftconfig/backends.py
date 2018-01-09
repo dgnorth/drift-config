@@ -67,7 +67,10 @@ class S3Backend(Backend):
             )
         except ClientError as e:
             if 'NoSuchBucket' in str(e) and try_create_bucket:
-                self.s3_client.create_bucket(Bucket=self.bucket_name)
+                self.s3_client.create_bucket(
+                    Bucket=self.bucket_name,
+                    CreateBucketConfiguration={'LocationConstraint': self.region_name}
+                )
                 return self._save_data_with_bucket_logic(file_name, data, try_create_bucket=False)
             else:
                 raise
