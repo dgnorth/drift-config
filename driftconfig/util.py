@@ -340,12 +340,7 @@ def define_tenant(ts, tenant_name, product_name, tier_name):
         }
         tenant = tenants.get(pk)
         if tenant:
-            # If tenant isn't already active, signal it for provisioning of resources.
-            if tenant['state'] != 'active':
-                tenant['state'] = 'initializing'
-                report_row = add_report(deployable_name, 'initializing')
-            else:
-                report_row = add_report(deployable_name, 'active')
+            report_row = add_report(deployable_name, tenant['state'])
         else:
             # State is set to 'initializing' by default signaling provisioning of resources.
             tenant = tenants.add(pk)
@@ -409,7 +404,7 @@ def provision_tenant_resources(ts, tenant_name, deployable_name=None, preview=Fa
         for dryrun in [True, False]:
             for resource_module in depl['resources']:
                 legacy_resource_name = resource_module.rsplit('.', 1)[1]
-                resource_attributes = tenant_config[legacy_resource_name]
+                resource_attributes = tenant_config.setdefault(legacy_resource_name, {})
                 m = importlib.import_module(resource_module)
                 has_provision_method = hasattr(m, 'provision_resource')
 
@@ -427,10 +422,10 @@ def provision_tenant_resources(ts, tenant_name, deployable_name=None, preview=Fa
                         tenant_config=tenant_config,
                         attributes=resource_attributes,
                     )
+                    depl_report['resources'][resource_module] = result
                 else:
-                    result = None
+                    depl_report['resources'][resource_module] = resource_attributes
 
-                depl_report['resources'][resource_module] = result
 
         depl_report['old_state'] = tenant_config['state']
 
