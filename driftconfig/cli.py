@@ -264,26 +264,6 @@ def get_options(parser):
         action='store', help="Display name."
     )
 
-    # 'tier' command
-    p = subparsers.add_parser(
-        'tier',
-        description='Add a new entry to the config database.',
-    )
-
-    p.add_argument(
-        'action',
-        action='store', help="Action to perform.",
-        default='info',
-        choices=['info', 'add', 'update', 'delete'],
-    )
-
-    p.add_argument(
-        'name',
-        action='store',
-        help="The name of the tier.",
-        nargs='?'
-    )
-
 
 def init_command(args):
     print "Initializing config from", args.source
@@ -512,40 +492,6 @@ _ENTRY_TO_TABLE_NAME = {
     'organization': 'organizations',
     'product': 'products',
 }
-
-
-def tier_command(args):
-    if args.name is None and args.action != 'info':
-        print "Tier name is missing!"
-        sys.exit(1)
-
-    if args.action == 'info':
-        conf = get_default_drift_config()
-        if args.name is None:
-            print "Tiers:"
-            for tier in conf.get_table('tiers').find():
-                print "\t{} state={}, is_live={}".format(
-                    tier['tier_name'].ljust(21), tier['state'], tier['is_live'])
-        else:
-            tier = conf.get_table('tiers').find({'tier_name': args.name})
-            if not tier:
-                print "No tier named {} found.".format(args.name)
-                sys.exit(1)
-            tier = tier[0]
-            print "Tier {}:".format(tier['tier_name'])
-            print json.dumps(tier, indent=4)
-
-    elif args.action == 'add':
-        with TSTransaction() as ts:
-            tiers = ts.get_table('tiers')
-            if tiers.find({'tier_name': args.name}):
-                print "Tier {} already exists!".format(args.name)
-                sys.exit(1)
-            tiers.add({'tier_name': args.name})
-    elif args.action == 'update':
-        pass
-
-    print "Done!"
 
 
 def diff_command(args):
