@@ -484,7 +484,6 @@ def create_command(args):
         if target_folder != args.domain:
             print "Error: For S3 source, the target folder name and domain name must match."
             print "Target folder is '{}' but domain name is '{}'".format(target_folder, args.domain)
-            print "Suggestion: {}".format(args.source.replace(target_folder, args.domain))
             sys.exit(1)
     elif args.source.startswith('file://'):
         # Expand user vars
