@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 import time
 import json
 import logging
-import pkg_resources
 
 # pygments is optional for now
 try:
@@ -17,7 +16,7 @@ try:
 except ImportError:
     got_pygments = False
 
-from driftconfig.relib import create_backend, get_store_from_url, diff_meta, diff_tables, CHECK_INTEGRITY
+from driftconfig.relib import create_backend, get_store_from_url, diff_meta, diff_tables, CHECK_INTEGRITY, copy_table_store
 from driftconfig.config import get_drift_table_store, push_to_origin, pull_from_origin, TSTransaction, TSLocal
 from driftconfig.config import update_cache
 from driftconfig.backends import FileBackend
@@ -239,6 +238,31 @@ def get_options(parser):
         nargs='?',
     )
     p.add_argument('--config',
+        help="Specify which config source to use. Will override 'DRIFT_CONFIG_URL' environment variable."
+    )
+    p.add_argument(
+        "--preview", help="Only preview the changes, do not commit to origin.", action="store_true"
+    )
+
+    # The assign-tier command
+    p = subparsers.add_parser(
+        'assign-tier',
+        help="Assign a deployable to a tier.",
+    )
+    p.add_argument(
+        'deployable-name',
+        action='store',
+        help="Name of the deployable.",
+    )
+    p.add_argument(
+        "--tiers", help="List of tiers to enable the deployable, or all tiers if omitted.",
+        nargs='*',
+    )
+    p.add_argument(
+        "--inactive", help="Mark the deployable inactive. By default the deployable will be marked as active.", action="store_true"
+    )
+    p.add_argument(
+        '--config',
         help="Specify which config source to use. Will override 'DRIFT_CONFIG_URL' environment variable."
     )
     p.add_argument(
@@ -632,6 +656,136 @@ def provision_tenant_command(args):
         sys.exit(0)
 
 
+def assign_tier_command(args):
+
+    from drift.core.resources import (
+        get_tier_resource_modules, register_tier_defaults, register_this_deployable_on_tier)
+
+    deployable_name = vars(args)['deployable-name']
+    print "Assigning '{}':".format(deployable_name)
+
+    if args.config:
+        os.environ['DRIFT_CONFIG_URL'] = args.config
+
+    is_active = not args.inactive
+
+    with TSTransaction(commit_to_origin=not args.preview) as ts:
+        old_ts = copy_table_store(ts)
+
+        names = [d['deployable_name'] for d in ts.get_table('deployable-names').find()]
+        if not names:
+            print "No deployable registered. See 'drift-admin register' for more info."
+            sys.exit(1)
+
+        if deployable_name not in names:
+            print "Deployable '{}' not found. Select one of: {}.".format(
+                deployable_name,
+                ', '.join(names)
+            )
+            sys.exit(1)
+
+        if not args.tiers:
+            args.tiers = [tier['tier_name'] for tier in ts.get_table('tiers').find()]
+
+        for tier_name in args.tiers:
+            print "Enable deployable on tier {s.BRIGHT}{}{s.NORMAL}:".format(tier_name, **styles)
+            tier = ts.get_table('tiers').get({'tier_name': tier_name})
+            if not tier:
+                print "{f.RED}Tier '{}' not found! Exiting.".format(tier_name, **styles)
+                sys.exit(1)
+
+            ret = register_this_deployable_on_tier(
+                ts, tier_name=tier_name, deployable_name=deployable_name)
+
+            if ret['new_registration']['is_active'] != is_active:
+                ret['new_registration']['is_active'] = is_active
+                print "Note: Marking this deployable as {} on tier '{}'.".format(
+                    "active" if is_active else "inactive", tier_name)
+
+            # For convenience, register resource default values as well. This
+            # is idempotent so it's fine to call it periodically.
+            resources = get_tier_resource_modules(
+                ts=ts, tier_name=tier_name, skip_loading=False)
+
+            # See if there is any attribute that needs prompting,
+            # Any default parameter from a resource module that is marked as <PLEASE FILL IN> and
+            # is not already set in the config, is subject to prompting.
+            tier = ts.get_table('tiers').get({'tier_name': tier_name})
+            config_resources = tier.get('resources', {})
+
+            for resource in resources:
+                for k, v in resource['default_attributes'].items():
+                    if v == "<PLEASE FILL IN>":
+                        # Let's prompt if and only if the value isn't already set.
+                        attributes = config_resources.get(resource['module_name'], {})
+                        if k not in attributes or attributes[k] == "<PLEASE FILL IN>":
+                            print "Enter value for {s.BRIGHT}{}.{}{s.NORMAL}:".format(
+                                resource['module_name'], k, **styles),
+                            resource['default_attributes'][k] = raw_input()
+
+            print "\nDefault values for resources configured for this tier:"
+            print pretty(config_resources)
+
+            register_tier_defaults(ts=ts, tier_name=tier_name, resources=resources)
+
+            print "\nRegistration values for this deployable on this tier:"
+            print pretty(ret['new_registration'])
+            print ""
+
+        # Display the diff
+        _diff_ts(ts, old_ts)
+
+    if args.preview:
+        print "Preview changes only, not committing to origin."
+
+
+def _diff_ts(ts1, ts2):
+    from driftconfig.relib import diff_meta, diff_tables
+    # Get local table store and its meta state
+
+    ts1 = copy_table_store(ts1)
+    ts2 = copy_table_store(ts2)
+    local_m1, local_m2 = ts1.refresh_metadata()
+
+    # Get origin table store meta info
+    origin_meta = ts2.meta.get()
+
+    title = "Local and origin"
+    m1, m2 = origin_meta, local_m2
+    diff = diff_meta(m1, m2)
+
+    if diff['identical']:
+        print title, "is clean."
+    else:
+        print title, "are different:"
+        print "\tFirst checksum: ", diff['checksum']['first'][:7]
+        print "\tSecond checksum:", diff['checksum']['second'][:7]
+        if diff['modified_diff']:
+            print "\tTime since pull: ", str(diff['modified_diff']).split('.')[0]
+
+        print "\tNew tables:", diff['new_tables']
+        print "\tDeleted tables:", diff['deleted_tables']
+        print "\tModified tables:", diff['modified_tables']
+
+        try:
+            import jsondiff
+        except ImportError:
+            print "To get detailed diff do {s.BRIGHT}pip install jsondiff{s.NORMAL}".format(**styles)
+        else:
+            # Diff origin
+            for table_name in diff['modified_tables']:
+                t1 = ts1.get_table(table_name)
+                t2 = ts2.get_table(table_name)
+                tablediff = diff_tables(t1, t2)
+                print "\nTable diff for {s.BRIGHT}{}{s.NORMAL}".format(table_name, **styles)
+
+                for modified_row in tablediff['modified_rows']:
+                    d = json.loads(jsondiff.diff(
+                        modified_row['second'], modified_row['first'], dump=True)
+                    )
+                    print pretty(d)
+
+
 def run_command(args):
     fn = globals()["{}_command".format(args.command.replace("-", "_"))]
     fn(args)
@@ -709,14 +863,19 @@ def cli(ctx, config_url, verbose, organization, product):
     ctx.obj.product = product
 
 
-@cli.command()
-def info():
-    """List out all Drift configuration DB's that are active on this machine.
-    """
+@cli.group()
+def list():
+    """List out information in a configuration DB."""
+
+
+@list.command()
+def configs():
+    """List out all Drift configuration DB's that are active on this machine."""
     domains = get_domains()
     if not domains:
-        click.secho("No Drift configuration found on this machine. Run 'init' or 'create' "
-            "command to remedy.")
+        click.secho(
+            "No Drift configuration found on this machine. Run 'init' or 'create' command "
+            "to remedy.")
     else:
         ts, source = get_default_drift_config_and_source()
         got_default = False
@@ -742,6 +901,73 @@ def info():
                 click.secho("The config above is the default one as it's the only one cached locally in ~/.drift/config.")
         else:
             click.secho("Note: There is no default config specified!")
+
+
+@list.command()
+def deployables():
+    """Display registration info for deployables."""
+    ts = get_default_drift_config()
+    click.echo("List of Drift deployable plugins in ", nl=False)
+    _header(ts)
+    deployables = ts.get_table('deployable-names')
+
+    click.secho("Deployables and api routes:\n", bold=True)
+
+    def join_tables(master_table, tables, search_criteria=None, cb=None):
+        """
+        Joins rows from 'tables' to the rows of 'master_table' and returns them
+        as a single sequence.
+        'search_criteria' is applied to the 'master_table'.
+        """
+        result = []
+        rows = master_table.find(search_criteria or {})
+        for row in rows:
+            row = row.copy()
+            for table in tables:
+                other = table.get(row)
+                if other:
+                    row.update(other)
+            if cb:
+                cb(row)
+            result.append(row)
+        return result
+
+    def cb(row):
+        """Generate list of tier names using info from 'deployables' table."""
+        crit = {'deployable_name': row['deployable_name'], 'is_active': True}
+        tiers = [d['tier_name'] for d in ts.get_table('deployables').find(crit)]
+        row['tiers'] = ', '.join(sorted(tiers))
+
+    head = ['deployable_name', 'api', 'requires_api_key', 'tiers', 'display_name']
+    rows = join_tables(
+        master_table=deployables,
+        tables=[ts.get_table('routing'), ts.get_table('deployable-names')],
+        cb=cb,
+    )
+    tabulate(head, rows, indent='  ')
+
+
+@list.command()
+@click.option('-name', '-n', 'tenant_name', type=str, help="Show full info for given tenant.")
+def tenants(tenant_name):
+    """Display tenant info."""
+    conf = get_default_drift_config()
+    _header(conf)
+
+    if tenant_name is None:
+        tabulate(
+            ['organization_name', 'product_name', 'tenant_name', 'reserved_at', 'reserved_by'],
+            conf.get_table('tenant-names').find(),
+            indent='  ',
+        )
+    else:
+        tenant = conf.get_table('tenants').find({'tenant_name': tenant_name})
+        if not tenant:
+            click.secho("No tenant named {} found.".format(tenant_name), fg='red', bold=True)
+            sys.exit(1)
+
+        click.secho("Tenant {s.BRIGHT}{}{s.NORMAL}:".format(tenant_name, **styles))
+        click.echo(json.dumps(tenant, indent=4))
 
 
 @cli.command()
@@ -827,54 +1053,6 @@ def edit(tier_name):
         if edit:
             entry = json.loads(edit)
             tiers.update(entry)
-
-
-@cli.group()
-@pass_repo
-def deployable(repo):
-    """Manage registration of deployables in the configuration database."""
-
-
-@deployable.command()
-def info():
-    """Show deployable registration info."""
-    ts = get_default_drift_config()
-    click.echo("List of Drift deployable plugins in ", nl=False)
-    _header(ts)
-    deployables = ts.get_table('deployable-names')
-
-    click.secho("Deployables and api routes:\n", bold=True)
-
-    def join_tables(master_table, tables, search_criteria=None, cb=None):
-        """
-        Joins rows from 'tables' to the rows of 'master_table' and returns them
-        as a single sequence.
-        'search_criteria' is applied to the 'master_table'.
-        """
-        rows = master_table.find(search_criteria or {})
-        for row in rows:
-            row = row.copy()
-            for table in tables:
-                other = table.get(row)
-                if other:
-                    row.update(other)
-            if cb:
-                cb(row)
-            yield row
-
-    def cb(row):
-        """Generate list of tier names using info from 'deployables' table."""
-        crit = {'deployable_name': row['deployable_name'], 'is_active': True}
-        tiers = [d['tier_name'] for d in ts.get_table('deployables').find(crit)]
-        row['tiers'] = ', '.join(sorted(tiers))
-
-    head = ['deployable_name', 'api', 'requires_api_key', 'tiers', 'display_name']
-    rows = join_tables(
-        master_table=deployables,
-        tables=[ts.get_table('routing'), ts.get_table('deployable-names')],
-        cb=cb,
-    )
-    tabulate(head, list(rows), indent='  ')
 
 
 @cli.group()
@@ -1041,35 +1219,6 @@ def edit(product_name):
         if edit:
             entry = json.loads(edit)
             products.update(entry)
-
-
-@cli.group()
-@pass_repo
-def tenant(repo):
-    """Manage tenants in the configuration database."""
-
-
-@tenant.command()
-@click.option('-name', '-n', 'tenant_name', type=str, help="Show full info for given tenant.")
-def info(tenant_name):
-    """Show tenant info."""
-    conf = get_default_drift_config()
-    _header(conf)
-
-    if tenant_name is None:
-        tabulate(
-            ['organization_name', 'product_name', 'tenant_name', 'reserved_at', 'reserved_by'],
-            conf.get_table('tenant-names').find(),
-            indent='  ',
-        )
-    else:
-        tenant = conf.get_table('tenants').find({'tenant_name': tenant_name})
-        if not tenant:
-            click.secho("No tenant named {} found.".format(tenant_name), fg='red', bold=True)
-            sys.exit(1)
-
-        click.secho("Tenant {s.BRIGHT}{}{s.NORMAL}:".format(tenant_name, **styles))
-        click.echo(json.dumps(tenant, indent=4))
 
 
 def tabulate(headers, rows, indent=None, col_padding=None):
