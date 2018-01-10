@@ -20,9 +20,11 @@ from driftconfig.relib import create_backend, get_store_from_url, diff_meta, dif
 from driftconfig.config import get_drift_table_store, push_to_origin, pull_from_origin, TSTransaction, TSLocal
 from driftconfig.config import update_cache
 from driftconfig.backends import FileBackend
-from driftconfig.util import config_dir, get_domains, get_default_drift_config, get_default_drift_config_and_source, \
-    define_tenant, prepare_tenant_name, provision_tenant_resources
-
+from driftconfig.util import (
+    config_dir, get_domains, get_default_drift_config, get_default_drift_config_and_source, 
+    define_tenant, prepare_tenant_name, provision_tenant_resources,
+    get_tier_resource_modules, register_tier_defaults, register_this_deployable_on_tier
+    )
 
 log = logging.getLogger(__name__)
 
@@ -657,10 +659,6 @@ def provision_tenant_command(args):
 
 
 def assign_tier_command(args):
-
-    from drift.core.resources import (
-        get_tier_resource_modules, register_tier_defaults, register_this_deployable_on_tier)
-
     deployable_name = vars(args)['deployable-name']
     print "Assigning '{}':".format(deployable_name)
 
