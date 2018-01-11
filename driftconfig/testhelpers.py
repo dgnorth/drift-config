@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import os
+
 from string import maketrans
 
 from driftconfig.config import get_drift_table_store
@@ -32,7 +34,7 @@ def _add(fn, ts, name, config_size, count, **kw):
             fn(ts, '{}{}'.format(name, i), config_size, **kw)
 
 
-def create_test_domain(config_size=None):
+def create_test_domain(config_size=None, provision_resources=False):
     """
     Creates Drift config to use for testing.
     If 'deployable_name' is used, a simple set of single entry
@@ -64,9 +66,14 @@ def create_test_domain(config_size=None):
     # Then, "customes" can be added, organizations, products and tenants.
     _add(add_tier, ts, TIER_NAME, config_size, config_size['num_tiers'])
     _add(add_deployable, ts, DEPL_NAME, config_size, config_size['num_deployables'])
-    _add(add_organization, ts, ORG_NAME, config_size, config_size['num_org'], deployables=[DEPL_NAME])
-
+    _add(add_organization, ts, ORG_NAME, config_size, config_size['num_org'])
     set_sticky_config(ts)
+
+    if provision_resources:
+        # Always assume local servers
+        os.environ['DRIFT_USE_LOCAL_SERVERS'] = '1'
+        for tenant in ts.get_table('tenant-names').find():
+            provision_tenant_resources(ts=ts, tenant_name=tenant['tenant_name'])
 
     return ts
 
@@ -120,7 +127,7 @@ def add_deployable(ts, deployable_name, config_size):
         register_tier_defaults(ts=ts, tier_name=tier['tier_name'], resources=resources)
 
 
-def add_organization(ts, organization_name, config_size, deployables):
+def add_organization(ts, organization_name, config_size):
     ts.get_table('organizations').add({
         'organization_name': organization_name,
         'short_name': organization_name,
@@ -131,13 +138,13 @@ def add_organization(ts, organization_name, config_size, deployables):
     _add(
         add_product, ts, PROD_NAME, config_size, config_size['num_products'],
         organization_name=organization_name,
-        deployables=deployables,
     )
 
 
-def add_product(ts, product_name, config_size, organization_name, deployables):
+def add_product(ts, product_name, config_size, organization_name):
 
     product_name = '{}-{}'.format(organization_name, product_name)
+    deployables = [d['deployable_name'] for d in ts.get_table('deployables').find()]
 
     ts.get_table('products').add({
         'product_name': product_name,
@@ -163,7 +170,6 @@ def add_tenant(ts, tenant_name_prefix, config_size, product_name, organization_n
         # Define a tenant
         define_tenant(
             ts, tenant_name=tenant_name, product_name=product_name, tier_name=tier_name)
-        provision_tenant_resources(ts=ts, tenant_name=tenant_name)
 
 
 def get_name(which):
