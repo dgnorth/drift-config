@@ -438,7 +438,7 @@ def get_drift_table_store():
     deployable_names.add_schema({
         'type': 'object',
         'properties': {
-            'deployable_name': {'pattern': r'^([a-z-]){3,20}$'},
+            'deployable_name': {'pattern': r'^[a-z]([a-z-0-9]){2,20}$'},
             'display_name': {'type': 'string'},
             'resources': {'type': 'array', 'item': 'string'},
             'resource_attributes': {'type': 'object'},
