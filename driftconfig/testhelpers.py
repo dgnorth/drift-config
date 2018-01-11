@@ -34,17 +34,17 @@ def _add(fn, ts, name, config_size, count, **kw):
             fn(ts, '{}{}'.format(name, i), config_size, **kw)
 
 
-def create_test_domain(config_size=None, provision_resources=False):
+def create_test_domain(config_size=None, resources=None, resource_attributes=None):
     """
-    Creates Drift config to use for testing.
-    If 'deployable_name' is used, a simple set of single entry
-    for all tables is created using that name, else some auto-
-    generated names are used for all primary keys.
-    'config_size' contains how many entries to create for each
-    tables. The primary keys will have a serial number added at
-     the end.
+    Creates a pre-populated Drift config to use for testing.
+    'config_size' contains how many entries to create for each tables. The primary keys
+    will have a serial number added at the end. See code for more info.
+    'resources' is a list of resource module names to include in the config.
+    Note that the resources will be provisioned as well. Pass in 'resource_attributes'
+    as well for resource module initialization values.
     """
     config_size = config_size or {}
+    resources = resources or []
 
     config_size = {
         'num_org': config_size.get('num_org', 1),
@@ -65,11 +65,14 @@ def create_test_domain(config_size=None, provision_resources=False):
     # Next, add all the deployables and associate with every tier
     # Then, "customes" can be added, organizations, products and tenants.
     _add(add_tier, ts, TIER_NAME, config_size, config_size['num_tiers'])
-    _add(add_deployable, ts, DEPL_NAME, config_size, config_size['num_deployables'])
+    _add(
+        add_deployable, ts, DEPL_NAME, config_size, config_size['num_deployables'],
+        resources=resources, resource_attributes=resource_attributes,
+    )
     _add(add_organization, ts, ORG_NAME, config_size, config_size['num_org'])
     set_sticky_config(ts)
 
-    if provision_resources:
+    if resources:
         # Always assume local servers
         os.environ['DRIFT_USE_LOCAL_SERVERS'] = '1'
         for tenant in ts.get_table('tenant-names').find():
@@ -93,25 +96,13 @@ def add_tier(ts, tier_name, config_size):
     })
 
 
-def add_deployable(ts, deployable_name, config_size):
+def add_deployable(ts, deployable_name, config_size, resources, resource_attributes):
     package_info = {'name': deployable_name, 'description': deployable_name}
-    resource_attributes = {
-        "drift.core.resources.postgres": {
-               "models": ["driftbase.db.models"]
-        }
-    }
 
     register_this_deployable(
         ts=ts,
         package_info=package_info,
-        resources=[
-            "drift.core.resources.postgres",
-            "drift.core.resources.redis",
-            "drift.core.resources.apitarget",
-            "drift.core.resources.jwtsession",
-            "driftbase.resources.staticdata",
-            "driftbase.resources.gameserver",
-        ],
+        resources=resources,
         resource_attributes=resource_attributes,
     )
 
