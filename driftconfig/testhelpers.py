@@ -46,6 +46,10 @@ def create_test_domain(config_size=None, resources=None, resource_attributes=Non
     config_size = config_size or {}
     resources = resources or []
 
+    if resources:
+        # Always assume local servers
+        os.environ['DRIFT_USE_LOCAL_SERVERS'] = '1'
+
     config_size = {
         'num_org': config_size.get('num_org', 1),
         'num_tiers': config_size.get('num_tiers', 1),
@@ -72,11 +76,8 @@ def create_test_domain(config_size=None, resources=None, resource_attributes=Non
     _add(add_organization, ts, ORG_NAME, config_size, config_size['num_org'])
     set_sticky_config(ts)
 
-    if resources:
-        # Always assume local servers
-        os.environ['DRIFT_USE_LOCAL_SERVERS'] = '1'
-        for tenant in ts.get_table('tenant-names').find():
-            provision_tenant_resources(ts=ts, tenant_name=tenant['tenant_name'])
+    for tenant in ts.get_table('tenant-names').find():
+        provision_tenant_resources(ts=ts, tenant_name=tenant['tenant_name'])
 
     return ts
 
