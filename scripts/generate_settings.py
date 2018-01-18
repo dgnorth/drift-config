@@ -63,8 +63,7 @@ def cli(ctx, config_urls, verbose, test):
             tier_name = tier['tier_name']
 
             if 'organization_name' not in tier:
-                click.secho("Note: Tier {} does not define 'organization_name'. Skipping.".format(tier_name))
-                continue
+                click.secho("Note: Tier {} does not define 'organization_name'.".format(tier_name))
 
             s3_origin_url = domain['origin']
 
@@ -112,7 +111,7 @@ def cli(ctx, config_urls, verbose, test):
             tier_args = {
                 's3_origin_url': s3_origin_url,
                 'tier_name': tier_name,
-                'organization_name': tier['organization_name'],
+                'organization_name': tier.get('organization_name', domain['domain_name']),
                 'aws_region': aws_region,
                 's3_bucket_region': s3_bucket_region,
                 'bucket_name': bucket_name,
