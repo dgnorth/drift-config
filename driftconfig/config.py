@@ -1069,19 +1069,17 @@ def get_redis_cache_backend(ts, tier_name):
     # connection information for a Redis server. We make good use of that here,
     # but it does mean that this piece of code below is now coupled with
     # aforementioned module.
+    # TODO: Fix bad coupling as described above.
     domain = ts.get_table('domain').get()
     tier = ts.get_table('tiers').get({'tier_name': tier_name})
-    if 'resource_defaults' not in tier:
-        return
+    redis_info = tier['resources']['drift.core.resources.redis']
 
-    for resource in tier['resource_defaults']:
-        if resource['resource_name'] == 'redis':
-            b = RedisBackend.create_from_server_info(
-                host=resource['parameters']['host'],
-                port=resource['parameters']['port'],
-                domain_name=domain['domain_name'],
-            )
-            return b
+    b = RedisBackend.create_from_server_info(
+        host=redis_info['host'],
+        port=redis_info['port'],
+        domain_name=domain['domain_name'],
+    )
+    return b
 
 
 def update_cache(ts, tier_name):
