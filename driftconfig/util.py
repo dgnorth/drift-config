@@ -170,7 +170,7 @@ def get_drift_config(ts=None, tenant_name=None, tier_name=None, deployable_name=
     # Map tenant alias to actual tenant name if needed.
     tenant_name_row = ts.get_table('tenant-names').find({'alias': tenant_name})
     if tenant_name_row:
-        tenant_name = tenant_name_row['tenant_name']
+        tenant_name = tenant_name_row[0]['tenant_name']
 
     # HACK BEGIN: Until 'flask_config' has been repurposed into 'drift_app' config, we enable a little mapping between
     # here for convenience:
@@ -473,7 +473,10 @@ def refresh_tenants(ts, tenant_name=None, tier_name=None):
         )
 
 
+# NOTE THIS IS DEPRECATED FUNCTION AND NEEDS TO BE UPGRADED TO NU STYLE SUMTHIN
 def get_parameters(config, args, required_keys, resource_name):
+    print "ROUESR IDC NOAME IS", resource_name
+    bork
     defaults = config.tier.get('resource_defaults', [])
 
     # gather default parameters from tier
