@@ -1,24 +1,11 @@
 # -*- coding: utf-8 -*-
 import unittest
-import json
 
-from driftconfig.relib import Backend
 from driftconfig.config import get_drift_table_store, TSTransaction
 
 # TODO:
 # - test 'check_only' in Table.add().
 
-
-class TestBackend(Backend):
-    """Wrap a dict as a Backend for TableStore."""
-    def __init__(self, storage):
-        self.storage = storage
-
-    def save_data(self, k, v):
-        self.storage[k] = v
-
-    def load_data(self, k):
-        return self.storage[k]
 
 def create_basic_domain():
     ts = get_drift_table_store()
@@ -70,7 +57,6 @@ def create_basic_domain():
         })
 
     return ts
-
 
 
 class TestRelib(unittest.TestCase):
@@ -186,7 +172,6 @@ class TestRelib(unittest.TestCase):
             'password': 'x'
         })
 
-
         ##print "USER", json.dumps(service_user, indent=4)
 
         """
@@ -218,7 +203,6 @@ class TestRelib(unittest.TestCase):
         -> identity: "drift:dg.alice"
 
         """
-
 
         role_service = ts.get_table('access-roles').add({
             'role_name': 'service',
@@ -256,7 +240,5 @@ class TestPushPull(unittest.TestCase):
             row['display_name'] += " moar! "
 
 
-
 if __name__ == '__main__':
     unittest.main()
-
