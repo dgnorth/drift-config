@@ -379,6 +379,7 @@ def provision_tenant_resources(ts, tenant_name, deployable_name=None, preview=Fa
     If 'preview' then the provision_resource() callback function is not called.
     """
     tenant_info = ts.get_table('tenant-names').get({'tenant_name': tenant_name})
+    termination_protection = tenant_info.get('termination_protection', False)
     crit = {'tenant_name': tenant_name, 'tier_name': tenant_info['tier_name']}
     if deployable_name:
         crit['deployable_name'] = deployable_name
@@ -400,6 +401,12 @@ def provision_tenant_resources(ts, tenant_name, deployable_name=None, preview=Fa
         report['deployables'][tenant_config['deployable_name']] = depl_report
 
         log.info("  Deployable: '%s'", tenant_config['deployable_name'])
+
+        # Termination protection is specified for the tenant as a whole, but we need to see if
+        # individual deployable is uninitializing and stop it there.
+        if tenant_config['state'] == 'uninitializing' and termination_protection:
+            depl_report['error'] = "Tenant has termination protection. Can't uninitialize."
+            continue
 
         for dryrun in [True, False]:
             for resource_module in depl['resources']:
@@ -425,7 +432,6 @@ def provision_tenant_resources(ts, tenant_name, deployable_name=None, preview=Fa
                     depl_report['resources'][resource_module] = result
                 else:
                     depl_report['resources'][resource_module] = resource_attributes
-
 
         depl_report['old_state'] = tenant_config['state']
 
