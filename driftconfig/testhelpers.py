@@ -81,6 +81,15 @@ def create_test_domain(config_size=None, resources=None, resource_attributes=Non
     return ts
 
 
+def terminate_tenants(ts):
+    """Terminate (or unprovision) all tenants."""
+    tenants = ts.get_table('tenants')
+    for tenant in ts.get_table('tenant-names').find():
+        for tenant_details in tenants.find({'tenant_name': tenant['tenant_name']}):
+            tenant_details['state'] = 'uninitializing'
+        provision_tenant_resources(ts=ts, tenant_name=tenant['tenant_name'])
+
+
 def add_tier(ts, tier_name, config_size):
 
     # Can't have numbers in tier names
