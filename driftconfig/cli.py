@@ -21,7 +21,7 @@ from driftconfig.config import get_drift_table_store, push_to_origin, pull_from_
 from driftconfig.config import update_cache
 from driftconfig.backends import FileBackend
 from driftconfig.util import (
-    config_dir, get_domains, get_default_drift_config, get_default_drift_config_and_source, 
+    config_dir, get_domains, get_default_drift_config, get_default_drift_config_and_source,
     define_tenant, prepare_tenant_name, provision_tenant_resources,
     get_tier_resource_modules, register_tier_defaults, register_this_deployable_on_tier
     )
@@ -293,11 +293,9 @@ def get_options(parser):
 
 def init_command(args):
     print "Initializing config from", args.source
-    from config import load_from_origin
-    ##ts = get_store_from_url(args.source)
     if args.ignore_errors:
         del CHECK_INTEGRITY[:]
-    ts = load_from_origin(create_backend(args.source))
+    ts = create_backend(args.source).load_table_store()
     domain_name = ts.get_table('domain')['domain_name']
     print "Config domain name: ", domain_name
     local_store = create_backend('file://' + config_dir(domain_name, user_dir=args.user_dir))

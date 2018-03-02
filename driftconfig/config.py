@@ -958,22 +958,12 @@ def get_drift_table_store():
         'required': ['s3_bucket'],
     })
 
-
     # END OF TABLE DEFS
 
     definition = ts.get_definition()
     new_ts = TableStore()
     new_ts.init_from_definition(definition)
     return new_ts
-
-
-def load_from_origin(origin_backend):
-    from cPickle import loads
-    origin_backend.start_loading()
-    blob = origin_backend.load_data('table-store.pickle')
-    origin_backend.done_loading()
-    ts = loads(blob)
-    return ts
 
 
 def push_to_origin(local_ts, force=False, _first=False, _origin_crc=None):
