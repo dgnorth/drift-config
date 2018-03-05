@@ -647,6 +647,7 @@ class TableStore(object):
 
     TS_DEF_FILENAME = '#tsdef.json'
     TS_META_TABLENAME = '#tsmeta'
+    FILEFORMAT_VERSION = 6
 
     def __init__(self):
         """
@@ -879,7 +880,18 @@ class Backend(object):
         except Exception as e:
             log.info("%s does not contain pickle: %s. Assuming json source.", self, self.pickle_filename)
         if blob:
-            ts = pickle.loads(blob)
+            versioned_ts = pickle.loads(blob)
+            if not isinstance(versioned_ts, tuple):
+                # Legacy format
+                loaded_version, ts_blob = -1, versioned_ts
+            else:
+                loaded_version, ts_blob = versioned_ts
+
+            if loaded_version != TableStore.FILEFORMAT_VERSION:
+                msg = "Binary file format version mismatch. Code is at {} but loaded data is at {}.".format(
+                    TableStore.FILEFORMAT_VERSION, loaded_version)
+                raise RuntimeError(msg)
+            ts = pickle.loads(ts_blob)
         else:
             # Try json loading
             ts = TableStore()
@@ -898,9 +910,10 @@ class Backend(object):
         elif file_format == 'pickle':
             if run_integrity_check:
                 ts.check_integrity()
-            blob = pickle.dumps(ts, protocol=2)
+            blob = pickle.dumps(ts, protocol=-1)
+            versioned_blob = pickle.dumps((TableStore.FILEFORMAT_VERSION, blob), protocol=-1)
             self.start_saving()
-            self.save_data(self.pickle_filename, blob)
+            self.save_data(self.pickle_filename, versioned_blob)
             self.done_saving()
         else:
             raise RuntimeError("Unsupported table store file format '%s'" % file_format)
