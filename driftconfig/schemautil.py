@@ -8,7 +8,10 @@ import logging
 
 import jsonschema
 from json import dumps
-from StringIO import StringIO
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
 
 log = logging.getLogger(__name__)
 
@@ -53,7 +56,7 @@ def _generate_validation_error_report(e, json_object):
     try:
         orig, o[e.path[0]] = o[e.path[0]], marker
     except:
-        print "Error setting marker in schemachecker!"
+        print("Error setting marker in schemachecker!")
 
     # Pretty print the object and search for the marker
     json_error = dumps(json_object, indent=4)

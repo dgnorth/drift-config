@@ -968,7 +968,10 @@ def get_drift_table_store():
 
 
 def load_from_origin(origin_backend):
-    from cPickle import loads
+    try:
+        from cPickle import loads
+    except ImportError:
+        from _pickle import loads
     origin_backend.start_loading()
     blob = origin_backend.load_data('table-store.pickle')
     origin_backend.done_loading()

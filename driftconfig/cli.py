@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from __future__ import print_function
 import os
 import os.path
 import sys
@@ -292,17 +293,17 @@ def get_options(parser):
 
 
 def init_command(args):
-    print "Initializing config from", args.source
-    from config import load_from_origin
+    print("Initializing config from", args.source)
+    from .config import load_from_origin
     ##ts = get_store_from_url(args.source)
     if args.ignore_errors:
         del CHECK_INTEGRITY[:]
     ts = load_from_origin(create_backend(args.source))
     domain_name = ts.get_table('domain')['domain_name']
-    print "Config domain name: ", domain_name
+    print("Config domain name: ", domain_name)
     local_store = create_backend('file://' + config_dir(domain_name, user_dir=args.user_dir))
     local_store.save_table_store(ts)
-    print "Config stored at: ", local_store
+    print("Config stored at: ", local_store)
 
 
 def _format_domain_info(domain_info):
@@ -315,10 +316,10 @@ def list_command(args):
     # Enumerate subfolders at drift/config and see what's there
     domains = get_domains(user_dir=args.user_dir)
     if not domains:
-        print "No Drift configuration found at", config_dir('', user_dir=args.user_dir)
+        print("No Drift configuration found at", config_dir('', user_dir=args.user_dir))
     else:
-        for d in domains.values():
-            print _format_domain_info(d)
+        for d in list(domains.values()):
+            print(_format_domain_info(d))
 
 
 def pull_command(args):
@@ -329,44 +330,44 @@ def pull_command(args):
 
 
 def pull_config_loop(args):
-    print "Starting the pull config loop"
+    print("Starting the pull config loop")
     while now() < end_time:
         st = time.time()
         _pull_command(args)
         diff = time.time() - st
         this_sleep_time = max(sleep_time - diff, 0)
-        print "Waiting for %.1f sec" % this_sleep_time
+        print("Waiting for %.1f sec" % this_sleep_time)
         time.sleep(this_sleep_time)
-    print "Completed in %.1f sec" % (now() - start_time).total_seconds()
+    print("Completed in %.1f sec" % (now() - start_time).total_seconds())
 
 
 def _pull_command(args):
-    for domain_name, domain_info in get_domains(user_dir=args.user_dir).items():
+    for domain_name, domain_info in list(get_domains(user_dir=args.user_dir).items()):
         if args.domain and args.domain != domain_name:
             continue
 
         result = pull_from_origin(domain_info['table_store'], ignore_if_modified=args.ignore_if_modified, force=args.force)
 
         if not result['pulled']:
-            print "Pull failed for", domain_name, ". Reason:", result['reason']
+            print("Pull failed for", domain_name, ". Reason:", result['reason'])
             if result['reason'] == 'local_is_modified':
-                print "Use --ignore-if-modified to overwrite local changes."
+                print("Use --ignore-if-modified to overwrite local changes.")
             else:
-                print "Use --force to force a pull."
+                print("Use --force to force a pull.")
         else:
             if result['reason'] == 'pulled_from_origin':
                 local_backend = create_backend('file://' + domain_info['path'])
                 local_backend.save_table_store(result['table_store'])
 
-            print "Config for {} pulled. Reason: {}".format(domain_name, result['reason'])
+            print("Config for {} pulled. Reason: {}".format(domain_name, result['reason']))
 
 
 def cache_command(args):
     if args.domain:
         os.environ['DRIFT_CONFIG_URL'] = args.domain
     ts = get_default_drift_config()
-    print "Updating cache for '{}' - {}".format(
-        ts.get_table('domain')['domain_name'], ts)
+    print("Updating cache for '{}' - {}".format(
+        ts.get_table('domain')['domain_name'], ts))
 
     for tier in ts.get_table('tiers').find():
         tier_name = tier['tier_name']
@@ -402,10 +403,10 @@ def cache_command(args):
 
 
 def migrate_command(args):
-    print "Migrating '{}'".format(args.domain)
+    print("Migrating '{}'".format(args.domain))
     path = config_dir(args.domain, user_dir=args.user_dir)
     if not os.path.exists(path):
-        print "Path not found:", path
+        print("Path not found:", path)
         sys.exit(1)
 
     ts = get_drift_table_store()
@@ -441,26 +442,26 @@ end_time = start_time + timedelta(seconds=run_time)
 def push_command(args):
     domain_info = get_domains(user_dir=args.user_dir).get(args.domain)
     if not domain_info:
-        print "Can't push '{}'.".format(args.domain)
+        print("Can't push '{}'.".format(args.domain))
         sys.exit(1)
 
     ts = domain_info['table_store']
     origin = ts.get_table('domain')['origin']
-    print "Pushing local config to source", origin
+    print("Pushing local config to source", origin)
     result = push_to_origin(ts, args.force)
     if not result['pushed']:
-        print "Push failed. Reason:", result['reason']
-        print "Origin has changed. Use --force to force push."
+        print("Push failed. Reason:", result['reason'])
+        print("Origin has changed. Use --force to force push.")
         if 'time_diff' in result:
-            print "Time diff", result['time_diff']
+            print("Time diff", result['time_diff'])
     else:
-        print "Config pushed. Reason: ", result['reason']
+        print("Config pushed. Reason: ", result['reason'])
         local_store = create_backend('file://' + domain_info['path'])
         local_store.save_table_store(ts)
 
 
 def copy_command(args):
-    print "Copy '%s' to '%s'" % (args.source_url, args.dest_url)
+    print("Copy '%s' to '%s'" % (args.source_url, args.dest_url))
     if args.source_url == '.':
         ts = get_default_drift_config()
     else:
@@ -468,15 +469,15 @@ def copy_command(args):
     b = create_backend(args.dest_url)
     b.default_format = 'pickle' if args.pickle else 'json'
     b.save_table_store(ts)
-    print "Done."
+    print("Done.")
 
 
 def create_command(args):
 
     domain_info = get_domains(user_dir=args.user_dir).get(args.domain)
     if domain_info:
-        print "The domain name '{}' is taken:".format(args.domain)
-        print _format_domain_info(domain_info)
+        print("The domain name '{}' is taken:".format(args.domain))
+        print(_format_domain_info(domain_info))
         sys.exit(1)
 
     # Force s3 naming convention. The root folder name and domain name must match.
@@ -488,8 +489,8 @@ def create_command(args):
         s3_backend = create_backend(args.source)
         target_folder = s3_backend.folder_name.rsplit('/')[-1]
         if target_folder != args.domain:
-            print "Error: For S3 source, the target folder name and domain name must match."
-            print "Target folder is '{}' but domain name is '{}'".format(target_folder, args.domain)
+            print("Error: For S3 source, the target folder name and domain name must match.")
+            print("Target folder is '{}' but domain name is '{}'".format(target_folder, args.domain))
             sys.exit(1)
     elif args.source.startswith('file://'):
         # Expand user vars
@@ -504,12 +505,12 @@ def create_command(args):
     domain_folder = config_dir(args.domain, user_dir=args.user_dir)
     local_store = create_backend('file://' + domain_folder)
     local_store.save_table_store(ts)
-    print "New config for '{}' saved to {}.".format(args.domain, domain_folder)
-    print "Pushing to origin..."
+    print("New config for '{}' saved to {}.".format(args.domain, domain_folder))
+    print("Pushing to origin...")
     result = push_to_origin(ts, _first=True)
     if not result['pushed']:
-        print "Push failed. Reason:", result['reason']
-    print "Done."
+        print("Push failed. Reason:", result['reason'])
+    print("Done.")
 
 
 _ENTRY_TO_TABLE_NAME = {
@@ -541,17 +542,17 @@ def diff_command(args):
     for title, m1, m2, details in local_diff, origin_diff:
         diff = diff_meta(m1, m2)
         if diff['identical']:
-            print title, "is clean."
+            print(title, "is clean.")
         else:
-            print title, "are different:"
-            print "\tFirst checksum: ", diff['checksum']['first'][:7]
-            print "\tSecond checksum:", diff['checksum']['second'][:7]
+            print(title, "are different:")
+            print("\tFirst checksum: ", diff['checksum']['first'][:7])
+            print("\tSecond checksum:", diff['checksum']['second'][:7])
             if diff['modified_diff']:
-                print "\tTime since pull: ", str(diff['modified_diff']).split('.')[0]
+                print("\tTime since pull: ", str(diff['modified_diff']).split('.')[0])
 
-            print "\tNew tables:", diff['new_tables']
-            print "\tDeleted tables:", diff['deleted_tables']
-            print "\tModified tables:", diff['modified_tables']
+            print("\tNew tables:", diff['new_tables'])
+            print("\tDeleted tables:", diff['deleted_tables'])
+            print("\tModified tables:", diff['modified_tables'])
 
             if details:
                 # Diff origin
@@ -560,8 +561,8 @@ def diff_command(args):
                     t1 = local_ts.get_table(table_name)
                     t2 = origin_ts.get_table(table_name)
                     tablediff = diff_tables(t1, t2)
-                    print "\nTable diff for", table_name, "\n(first=local, second=origin):"
-                    print json.dumps(tablediff, indent=4, sort_keys=True)
+                    print("\nTable diff for", table_name, "\n(first=local, second=origin):")
+                    print(json.dumps(tablediff, indent=4, sort_keys=True))
 
 
 def create_tenant_command(args):
@@ -581,11 +582,11 @@ def create_tenant_command(args):
         tenant = ts.get_table('tenant-names').get({'tenant_name': tenant_name})
         if tenant:
             if tenant['tier_name'] != tier_name:
-                print "Tenant '{}' is on tier '{}'. Exiting.".format(tenant_name, tenant['tier_name'])
+                print("Tenant '{}' is on tier '{}'. Exiting.".format(tenant_name, tenant['tier_name']))
                 sys.exit(1)
 
-            print "Tenant '{}' already exists. Refreshing it for tier '{}'...".format(
-                tenant_name, tier_name)
+            print("Tenant '{}' already exists. Refreshing it for tier '{}'...".format(
+                tenant_name, tier_name))
 
         result = define_tenant(
             ts=ts,
@@ -594,24 +595,24 @@ def create_tenant_command(args):
             tier_name=tier_name
         )
 
-    print "Tenant '{}' created/refreshed on tier '{}'.".format(tenant_name, tier_name)
-    print pretty(result)
+    print("Tenant '{}' created/refreshed on tier '{}'.".format(tenant_name, tier_name))
+    print(pretty(result))
     if args.preview:
-        print "\nPreview changes only, not committing to origin."
+        print("\nPreview changes only, not committing to origin.")
         sys.exit(0)
 
 
 def refresh_tenant_command(args):
 
     tenant_name = vars(args)['tenant-name']
-    print "Refreshing '{}':".format(tenant_name)
+    print("Refreshing '{}':".format(tenant_name))
     if args.config:
         os.environ['DRIFT_CONFIG_URL'] = args.config
 
     with TSTransaction(commit_to_origin=not args.preview) as ts:
         tenant_info = ts.get_table('tenant-names').get({'tenant_name': tenant_name})
         if not tenant_info:
-            print "Tenant '{}' not found!".format(tenant_name)
+            print("Tenant '{}' not found!".format(tenant_name))
             sys.exit(1)
 
         result = define_tenant(
@@ -621,24 +622,24 @@ def refresh_tenant_command(args):
             tier_name=tenant_info['tier_name'],
         )
 
-    print "Result:"
-    print pretty(result)
+    print("Result:")
+    print(pretty(result))
     if args.preview:
-        print "\nPreview changes only, not committing to origin."
+        print("\nPreview changes only, not committing to origin.")
         sys.exit(0)
 
 
 def provision_tenant_command(args):
 
     tenant_name = vars(args)['tenant-name']
-    print "Provisioning '{}':".format(tenant_name)
+    print("Provisioning '{}':".format(tenant_name))
     if args.config:
         os.environ['DRIFT_CONFIG_URL'] = args.config
 
     with TSTransaction(commit_to_origin=not args.preview) as ts:
         tenant_info = ts.get_table('tenant-names').get({'tenant_name': tenant_name})
         if not tenant_info:
-            print "Tenant '{}' not found!".format(tenant_name)
+            print("Tenant '{}' not found!".format(tenant_name))
             sys.exit(1)
 
         # Refresh for good measure
@@ -651,16 +652,16 @@ def provision_tenant_command(args):
 
         report = provision_tenant_resources(ts=ts, tenant_name=tenant_name, preview=args.preview)
 
-    print "Result:"
-    print pretty(report)
+    print("Result:")
+    print(pretty(report))
     if args.preview:
-        print "\nPreview changes only, not committing to origin."
+        print("\nPreview changes only, not committing to origin.")
         sys.exit(0)
 
 
 def assign_tier_command(args):
     deployable_name = vars(args)['deployable-name']
-    print "Assigning '{}':".format(deployable_name)
+    print("Assigning '{}':".format(deployable_name))
 
     if args.config:
         os.environ['DRIFT_CONFIG_URL'] = args.config
@@ -672,24 +673,24 @@ def assign_tier_command(args):
 
         names = [d['deployable_name'] for d in ts.get_table('deployable-names').find()]
         if not names:
-            print "No deployable registered. See 'drift-admin register' for more info."
+            print("No deployable registered. See 'drift-admin register' for more info.")
             sys.exit(1)
 
         if deployable_name not in names:
-            print "Deployable '{}' not found. Select one of: {}.".format(
+            print("Deployable '{}' not found. Select one of: {}.".format(
                 deployable_name,
                 ', '.join(names)
-            )
+            ))
             sys.exit(1)
 
         if not args.tiers:
             args.tiers = [tier['tier_name'] for tier in ts.get_table('tiers').find()]
 
         for tier_name in args.tiers:
-            print "Enable deployable on tier {s.BRIGHT}{}{s.NORMAL}:".format(tier_name, **styles)
+            print("Enable deployable on tier {s.BRIGHT}{}{s.NORMAL}:".format(tier_name, **styles))
             tier = ts.get_table('tiers').get({'tier_name': tier_name})
             if not tier:
-                print "{f.RED}Tier '{}' not found! Exiting.".format(tier_name, **styles)
+                print("{f.RED}Tier '{}' not found! Exiting.".format(tier_name, **styles))
                 sys.exit(1)
 
             ret = register_this_deployable_on_tier(
@@ -697,8 +698,8 @@ def assign_tier_command(args):
 
             if ret['new_registration']['is_active'] != is_active:
                 ret['new_registration']['is_active'] = is_active
-                print "Note: Marking this deployable as {} on tier '{}'.".format(
-                    "active" if is_active else "inactive", tier_name)
+                print("Note: Marking this deployable as {} on tier '{}'.".format(
+                    "active" if is_active else "inactive", tier_name))
 
             # For convenience, register resource default values as well. This
             # is idempotent so it's fine to call it periodically.
@@ -712,29 +713,29 @@ def assign_tier_command(args):
             config_resources = tier.get('resources', {})
 
             for resource in resources:
-                for k, v in resource['default_attributes'].items():
+                for k, v in list(resource['default_attributes'].items()):
                     if v == "<PLEASE FILL IN>":
                         # Let's prompt if and only if the value isn't already set.
                         attributes = config_resources.get(resource['module_name'], {})
                         if k not in attributes or attributes[k] == "<PLEASE FILL IN>":
-                            print "Enter value for {s.BRIGHT}{}.{}{s.NORMAL}:".format(
-                                resource['module_name'], k, **styles),
-                            resource['default_attributes'][k] = raw_input()
+                            print("Enter value for {s.BRIGHT}{}.{}{s.NORMAL}:".format(
+                                resource['module_name'], k, **styles), end=' ')
+                            resource['default_attributes'][k] = input()
 
-            print "\nDefault values for resources configured for this tier:"
-            print pretty(config_resources)
+            print("\nDefault values for resources configured for this tier:")
+            print(pretty(config_resources))
 
             register_tier_defaults(ts=ts, tier_name=tier_name, resources=resources)
 
-            print "\nRegistration values for this deployable on this tier:"
-            print pretty(ret['new_registration'])
-            print ""
+            print("\nRegistration values for this deployable on this tier:")
+            print(pretty(ret['new_registration']))
+            print("")
 
         # Display the diff
         _diff_ts(ts, old_ts)
 
     if args.preview:
-        print "Preview changes only, not committing to origin."
+        print("Preview changes only, not committing to origin.")
 
 
 def _diff_ts(ts1, ts2):
@@ -753,35 +754,35 @@ def _diff_ts(ts1, ts2):
     diff = diff_meta(m1, m2)
 
     if diff['identical']:
-        print title, "is clean."
+        print(title, "is clean.")
     else:
-        print title, "are different:"
-        print "\tFirst checksum: ", diff['checksum']['first'][:7]
-        print "\tSecond checksum:", diff['checksum']['second'][:7]
+        print(title, "are different:")
+        print("\tFirst checksum: ", diff['checksum']['first'][:7])
+        print("\tSecond checksum:", diff['checksum']['second'][:7])
         if diff['modified_diff']:
-            print "\tTime since pull: ", str(diff['modified_diff']).split('.')[0]
+            print("\tTime since pull: ", str(diff['modified_diff']).split('.')[0])
 
-        print "\tNew tables:", diff['new_tables']
-        print "\tDeleted tables:", diff['deleted_tables']
-        print "\tModified tables:", diff['modified_tables']
+        print("\tNew tables:", diff['new_tables'])
+        print("\tDeleted tables:", diff['deleted_tables'])
+        print("\tModified tables:", diff['modified_tables'])
 
         try:
             import jsondiff
         except ImportError:
-            print "To get detailed diff do {s.BRIGHT}pip install jsondiff{s.NORMAL}".format(**styles)
+            print("To get detailed diff do {s.BRIGHT}pip install jsondiff{s.NORMAL}".format(**styles))
         else:
             # Diff origin
             for table_name in diff['modified_tables']:
                 t1 = ts1.get_table(table_name)
                 t2 = ts2.get_table(table_name)
                 tablediff = diff_tables(t1, t2)
-                print "\nTable diff for {s.BRIGHT}{}{s.NORMAL}".format(table_name, **styles)
+                print("\nTable diff for {s.BRIGHT}{}{s.NORMAL}".format(table_name, **styles))
 
                 for modified_row in tablediff['modified_rows']:
                     d = json.loads(jsondiff.diff(
                         modified_row['second'], modified_row['first'], dump=True)
                     )
-                    print pretty(d)
+                    print(pretty(d))
 
 
 def run_command(args):
@@ -878,7 +879,7 @@ def configs():
         ts, source = get_default_drift_config_and_source()
         got_default = False
 
-        for domain_info in domains.values():
+        for domain_info in list(domains.values()):
             domain = domain_info['table_store'].get_table('domain')
             is_default = domain['domain_name'] == ts.get_table('domain')['domain_name']
             if is_default:
@@ -1261,7 +1262,7 @@ def pretty(ob, lexer=None):
     Command line switches can be used to control highlighting and style.
     """
     if lexer is None:
-        if isinstance(ob, basestring):
+        if isinstance(ob, str):
             lexer = 'text'
         else:
             lexer = 'json'

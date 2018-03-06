@@ -113,7 +113,7 @@ def get_default_drift_config_and_source():
                 return domain['table_store'], 'file://' + domain['path']
             else:
                 raise RuntimeError("No domain named '{}' found on local disk. Available domains: {}.".format(
-                    url, ", ".join(domains.keys())))
+                    url, ", ".join(list(domains.keys()))))
 
         b = create_backend(url)
         return b.load_table_store(), url
@@ -126,13 +126,13 @@ def get_default_drift_config_and_source():
                 "environment variable 'DRIFT_CONFIG_URL'."
             )
         elif len(domains) != 1:
-            domain_names = ", ".join(domains.keys())
+            domain_names = ", ".join(list(domains.keys()))
             raise ConfigNotFound("Multiple Drift configurations found in ~/.drift/config.\n"
                 "Specify which configuration to use by referencing it in the "
                 "'DRIFT_CONFIG_URL' environment variable.\n"
                 "Configurations available on local disk: %s."
                 "" % domain_names)
-        domain = domains.values()[0]
+        domain = list(domains.values())[0]
         return domain['table_store'], 'file://' + domain['path']
 
 
@@ -357,12 +357,12 @@ def define_tenant(ts, tenant_name, product_name, tier_name):
             resource_attribs = tenant.setdefault(legacy_resource_name, {})
 
             # Apply tier defaults
-            for k, v in tier['resources'][resource_name].items():
+            for k, v in list(tier['resources'][resource_name].items()):
                 resource_attribs.setdefault(k, v)
 
             # Apply deployable defaults
             deployable_defaults = depl_names['resource_attributes'].get(resource_name, {})
-            for k, v in deployable_defaults.items():
+            for k, v in list(deployable_defaults.items()):
                 resource_attribs.setdefault(k, v)
 
             report_row.setdefault('resources', {})[resource_name] = resource_attribs
@@ -475,7 +475,7 @@ def refresh_tenants(ts, tenant_name=None, tier_name=None):
 
 # NOTE THIS IS DEPRECATED FUNCTION AND NEEDS TO BE UPGRADED TO NU STYLE SUMTHIN
 def get_parameters(config, args, required_keys, resource_name):
-    print "ROUESR IDC NOAME IS", resource_name
+    print("ROUESR IDC NOAME IS", resource_name)
     bork
     defaults = config.tier.get('resource_defaults', [])
 
@@ -488,9 +488,9 @@ def get_parameters(config, args, required_keys, resource_name):
     if not params:
         raise RuntimeError("No provisioning defaults in tier config for '%s'. Cannot continue" % resource_name)
     if set(required_keys) != set(params.keys()):
-        log.error("%s vs %s" % (required_keys, params.keys()))
+        log.error("%s vs %s" % (required_keys, list(params.keys())))
         raise RuntimeError("Tier provisioning parameters do not match tier defaults for '%s'. Cannot continue" % resource_name)
-    for k in args.keys():
+    for k in list(args.keys()):
         if k not in params:
             raise RuntimeError("Custom parameter %s for '%s' not supported. Cannot continue" % (k, resource_name))
 
@@ -629,7 +629,7 @@ def register_tier_defaults(ts, tier_name, resources=None):
         # Create or refresh default attributes entry in config
         attributes = config_resources.setdefault(resource['module_name'], {})
         # Only add new entries to 'attributes' otherwise we override some values with placeholder data.
-        for k, v in resource['default_attributes'].items():
+        for k, v in list(resource['default_attributes'].items()):
             if k not in attributes or attributes[k] == "<PLEASE FILL IN>":
                 attributes[k] = v
 

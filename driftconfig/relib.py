@@ -12,7 +12,12 @@ import json
 import re
 import collections
 import copy
-from urlparse import urlparse, parse_qs
+
+try:
+    from urlparse import urlparse, parse_qs
+except ImportError:
+    from urllib.parse import urlparse, parse_qs
+
 import hashlib
 from datetime import datetime
 try:
@@ -20,7 +25,7 @@ try:
 except ImportError:
     import pickle
 
-from schemautil import check_schema
+from .schemautil import check_schema
 
 log = logging.getLogger(__name__)
 
@@ -570,7 +575,7 @@ class SingleRowTable(Table):
 
     def get(self):
         if self._rows:
-            return self._rows.values()[0]
+            return list(self._rows.values())[0]
 
     def __getitem__(self, key):
         """Convenience operator to access properties of a single row."""
@@ -638,9 +643,16 @@ class TableStoreEncoder(json.JSONEncoder):
             finally:
                 obj._rows = tmp
                 obj._table_store = tmp2
+        elif hasattr(obj, '__iter__') and not isinstance(obj, list):
+            return list(obj)
 
         # Let the base class default method raise the TypeError
-        return super(TableStoreEncoder, self).default(obj)
+        try:
+            return super(TableStoreEncoder, self).default(obj)
+        except TypeError as e:
+            print("BOOOOOOOOO " + str(e))
+            print((obj.__class__.__name__))
+            raise
 
 
 class TableStore(object):

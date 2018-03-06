@@ -4,8 +4,14 @@ ReLib Backends
 '''
 import logging
 import os
-from StringIO import StringIO
-from urlparse import urlparse
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import BytesIO as StringIO
+try:
+    from urlparse import urlparse
+except ImportError:
+    from urllib.parse import urlparse
 import zipfile
 
 from .relib import Backend, BackendError, register
