@@ -1,5 +1,0 @@
-click>=2.0
-jsonschema
-boto3
-redis
-jinja2

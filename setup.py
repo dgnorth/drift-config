@@ -23,13 +23,25 @@ setup(
     # the conditional on i.req avoids the error:
     # distutils.errors.DistutilsError: Could not find suitable distribution for Requirement.parse('None')
     install_requires=[
-        str(i.req)
-        for i in parse_requirements('requirements.txt', session=pip.download.PipSession())
-        if i.req
+        'click',
+        'jsonschema',
+        'jinja2',
     ],
-    tests_require=[
-        'werkzeug',
-    ],
+
+    extras_require={
+        's3-backend': [
+            'boto3',
+        ],
+        'redis-backend': [
+            'redis',
+        ],
+        'trigger': [
+            'boto3',
+            'redis',
+            'zappa',
+        ],
+    },
+
     classifiers=[
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python',
