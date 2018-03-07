@@ -1,8 +1,6 @@
 import re
 import ast
 from setuptools import setup
-from pip.req import parse_requirements
-import pip.download
 
 _version_re = re.compile(r'__version__\s+=\s+(.*)')
 
