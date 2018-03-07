@@ -4,7 +4,7 @@ python:
 # command to install dependencies
 install:
   - pip install codecov
-  - pip install -r requirements.txt
+  - pip install ".[s3-backend,redis-backend,trigger]"
 # command to run tests
 script:
   - coverage run -m pytest
