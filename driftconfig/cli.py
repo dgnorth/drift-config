@@ -379,7 +379,7 @@ def cache_command(args):
             click.secho("Updating failed. VPN down? {}".format(e), fg='red', bold=True)
         else:
             if b:
-                click.secho("Cache updated on {}.".format(b))
+                click.secho("Cache updated. Url: {}".format(b.get_url()))
             else:
                 click.secho("No Redis resource defined for this tier.", fg='red', bold=True)
 

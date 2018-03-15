@@ -1062,13 +1062,16 @@ def get_redis_cache_backend(ts, tier_name):
     # TODO: Fix bad coupling as described above.
     domain = ts.get_table('domain').get()
     tier = ts.get_table('tiers').get({'tier_name': tier_name})
-    redis_info = tier['resources']['drift.core.resources.redis']
+    if 'cache' in tier:
+        b = create_backend(tier['cache'])
+    else:
+        redis_info = tier['resources']['drift.core.resources.redis']
+        b = RedisBackend.create_from_server_info(
+            host=redis_info['host'],
+            port=redis_info['port'],
+            domain_name=domain['domain_name'],
+        )
 
-    b = RedisBackend.create_from_server_info(
-        host=redis_info['host'],
-        port=redis_info['port'],
-        domain_name=domain['domain_name'],
-    )
     return b
 
 
