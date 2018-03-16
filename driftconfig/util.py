@@ -591,11 +591,12 @@ def register_this_deployable_on_tier(ts, tier_name, deployable_name):
     return {'old_registration': orig_row, 'new_registration': row}
 
 
-def get_tier_resource_modules(ts, tier_name, skip_loading=False):
+def get_tier_resource_modules(ts, tier_name, skip_loading=False, ignore_import_errors=False):
     """
     Returns a list of all resource modules registered on 'tier_name'.
     Each entry is a dict with 'module_name', 'module' and 'default_attributes'.
     If 'skip_loading' the 'module' value is None.
+    If 'ignore_import_errors' import errors will be ignored.
     """
     resources = set()
     deployables = ts.get_table('deployables')
@@ -608,7 +609,13 @@ def get_tier_resource_modules(ts, tier_name, skip_loading=False):
         if skip_loading:
             m = None
         else:
-            m = importlib.import_module(module_name)
+            try:
+                m = importlib.import_module(module_name)
+            except ImportError as e:
+                if not ignore_import_errors:
+                    raise
+                log.warning("Ignoring import error: %s", e)
+                continue
         modules.append({
             'module_name': module_name,
             'module': m,

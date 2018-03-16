@@ -663,6 +663,10 @@ def assign_tier_command(args):
     if args.config:
         os.environ['DRIFT_CONFIG_URL'] = args.config
 
+    # Out of convenience, add current dir to sys.path so the local project can
+    # be found during imports.
+    sys.path.insert(0, '.')
+
     is_active = not args.inactive
 
     with TSTransaction(commit_to_origin=not args.preview) as ts:
@@ -701,7 +705,7 @@ def assign_tier_command(args):
             # For convenience, register resource default values as well. This
             # is idempotent so it's fine to call it periodically.
             resources = get_tier_resource_modules(
-                ts=ts, tier_name=tier_name, skip_loading=False)
+                ts=ts, tier_name=tier_name, skip_loading=False, ignore_import_errors=True)
 
             # See if there is any attribute that needs prompting,
             # Any default parameter from a resource module that is marked as <PLEASE FILL IN> and
