@@ -327,7 +327,7 @@ def define_tenant(ts, tenant_name, product_name, tier_name):
         if deployable_name in inactive_deployables:
             tenant['state'] = 'disabled'
             add_report(deployable_name, 'disabled')
-        elif deployable_name not in active_deployables:
+        elif deployable_name not in active_deployables and tenant['state'] != 'deleted':
             tenant['state'] = 'uninitializing'  # Signal de-provision of resources.
             add_report(deployable_name, 'uninitializing')
 
@@ -424,11 +424,16 @@ def provision_tenant_resources(ts, tenant_name, deployable_name=None, preview=Fa
                     continue
 
                 if has_provision_method and not preview:
-                    result = m.provision_resource(
-                        ts=ts,
-                        tenant_config=tenant_config,
-                        attributes=resource_attributes,
-                    )
+                    try:
+                        result = m.provision_resource(
+                            ts=ts,
+                            tenant_config=tenant_config,
+                            attributes=resource_attributes,
+                        )
+                    except Exception as e:
+                        result.append("Failed to provision resource '{}'.\nException: {}\nAttributes: {}".format(
+                            resource_module, repr(e), resource_attributes)
+                        )
                     depl_report['resources'][resource_module] = result
                 else:
                     depl_report['resources'][resource_module] = resource_attributes
