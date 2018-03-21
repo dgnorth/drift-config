@@ -606,6 +606,10 @@ def refresh_tenant_command(args):
     if args.config:
         os.environ['DRIFT_CONFIG_URL'] = args.config
 
+    # Out of convenience, add current dir to sys.path so the local project can
+    # be found during imports.
+    sys.path.insert(0, '.')
+
     with TSTransaction(commit_to_origin=not args.preview) as ts:
         tenant_info = ts.get_table('tenant-names').get({'tenant_name': tenant_name})
         if not tenant_info:
@@ -632,6 +636,10 @@ def provision_tenant_command(args):
     print "Provisioning '{}':".format(tenant_name)
     if args.config:
         os.environ['DRIFT_CONFIG_URL'] = args.config
+
+    # Out of convenience, add current dir to sys.path so the local project can
+    # be found during imports.
+    sys.path.insert(0, '.')
 
     with TSTransaction(commit_to_origin=not args.preview) as ts:
         tenant_info = ts.get_table('tenant-names').get({'tenant_name': tenant_name})
