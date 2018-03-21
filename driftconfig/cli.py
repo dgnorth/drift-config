@@ -237,7 +237,11 @@ def get_options(parser):
         'tenant-name',
         action='store',
         help="Name of the tenant.",
-        nargs='?',
+    )
+    p.add_argument(
+        'deployable-name',
+        action='store',
+        help="Name of the deployable. Specify 'all' to include all deployables.",
     )
     p.add_argument('--config',
         help="Specify which config source to use. Will override 'DRIFT_CONFIG_URL' environment variable."
@@ -633,7 +637,12 @@ def refresh_tenant_command(args):
 def provision_tenant_command(args):
 
     tenant_name = vars(args)['tenant-name']
-    print "Provisioning '{}':".format(tenant_name)
+    deployable_name = vars(args)['deployable-name']
+
+    print "Provisioning '{}' for {}:".format(tenant_name, deployable_name)
+    if deployable_name == 'all':
+        deployable_name = None
+
     if args.config:
         os.environ['DRIFT_CONFIG_URL'] = args.config
 
@@ -655,7 +664,12 @@ def provision_tenant_command(args):
             tier_name=tenant_info['tier_name'],
         )
 
-        report = provision_tenant_resources(ts=ts, tenant_name=tenant_name, preview=args.preview)
+        report = provision_tenant_resources(
+            ts=ts,
+            tenant_name=tenant_name,
+            deployable_name=deployable_name,
+            preview=args.preview
+        )
 
     print "Result:"
     print pretty(report)
