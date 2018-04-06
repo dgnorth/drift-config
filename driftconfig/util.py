@@ -431,9 +431,10 @@ def provision_tenant_resources(ts, tenant_name, deployable_name=None, preview=Fa
                             attributes=resource_attributes,
                         )
                     except Exception as e:
-                        result.append("Failed to provision resource '{}'.\nException: {}\nAttributes: {}".format(
+                        result = [
+                            "Failed to provision resource '{}'.\nException: {}\nAttributes: {}".format(
                             resource_module, repr(e), resource_attributes)
-                        )
+                        ]
                     depl_report['resources'][resource_module] = result
                 else:
                     depl_report['resources'][resource_module] = resource_attributes
