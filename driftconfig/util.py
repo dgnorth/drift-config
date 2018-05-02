@@ -154,13 +154,24 @@ conf_tuple = collections.namedtuple(
 )
 
 
-def get_drift_config(ts=None, tenant_name=None, tier_name=None, deployable_name=None, drift_app=None):
+def get_drift_config(
+    ts=None,
+    tenant_name=None,
+    tier_name=None,
+    deployable_name=None,
+    drift_app=None,
+    allow_missing_tenant=False
+):
     """
     Return config tuple for given config context, containing the following properties:
     ['organization', 'product', 'tenant_name', 'tier', 'deployable', 'tenant']
 
     'ts' is the config TableStore object.
     'tenant_name' is the name of the tenant, or None if not applicable.
+
+    If 'tenant_name' is specified but not found in config a TenantNotConfigured exception
+    is raised. If 'allow_missing_tenant' is True however, then the config tuple will be
+    returned but with the 'tenant' property set to None.
     """
     if ts:
         source = "internal"
@@ -182,7 +193,7 @@ def get_drift_config(ts=None, tenant_name=None, tier_name=None, deployable_name=
     if tenant_name:
         tenant = tenants.get({'tier_name': tier_name, 'deployable_name': deployable_name, 'tenant_name': tenant_name})
 
-        if not tenant:
+        if not tenant and not allow_missing_tenant:
             raise TenantNotConfigured(
                 "Tenant '{}' not found for tier '{}' and deployable '{}'".format(tenant_name, tier_name, deployable_name)
             )
