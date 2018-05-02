@@ -23,8 +23,9 @@ from driftconfig.backends import FileBackend
 from driftconfig.util import (
     config_dir, get_domains, get_default_drift_config, get_default_drift_config_and_source,
     define_tenant, prepare_tenant_name, provision_tenant_resources,
-    get_tier_resource_modules, register_tier_defaults, register_this_deployable_on_tier
-    )
+    get_tier_resource_modules, register_tier_defaults, register_this_deployable_on_tier,
+    register_this_deployable
+)
 
 log = logging.getLogger(__name__)
 
@@ -177,6 +178,21 @@ def get_options(parser):
         help='Do a detailed diff on modified tables.'
     )
 
+    # MIGRATED FROM drift-admin register command
+    p = subparsers.add_parser(
+        'register',
+        help='Register Drift deployable.',
+        description=""
+    )
+    p.add_argument(
+        'project-dir',
+        action='store',
+        help="Path to project root directory. Default is current working directory.",
+        nargs='?',
+    )
+    p.add_argument(
+        "--preview", help="Only preview the changes, do not commit to origin.", action="store_true"
+    )
 
 
     # MIGRATED FROM drift-admin tenant command suite
@@ -564,6 +580,87 @@ def diff_command(args):
                     tablediff = diff_tables(t1, t2)
                     print "\nTable diff for", table_name, "\n(first=local, second=origin):"
                     print json.dumps(tablediff, indent=4, sort_keys=True)
+
+
+def register_command(args):
+    project_dir = vars(args)['project-dir'] or '.'
+    project_dir = os.path.abspath(project_dir)
+    print "Project Directory:", project_dir
+
+    def get_package_info():
+        """
+        Returns info from current package.
+        """
+
+        _package_classifiers = [
+            'name',
+            'version',
+            'description',
+            'long-description',
+            'author',
+            'author-email',
+            'license'
+        ]
+
+        import subprocess
+        p = subprocess.Popen(
+            ['python', 'setup.py'] + ['--' + classifier for classifier in _package_classifiers],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            cwd=project_dir
+        )
+        out, err = p.communicate()
+        if p.returncode != 0:
+            raise RuntimeError(
+                "Can't get '{}' of this deployable. Error: {} - {}".format(classifier, p.returncode, err)
+            )
+
+        info = dict(zip(_package_classifiers, out.split('\n')))
+        return info
+
+    info = get_package_info()
+    name = info['name']
+
+    print "Registering/updating deployable {}:".format(name)
+    print "Package info:"
+    print pretty(info)
+    print ""
+
+    # TODO: This is perhaps not ideal, or what?
+    config_filename = os.path.join(project_dir, 'config', 'config.json')
+    config_filename = os.path.expanduser(config_filename)
+    log.info("Loading configuration from %s", config_filename)
+    with open(config_filename) as f:
+        app_config = json.load(f)
+
+    # Make project_dir importable.
+    sys.path.insert(0, project_dir)
+
+    with TSTransaction(commit_to_origin=not args.preview) as ts:
+
+        ret = register_this_deployable(
+            ts=ts,
+            package_info=info,
+            resources=app_config.get("resources", []),
+            resource_attributes=app_config.get("resource_attributes", {}),
+        )
+
+        orig_row = ret['old_registration']
+        row = ret['new_registration']
+
+        if orig_row is None:
+            print "New registration entry added:"
+            print pretty(row)
+        elif orig_row == row:
+            print "Current registration unchanged:"
+            print pretty(row)
+        else:
+            print "Updating current registration info:"
+            print pretty(row)
+            print "\nPrevious registration info:"
+            print pretty(orig_row)
+
+    if args.preview:
+        print "Preview changes only, not committing to origin."
 
 
 def create_tenant_command(args):
