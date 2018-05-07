@@ -26,6 +26,7 @@ from driftconfig.util import (
     get_tier_resource_modules, register_tier_defaults, register_this_deployable_on_tier,
     register_this_deployable
 )
+from driftconfig import testhelpers
 
 log = logging.getLogger(__name__)
 
@@ -585,39 +586,46 @@ def diff_command(args):
 def register_command(args):
     project_dir = vars(args)['project-dir'] or '.'
     project_dir = os.path.abspath(project_dir)
+    register_deployable(project_dir, args.preview)
+
+
+def _get_package_info(project_dir):
+    """
+    Returns info from current package.
+    """
+
+    _package_classifiers = [
+        'name',
+        'version',
+        'description',
+        'long-description',
+        'author',
+        'author-email',
+        'license'
+    ]
+
+    import subprocess
+    p = subprocess.Popen(
+        ['python', 'setup.py'] + ['--' + classifier for classifier in _package_classifiers],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        cwd=project_dir
+    )
+    out, err = p.communicate()
+    if p.returncode != 0:
+        raise RuntimeError(
+            "Can't get '{}' of this deployable. Error: {} - {}".format(classifier, p.returncode, err)
+        )
+
+    info = dict(zip(_package_classifiers, out.split('\n')))
+    return info
+
+
+def register_deployable(project_dir=None, preview=False):
+
+    project_dir = project_dir or '.'
     print "Project Directory:", project_dir
 
-    def get_package_info():
-        """
-        Returns info from current package.
-        """
-
-        _package_classifiers = [
-            'name',
-            'version',
-            'description',
-            'long-description',
-            'author',
-            'author-email',
-            'license'
-        ]
-
-        import subprocess
-        p = subprocess.Popen(
-            ['python', 'setup.py'] + ['--' + classifier for classifier in _package_classifiers],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            cwd=project_dir
-        )
-        out, err = p.communicate()
-        if p.returncode != 0:
-            raise RuntimeError(
-                "Can't get '{}' of this deployable. Error: {} - {}".format(classifier, p.returncode, err)
-            )
-
-        info = dict(zip(_package_classifiers, out.split('\n')))
-        return info
-
-    info = get_package_info()
+    info = _get_package_info(project_dir)
     name = info['name']
 
     print "Registering/updating deployable {}:".format(name)
@@ -635,7 +643,7 @@ def register_command(args):
     # Make project_dir importable.
     sys.path.insert(0, project_dir)
 
-    with TSTransaction(commit_to_origin=not args.preview) as ts:
+    with TSTransaction(commit_to_origin=not preview) as ts:
 
         ret = register_this_deployable(
             ts=ts,
@@ -659,7 +667,7 @@ def register_command(args):
             print "\nPrevious registration info:"
             print pretty(orig_row)
 
-    if args.preview:
+    if preview:
         print "Preview changes only, not committing to origin."
 
 
@@ -1087,6 +1095,188 @@ def tenants(tenant_name):
 
         click.secho("Tenant {s.BRIGHT}{}{s.NORMAL}:".format(tenant_name, **styles))
         click.echo(json.dumps(tenant, indent=4))
+
+
+@cli.command()
+@click.option(
+    '--recreate', '-r',
+    help="Recreate config. (Note, it will overwrite existing developer config).",
+    is_flag=True
+    )
+def developer(recreate):
+    """Create a Drift Configuration DB for local development.
+
+    The origin and working copy will be stored at ~/.drift/config
+    """
+    domain_name = 'developer'
+    tier_name = 'LOCALTIER'
+    tenant_name = 'developer'
+    origin_folder = '.driftconfig-' + domain_name
+
+    # Make sure origin folder is ignored in git.
+    if os.path.exists('.gitignore'):
+        with open('.gitignore', 'r+') as f:
+            if origin_folder not in f.read():
+                click.secho("Note! Adding {} to .gitignore".format(click.style(origin_folder, bold=True)))
+                f.write("\n# Drift config folder for local development\n{}\n".format(origin_folder))
+
+    origin = 'file://{}'.format(os.path.abspath(origin_folder))
+    origin = origin.replace('~', os.path.expanduser('~'))
+    click.secho("Origin of this developer config is at: {}".format(origin))
+
+    # See if config already exists
+    try:
+        ts = get_store_from_url(origin)
+    except Exception:
+        ts = None
+
+    if recreate or ts is None:
+        if ts:
+            click.secho(
+                "Warning: Overriding existing configuration because of --recreate flag.",
+                fg='yellow'
+                )
+
+        testhelpers.DOMAIN_NAME = domain_name
+        testhelpers.ORG_NAME = 'localorg'
+        testhelpers.TIER_NAME = tier_name
+        testhelpers.PROD_NAME = 'localproduct'
+        testhelpers.TENANT_NAME = 'dev'
+        config_size = {
+            'num_org': 1,
+            'num_tiers': 1,
+            'num_deployables': 0,
+            'num_products': 1,
+            'num_tenants': 0,
+        }
+
+        ts = testhelpers.create_test_domain(
+            config_size=config_size,
+            resources=None,
+            resource_attributes={}
+        )
+        domain = ts.get_table('domain').get()
+        domain['origin'] = origin
+        domain['display_name'] = "Configuration for local development"
+    else:
+        click.secho("Using existing developer config DB.")
+
+    project_dir = '.'
+
+    # TODO: This is perhaps not ideal, or what?
+    config_filename = os.path.join(project_dir, 'config', 'config.json')
+    config_filename = os.path.expanduser(config_filename)
+    if not os.path.exists(config_filename) or not os.path.exists('setup.py'):
+        click.secho("Error: Please run this command from a deployable root directory.",
+            fg='red', bold=True)
+        sys.exit(1)
+
+    log.info("Loading configuration from %s", config_filename)
+    with open(config_filename) as f:
+        app_config = json.load(f)
+
+    package_info = _get_package_info(project_dir=project_dir)
+
+    ret = register_this_deployable(
+        ts=ts,
+        package_info=package_info,
+        resources=app_config.get("resources", []),
+        resource_attributes=app_config.get("resource_attributes", {}),
+    )
+    deployable_name=package_info['name']
+
+    # Make sure this deployable is associated with the current product
+    product = ts.get_table('products').find()[0]
+    if deployable_name not in product['deployables']:
+        product['deployables'].append(deployable_name)
+
+    ret = register_this_deployable_on_tier(
+        ts, tier_name='LOCALTIER', deployable_name=deployable_name)
+
+    # For convenience, register resource default values as well. This
+    # is idempotent so it's fine to call it periodically.
+    resources = get_tier_resource_modules(
+        ts=ts, tier_name='LOCALTIER', skip_loading=False, ignore_import_errors=True)
+
+    # See if there is any attribute that needs prompting,
+    # Any default parameter from a resource module that is marked as <PLEASE FILL IN> and
+    # is not already set in the config, is subject to prompting.
+    tier = ts.get_table('tiers').get({'tier_name': 'LOCALTIER'})
+    config_resources = tier.get('resources', {})
+
+    for resource in resources:
+        for k, v in resource['default_attributes'].items():
+            if v == "<PLEASE FILL IN>":
+                # Let's prompt if and only if the value isn't already set.
+                attributes = config_resources.get(resource['module_name'], {})
+                if k not in attributes or attributes[k] == "<PLEASE FILL IN>":
+                    attrib_name = '{}.{}'.format(resource['module_name'], k)
+                    if attrib_name == 'drift.core.resources.redis.host':
+                        value = 'localhost'
+                    elif attrib_name == 'drift.core.resources.postgres.server':
+                        value = 'localhost'
+                    else:
+                        print "Enter value for {s.BRIGHT}{}{s.NORMAL}:".format(
+                            attrib_name, **styles),
+                        value = raw_input()
+                    resource['default_attributes'][k] = value
+
+    register_tier_defaults(ts=ts, tier_name='LOCALTIER', resources=resources)
+
+    click.secho("\nDefault values for resources configured for this tier:", bold=True)
+    click.secho(pretty(tier.get('resources', {})))
+
+    # Add the developer tenant
+    result = define_tenant(
+        ts=ts,
+        tenant_name=tenant_name,
+        product_name=product['product_name'],
+        tier_name=tier_name,
+    )
+
+    # Define an alias for the developer tenant so it less cumbersome than the actual name.
+    result['tenant_master_row']['alias'] = tenant_name
+    tenant_name = result['tenant_master_row']['tenant_name']  # The actual tenant name
+
+    # Provision all resources for the tenant:
+    sys.path.insert(0, '.')  # Make project_dir importable.
+    report = provision_tenant_resources(
+        ts=ts,
+        tenant_name=tenant_name,
+        deployable_name=deployable_name,
+    )
+
+    click.secho("Provisioned tenant", bold=True)
+    click.secho(pretty(report))
+
+    # Save it locally
+    domain_folder = config_dir(domain_name)
+    local_store = create_backend('file://' + domain_folder)
+    local_store.save_table_store(ts)
+    click.secho("New config for '{}' saved to {}.".format(domain_name, domain_folder))
+    result = push_to_origin(ts, _first=True)
+    if not result['pushed']:
+        click.secho("Push failed. Reason:" + result['reason'], fg='red')
+
+    click.secho("\nTo enable local development:\n", bold=True)
+    sh = (""
+        "# The following environment variables define full context for local development\n"
+        "export DRIFT_CONFIG_URL={}\n"
+        "export DRIFT_TIER={}\n"
+        "export FLASK_APP=drift.devapp:app\n"
+        "export FLASK_ENV=development\n"
+        "\n"
+        "# To run a flask development server:\n"
+        "flask run\n\n"
+        "".format(domain_name, tier_name)
+        )
+    click.secho(pretty(sh, lexer='bash'))
+
+    if not got_pygments:
+        click.secho("\n\nFinal Note! All the blurb above would look much better with colors!.\n"
+            "Plese Run the following command for the sake of rainbows and unicorns:\n"
+            "pip install pygments\n\n"
+            )
 
 
 @cli.command()
