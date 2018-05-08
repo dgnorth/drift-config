@@ -1177,6 +1177,8 @@ def developer(recreate):
 
     package_info = _get_package_info(project_dir=project_dir)
 
+    sys.path.insert(0, '.')  # Make project_dir importable.
+
     ret = register_this_deployable(
         ts=ts,
         package_info=package_info,
@@ -1239,7 +1241,6 @@ def developer(recreate):
     tenant_name = result['tenant_master_row']['tenant_name']  # The actual tenant name
 
     # Provision all resources for the tenant:
-    sys.path.insert(0, '.')  # Make project_dir importable.
     report = provision_tenant_resources(
         ts=ts,
         tenant_name=tenant_name,
