@@ -616,7 +616,7 @@ def _get_package_info(project_dir):
             "Can't get '{}' of this deployable. Error: {} - {}".format(classifier, p.returncode, err)
         )
 
-    info = dict(zip(_package_classifiers, out.split('\n')))
+    info = dict(zip(_package_classifiers, out.splitlines()))
     return info
 
 
@@ -1138,6 +1138,7 @@ def developer(recreate, user, run):
             with open('.gitignore', 'r+') as f:
                 if origin_folder not in f.read():
                     click.secho("Note! Adding {} to .gitignore".format(click.style(origin_folder, bold=True)))
+                    f.seek(0, os.SEEK_END)  # Need this on Windows
                     f.write("\n# Drift config folder for local development\n{}\n".format(origin_folder))
 
     origin_folder = os.path.abspath(origin_folder)
