@@ -1098,15 +1098,15 @@ def tenants(tenant_name):
 
 @cli.command()
 @click.option(
-    '--recreate', '-r',
-    help="Recreate Configuration DB. (Note, it will overwrite existing developer config).",
-    is_flag=True
-)
-@click.option(
     '--user', '-u',
     help="Use a shared configuration. The DB will be stored in user directory for your platform, "
     "typically ~/ (or %USERPROFILE% on Windows). The configuration can thus be shared between "
     "multiple projects.",
+    is_flag=True
+)
+@click.option(
+    '--recreate',
+    help="Recreate Configuration DB. (Note, it will overwrite existing developer config).",
     is_flag=True
 )
 @click.option(
