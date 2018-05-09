@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import time
 import json
 import logging
+import subprocess
 
 # pygments is optional for now
 try:
@@ -604,7 +605,6 @@ def _get_package_info(project_dir):
         'license'
     ]
 
-    import subprocess
     p = subprocess.Popen(
         ['python', 'setup.py'] + ['--' + classifier for classifier in _package_classifiers],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -943,7 +943,6 @@ if __name__ == '__main__':
 
 
 import click
-import posixpath
 
 
 def _header(ts):
@@ -966,7 +965,7 @@ class Globals(object):
 pass_repo = click.make_pass_decorator(Globals)
 
 
-@click.group()
+@click.group(context_settings={'help_option_names': ['-h', '--help']})
 @click.option('--config-url', '-u', envvar='DRIFT_CONFIG_URL', metavar='',
     help="Url to DB origin.")
 @click.option('--verbose', '-v', is_flag=True,
@@ -1100,29 +1099,51 @@ def tenants(tenant_name):
 @cli.command()
 @click.option(
     '--recreate', '-r',
-    help="Recreate config. (Note, it will overwrite existing developer config).",
+    help="Recreate Configuration DB. (Note, it will overwrite existing developer config).",
     is_flag=True
-    )
-def developer(recreate):
-    """Create a Drift Configuration DB for local development.
+)
+@click.option(
+    '--user', '-u',
+    help="Use a shared configuration. The DB will be stored in user directory for your platform, "
+    "typically ~/ (or %USERPROFILE% on Windows). The configuration can thus be shared between "
+    "multiple projects.",
+    is_flag=True
+)
+@click.option(
+    '--run', '-r',
+    help="Run a Flask server.",
+    is_flag=True
+)
+def developer(recreate, user, run):
+    """Set up environment for local development.
 
-    The origin and working copy will be stored at ~/.drift/config
+    Creates or updates a Drift Configuration DB. The current deployable is automatically
+    registered.
     """
+    logging.basicConfig(level='INFO')
+    click.secho("----------------", bold=True)
+    click.secho("Drift Developer:", bold=True)
+    click.secho("----------------", bold=True)
+
     domain_name = 'developer'
     tier_name = 'LOCALTIER'
     tenant_name = 'developer'
     origin_folder = '.driftconfig-' + domain_name
 
-    # Make sure origin folder is ignored in git.
-    if os.path.exists('.gitignore'):
-        with open('.gitignore', 'r+') as f:
-            if origin_folder not in f.read():
-                click.secho("Note! Adding {} to .gitignore".format(click.style(origin_folder, bold=True)))
-                f.write("\n# Drift config folder for local development\n{}\n".format(origin_folder))
+    if user:
+        origin_folder = os.path.join(os.path.expanduser('~'), origin_folder)
+    else:
+        # Make sure origin folder is ignored in git.
+        if os.path.exists('.gitignore'):
+            with open('.gitignore', 'r+') as f:
+                if origin_folder not in f.read():
+                    click.secho("Note! Adding {} to .gitignore".format(click.style(origin_folder, bold=True)))
+                    f.write("\n# Drift config folder for local development\n{}\n".format(origin_folder))
 
-    origin = 'file://{}'.format(os.path.abspath(origin_folder))
-    origin = origin.replace('~', os.path.expanduser('~'))
-    click.secho("Origin of this developer config is at: {}".format(origin))
+    origin_folder = os.path.abspath(origin_folder)
+    click.secho("Origin of this developer config is at: ", nl=False)
+    click.secho(origin_folder, bold=True, fg='blue')
+    origin = 'file://{}'.format(origin_folder)
 
     # See if config already exists
     try:
@@ -1277,6 +1298,26 @@ def developer(recreate):
         click.secho("\n\nFinal Note! All the blurb above would look much better with colors!.\n"
             "Plese Run the following command for the sake of rainbows and unicorns:\n"
             "pip install pygments\n\n"
+            )
+
+    if run:
+        # Run a Flask development server
+        env = os.environ.copy()
+        env['DRIFT_CONFIG_URL'] = domain_name
+        env['DRIFT_TIER'] = tier_name
+        env['FLASK_APP'] = 'drift.devapp:app'
+        env['FLASK_ENV'] = 'development'
+
+        p = subprocess.Popen(
+            ['flask', 'run', '--host=0.0.0.0'],
+            cwd=project_dir,
+            env=env
+        )
+
+        out, err = p.communicate()
+        if p.returncode != 0:
+            raise RuntimeError(
+                "Flask run failed: {} - {}".format(p.returncode, err)
             )
 
 
