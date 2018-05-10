@@ -180,8 +180,10 @@ def get_drift_config(
 
     # Map tenant alias to actual tenant name if needed.
     tenant_name_row = ts.get_table('tenant-names').find({'alias': tenant_name})
+    alias = tenant_name
     if tenant_name_row:
         tenant_name = tenant_name_row[0]['tenant_name']
+        alias = "{} (alias={})".format(tenant_name, alias)
 
     # HACK BEGIN: Until 'flask_config' has been repurposed into 'drift_app' config, we enable a little mapping between
     # here for convenience:
@@ -195,7 +197,7 @@ def get_drift_config(
 
         if not tenant and not allow_missing_tenant:
             raise TenantNotConfigured(
-                "Tenant '{}' not found for tier '{}' and deployable '{}'".format(tenant_name, tier_name, deployable_name)
+                "Tenant '{}' not found for tier '{}' and deployable '{}'".format(alias, tier_name, deployable_name)
             )
     else:
         tenant = None
