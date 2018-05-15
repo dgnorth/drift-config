@@ -109,7 +109,7 @@ class Table(object):
             raise TableError("For table '{}', can't make primary key. Need {} but got {}.".format(
                 self._table_name, fields, primary_key.keys()))
 
-        if len(fields) == 1 and isinstance(primary_key[fields[0]], (int, long, float)):
+        if len(fields) == 1 and isinstance(primary_key[fields[0]], (six.integer_types, float)):
             canonicalized = primary_key[fields[0]]
         else:
             for k in fields:
@@ -172,7 +172,7 @@ class Table(object):
 
         rows = []
         search_criteria = search_criteria or {}
-        for row in self._rows.itervalues():
+        for row in six.itervalues(self._rows):
             for k, v in search_criteria.items():
                 if k not in row or row[k] != v:
                     break
@@ -465,7 +465,7 @@ class Table(object):
         checksum = hashlib.sha256()
 
         def save_data_check(filename, data):
-            checksum.update(data)
+            checksum.update(data.encode("ascii"))
             return save_data(filename, data)
 
         if self._group_by_fields:
@@ -611,7 +611,7 @@ class SingleRowTable(Table):
         save_data(self.get_filename(), data)
 
         checksum = hashlib.sha256()
-        checksum.update(data)
+        checksum.update(data.encode('ascii'))
         return checksum.hexdigest()
 
     def _load_table_data(self, fetch_from_storage):
@@ -700,7 +700,7 @@ class TableStore(object):
         Returns the definition of this table store as well as all its tables as a Json
         doc.
         """
-        self._tableorder = self._tables.keys()
+        self._tableorder = list(self._tables.keys())
         return json.dumps(self, indent=4, cls=TableStoreEncoder, sort_keys=True)
 
     def init_from_definition(self, definition):
@@ -721,7 +721,7 @@ class TableStore(object):
             for table_name in self._tableorder:
                 self._tables[table_name] = tables[table_name]
 
-        for table_name, table_data in self._tables.iteritems():
+        for table_name, table_data in six.iteritems(self._tables):
             # TODO: Make this mapping dynamic instead of hardcoded.
             if table_data['class'] == 'Table':
                 cls = Table
@@ -775,7 +775,7 @@ class TableStore(object):
         checksum = hashlib.sha256()
         for table in user_tables:
             md5 = self.get_table_metadata(table.name)['md5']
-            checksum.update(md5)
+            checksum.update(md5.encode("ascii"))
         self.meta.get()['checksum'] = checksum.hexdigest()
 
         for table in system_tables:

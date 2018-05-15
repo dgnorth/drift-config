@@ -4,6 +4,9 @@ import json
 import tempfile
 import shutil
 
+from click import echo
+import six
+
 import jsonschema
 
 from driftconfig.relib import TableStore, Table, TableError, ConstraintError, Backend, DictBackend
@@ -128,7 +131,7 @@ class TestRelib(unittest.TestCase):
         self.assertEqual([row3], table1.find(row3))
 
         # Test lookup using no criteria. Should return all rows.
-        self.assertItemsEqual([row1, row2, row3], table1.find())
+        six.assertCountEqual(self, [row1, row2, row3], table1.find())
 
         # Test lookup using unique field as search criteria
         self.assertEqual([row1], table1.find({'unique_field': 'iamunique1'}))
@@ -137,7 +140,7 @@ class TestRelib(unittest.TestCase):
 
         # Test lookup on non-distinct fields
         self.assertEqual([row1], table1.find({'tag': 'red'}))
-        self.assertItemsEqual([row2, row3], table1.find({'tag': 'blue'}))
+        six.assertCountEqual(self, [row2, row3], table1.find({'tag': 'blue'}))
 
         # Test foreign key relationship. Previously inserted rows are not re-checked
         # automatically.
@@ -345,7 +348,7 @@ class TestRelib(unittest.TestCase):
         ts.check_integrity()
         result = t1.find_references(t1r1)
         # Only rows from 'middle' and 'detail' tables should be expected
-        self.assertItemsEqual(result.keys(), ['middle', 'detail'])
+        six.assertCountEqual(self, result.keys(), ['middle', 'detail'])
 
         # First two of three rows in 'middle' should be expected.
         self.assertEqual(len(result['middle']), 2)
@@ -489,7 +492,7 @@ class TestRelib(unittest.TestCase):
 
         def on_progress(msg):
             if show_progress:
-                print ">>>", msg
+                echo(">>> " + msg)
 
         backend.on_progress = on_progress
 
