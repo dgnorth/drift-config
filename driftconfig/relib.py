@@ -19,10 +19,10 @@ import copy
 from six.moves.urllib.parse import urlparse, parse_qs
 import hashlib
 from datetime import datetime
-try:
-    import cPickle as pickle
-except ImportError:
-    import pickle
+
+import six
+import six.moves.cPickle as pickle
+
 
 from .schemautil import check_schema
 
@@ -544,7 +544,7 @@ class Table(object):
 
         d = copy.deepcopy(self._default_values)
         for k, v in d.items():
-            if isinstance(v, basestring) and v.startswith('@@'):
+            if isinstance(v, six.string_types) and v.startswith('@@'):
                 if v == '@@utcnow':
                     d[k] = datetime.utcnow().isoformat() + 'Z'
                 elif v == '@@identity':
@@ -574,7 +574,7 @@ class SingleRowTable(Table):
 
     def get(self):
         if self._rows:
-            return self._rows.values()[0]
+            return next(six.itervalues(self._rows))
 
     def __getitem__(self, key):
         """Convenience operator to access properties of a single row."""
