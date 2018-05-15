@@ -8,7 +8,7 @@ import logging
 
 import jsonschema
 from json import dumps
-from StringIO import StringIO
+from six.moves import cStringIO as StringIO
 
 log = logging.getLogger(__name__)
 

@@ -24,6 +24,7 @@ setup(
         'click',
         'jsonschema',
         'jinja2',
+        'six',
     ],
 
     extras_require={

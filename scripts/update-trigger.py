@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import sys
-import urlparse
+import six.moves.urllib.parse import urlsplit
 from datetime import datetime
 import subprocess
 
@@ -62,7 +62,7 @@ def cli(ctx, config_urls, verbose, test):
 
         # Figure out in which aws region this config is located
         aws_region = tier['aws']['region']
-        parts = urlparse.urlsplit(s3_origin_url)
+        parts = urlsplit(s3_origin_url)
         bucket_name = parts.hostname
         s3_bucket_region = boto3.resource("s3").meta.client.get_bucket_location(
             Bucket=bucket_name)["LocationConstraint"]

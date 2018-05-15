@@ -9,10 +9,14 @@ TODO:
 '''
 import logging
 import json
+try:
+    import ujson
+except ImportError:
+    ujson = json
 import re
 import collections
 import copy
-from urlparse import urlparse, parse_qs
+from six.moves.urllib.parse import urlparse, parse_qs
 import hashlib
 from datetime import datetime
 try:
@@ -20,7 +24,7 @@ try:
 except ImportError:
     import pickle
 
-from schemautil import check_schema
+from .schemautil import check_schema
 
 log = logging.getLogger(__name__)
 
@@ -1024,7 +1028,7 @@ def jsonloads(json_text, filename):
     is generated.
     """
     try:
-        return json.loads(json_text)
+        return ujson.loads(json_text)
     except Exception:
         log.error("Error parsing json file %s", filename)
         raise
