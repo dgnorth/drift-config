@@ -1262,11 +1262,10 @@ def developer(recreate, user, run):
     result['tenant_master_row']['alias'] = tenant_name
     tenant_name = result['tenant_master_row']['tenant_name']  # The actual tenant name
 
-    # Provision all resources for the tenant:
+    # Provision all resources for the tenant for all deployables
     report = provision_tenant_resources(
         ts=ts,
         tenant_name=tenant_name,
-        deployable_name=deployable_name,
     )
 
     click.secho("Provisioned tenant", bold=True)
