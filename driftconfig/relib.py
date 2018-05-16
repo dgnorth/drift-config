@@ -168,7 +168,7 @@ class Table(object):
         """
         if search_criteria is None:
             # Special case, return all rows
-            return self._rows.values()
+            return list(self._rows.values())
 
         rows = []
         search_criteria = search_criteria or {}

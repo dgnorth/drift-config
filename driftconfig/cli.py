@@ -8,6 +8,8 @@ import json
 import logging
 import subprocess
 
+import six
+
 # pygments is optional for now
 try:
     got_pygments = True
@@ -413,7 +415,7 @@ def cache_command(args):
         from driftconfig.util import get_default_drift_config
         os.environ['DRIFT_CONFIG_URL'] = 'redis://redis.devnorth.dg-api.com/?prefix=dgnorth'
         t = time.time()
-        for i in xrange(count):
+        for i in six.moves.xrange(count):
             ts = get_default_drift_config()
         t = time.time() - t
         avg = t / count

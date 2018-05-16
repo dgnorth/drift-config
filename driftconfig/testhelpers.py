@@ -33,7 +33,7 @@ def _add(fn, ts, name, config_size, count, **kw):
     if count == 1:
         fn(ts, name, config_size, **kw)
     else:
-        for i in xrange(count):
+        for i in six.moves.range(count):
             fn(ts, '{}{}'.format(name, i), config_size, **kw)
 
 
