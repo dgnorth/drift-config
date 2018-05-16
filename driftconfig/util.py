@@ -8,6 +8,7 @@ import os.path
 import getpass
 import importlib
 
+import six
 from click import echo
 
 from driftconfig.relib import get_store_from_url, create_backend
@@ -134,7 +135,7 @@ def get_default_drift_config_and_source():
                 "'DRIFT_CONFIG_URL' environment variable.\n"
                 "Configurations available on local disk: %s."
                 "" % domain_names)
-        domain = domains.values()[0]
+        domain = next(six.itervalues(domains))
         return domain['table_store'], 'file://' + domain['path']
 
 
