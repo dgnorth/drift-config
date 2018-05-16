@@ -9,6 +9,8 @@ import logging
 import subprocess
 
 import six
+import click
+from click import echo, secho
 
 # pygments is optional for now
 try:
@@ -316,15 +318,15 @@ def get_options(parser):
 
 
 def init_command(args):
-    print "Initializing config from", args.source
+    echo("Initializing config from " + args.source)
     if args.ignore_errors:
         del CHECK_INTEGRITY[:]
     ts = create_backend(args.source).load_table_store()
     domain_name = ts.get_table('domain')['domain_name']
-    print "Config domain name: ", domain_name
+    echo("Config domain name: " + domain_name)
     local_store = create_backend('file://' + config_dir(domain_name, user_dir=args.user_dir))
     local_store.save_table_store(ts)
-    print "Config stored at: ", local_store
+    echo("Config stored at: " + local_store)
 
 
 def _format_domain_info(domain_info):
@@ -337,10 +339,10 @@ def list_command(args):
     # Enumerate subfolders at drift/config and see what's there
     domains = get_domains(user_dir=args.user_dir)
     if not domains:
-        print "No Drift configuration found at", config_dir('', user_dir=args.user_dir)
+        echo("No Drift configuration found at " +config_dir('', user_dir=args.user_dir))
     else:
         for d in domains.values():
-            print _format_domain_info(d)
+            echo(_format_domain_info(d))
 
 
 def pull_command(args):
@@ -351,15 +353,16 @@ def pull_command(args):
 
 
 def pull_config_loop(args):
-    print "Starting the pull config loop"
+    # TODO replace with click progress bar
+    echo("Starting the pull config loop")
     while now() < end_time:
         st = time.time()
         _pull_command(args)
         diff = time.time() - st
         this_sleep_time = max(sleep_time - diff, 0)
-        print "Waiting for %.1f sec" % this_sleep_time
+        echo("Waiting for %.1f sec" % this_sleep_time)
         time.sleep(this_sleep_time)
-    print "Completed in %.1f sec" % (now() - start_time).total_seconds()
+    echo("Completed in %.1f sec" % (now() - start_time).total_seconds())
 
 
 def _pull_command(args):
@@ -370,42 +373,42 @@ def _pull_command(args):
         result = pull_from_origin(domain_info['table_store'], ignore_if_modified=args.ignore_if_modified, force=args.force)
 
         if not result['pulled']:
-            print "Pull failed for", domain_name, ". Reason:", result['reason']
+            echo("Pull failed for " + domain_name + ". Reason: " + result['reason'])
             if result['reason'] == 'local_is_modified':
-                print "Use --ignore-if-modified to overwrite local changes."
+                echo("Use --ignore-if-modified to overwrite local changes.")
             else:
-                print "Use --force to force a pull."
+                echo("Use --force to force a pull.")
         else:
             if result['reason'] == 'pulled_from_origin':
                 local_backend = create_backend('file://' + domain_info['path'])
                 local_backend.save_table_store(result['table_store'])
 
-            print "Config for {} pulled. Reason: {}".format(domain_name, result['reason'])
+            echo("Config for {} pulled. Reason: {}".format(domain_name, result['reason']))
 
 
 def cache_command(args):
     if args.domain:
         os.environ['DRIFT_CONFIG_URL'] = args.domain
     ts = get_default_drift_config()
-    print "Updating cache for '{}' - {}".format(
-        ts.get_table('domain')['domain_name'], ts)
+    echo("Updating cache for '{}' - {}".format(
+        ts.get_table('domain')['domain_name'], ts))
 
     for tier in ts.get_table('tiers').find():
         tier_name = tier['tier_name']
         if args.tier and args.tier.upper() != tier_name:
             continue
-        click.secho("{}: ".format(tier_name), nl=False, bold=True)
+        secho("{}: ".format(tier_name), nl=False, bold=True)
         try:
             b = update_cache(ts, tier_name)
         except Exception as e:
             if "Timeout" not in str(e):
                 raise
-            click.secho("Updating failed. VPN down? {}".format(e), fg='red', bold=True)
+            secho("Updating failed. VPN down? {}".format(e), fg='red', bold=True)
         else:
             if b:
-                click.secho("Cache updated. Url: {}".format(b.get_url()))
+                secho("Cache updated. Url: {}".format(b.get_url()))
             else:
-                click.secho("No Redis resource defined for this tier.", fg='red', bold=True)
+                secho("No Redis resource defined for this tier.", fg='red', bold=True)
 
     '''
     # bench test:
@@ -419,15 +422,15 @@ def cache_command(args):
             ts = get_default_drift_config()
         t = time.time() - t
         avg = t / count
-        print "Average time to fetch config from redis: %.1f ms." % (avg * 1000.0)
+        echo("Average time to fetch config from redis: %.1f ms." % (avg * 1000.0))
     '''
 
 
 def migrate_command(args):
-    print "Migrating '{}'".format(args.domain)
+    echo("Migrating '{}'".format(args.domain))
     path = config_dir(args.domain, user_dir=args.user_dir)
     if not os.path.exists(path):
-        print "Path not found:", path
+        echo("Path not found: " + path)
         sys.exit(1)
 
     ts = get_drift_table_store()
@@ -463,26 +466,26 @@ end_time = start_time + timedelta(seconds=run_time)
 def push_command(args):
     domain_info = get_domains(user_dir=args.user_dir).get(args.domain)
     if not domain_info:
-        print "Can't push '{}'.".format(args.domain)
+        echo("Can't push '{}'.".format(args.domain))
         sys.exit(1)
 
     ts = domain_info['table_store']
     origin = ts.get_table('domain')['origin']
-    print "Pushing local config to source", origin
+    echo("Pushing local config to source " + origin)
     result = push_to_origin(ts, args.force)
     if not result['pushed']:
-        print "Push failed. Reason:", result['reason']
-        print "Origin has changed. Use --force to force push."
+        echo("Push failed. Reason: " + result['reason'])
+        echo("Origin has changed. Use --force to force push.")
         if 'time_diff' in result:
-            print "Time diff", result['time_diff']
+            echo("Time diff " + result['time_diff'])
     else:
-        print "Config pushed. Reason: ", result['reason']
+        echo("Config pushed. Reason: " + result['reason'])
         local_store = create_backend('file://' + domain_info['path'])
         local_store.save_table_store(ts)
 
 
 def copy_command(args):
-    print "Copy '%s' to '%s'" % (args.source_url, args.dest_url)
+    echo("Copy '%s' to '%s'" % (args.source_url, args.dest_url))
     if args.source_url == '.':
         ts = get_default_drift_config()
     else:
@@ -490,15 +493,15 @@ def copy_command(args):
     b = create_backend(args.dest_url)
     b.default_format = 'pickle' if args.pickle else 'json'
     b.save_table_store(ts)
-    print "Done."
+    echo("Done.")
 
 
 def create_command(args):
 
     domain_info = get_domains(user_dir=args.user_dir).get(args.domain)
     if domain_info:
-        print "The domain name '{}' is taken:".format(args.domain)
-        print _format_domain_info(domain_info)
+        echo("The domain name '{}' is taken:".format(args.domain))
+        echo(_format_domain_info(domain_info))
         sys.exit(1)
 
     # Force s3 naming convention. The root folder name and domain name must match.
@@ -510,8 +513,8 @@ def create_command(args):
         s3_backend = create_backend(args.source)
         target_folder = s3_backend.folder_name.rsplit('/')[-1]
         if target_folder != args.domain:
-            print "Error: For S3 source, the target folder name and domain name must match."
-            print "Target folder is '{}' but domain name is '{}'".format(target_folder, args.domain)
+            echo("Error: For S3 source, the target folder name and domain name must match.")
+            echo("Target folder is '{}' but domain name is '{}'".format(target_folder, args.domain))
             sys.exit(1)
     elif args.source.startswith('file://'):
         # Expand user vars
@@ -526,12 +529,12 @@ def create_command(args):
     domain_folder = config_dir(args.domain, user_dir=args.user_dir)
     local_store = create_backend('file://' + domain_folder)
     local_store.save_table_store(ts)
-    print "New config for '{}' saved to {}.".format(args.domain, domain_folder)
-    print "Pushing to origin..."
+    echo("New config for '{}' saved to {}.".format(args.domain, domain_folder))
+    echo("Pushing to origin...")
     result = push_to_origin(ts, _first=True)
     if not result['pushed']:
-        print "Push failed. Reason:", result['reason']
-    print "Done."
+        echo("Push failed. Reason: " + result['reason'])
+    echo("Done.")
 
 
 _ENTRY_TO_TABLE_NAME = {
@@ -546,7 +549,7 @@ def diff_command(args):
     # Get local table store and its meta state
     domain_info = get_domains(user_dir=args.user_dir).get(args.domain)
     if domain_info is None:
-        click.secho("Configuration not found: {}".format(args.domain), fg='red')
+        secho("Configuration not found: {}".format(args.domain), fg='red')
         sys.exit(1)
     local_ts = domain_info['table_store']
     local_m1, local_m2 = local_ts.refresh_metadata()
@@ -563,17 +566,17 @@ def diff_command(args):
     for title, m1, m2, details in local_diff, origin_diff:
         diff = diff_meta(m1, m2)
         if diff['identical']:
-            print title, "is clean."
+            echo(title + " is clean.")
         else:
-            print title, "are different:"
-            print "\tFirst checksum: ", diff['checksum']['first'][:7]
-            print "\tSecond checksum:", diff['checksum']['second'][:7]
+            echo(title + " are different:")
+            echo("\tFirst checksum:  " + diff['checksum']['first'][:7])
+            echo("\tSecond checksum: " + diff['checksum']['second'][:7])
             if diff['modified_diff']:
-                print "\tTime since pull: ", str(diff['modified_diff']).split('.')[0]
+                echo("\tTime since pull: ", str(diff['modified_diff']).split('.')[0])
 
-            print "\tNew tables:", diff['new_tables']
-            print "\tDeleted tables:", diff['deleted_tables']
-            print "\tModified tables:", diff['modified_tables']
+            echo("\tNew tables: ", + diff['new_tables'])
+            echo("\tDeleted tables: " + diff['deleted_tables'])
+            echo("\tModified tables: " + diff['modified_tables'])
 
             if details:
                 # Diff origin
@@ -582,8 +585,8 @@ def diff_command(args):
                     t1 = local_ts.get_table(table_name)
                     t2 = origin_ts.get_table(table_name)
                     tablediff = diff_tables(t1, t2)
-                    print "\nTable diff for", table_name, "\n(first=local, second=origin):"
-                    print json.dumps(tablediff, indent=4, sort_keys=True)
+                    echo("\nTable diff for " + table_name + "\n(first=local, second=origin):")
+                    echo(json.dumps(tablediff, indent=4, sort_keys=True))
 
 
 def register_command(args):
@@ -625,15 +628,15 @@ def _get_package_info(project_dir):
 def register_deployable(project_dir=None, preview=False):
 
     project_dir = project_dir or '.'
-    print "Project Directory:", project_dir
+    echo("Project Directory: " + project_dir)
 
     info = _get_package_info(project_dir)
     name = info['name']
 
-    print "Registering/updating deployable {}:".format(name)
-    print "Package info:"
-    print pretty(info)
-    print ""
+    echo("Registering/updating deployable {}:".format(name))
+    echo("Package info:")
+    echo(pretty(info))
+    echo("")
 
     # TODO: This is perhaps not ideal, or what?
     config_filename = os.path.join(project_dir, 'config', 'config.json')
@@ -658,19 +661,19 @@ def register_deployable(project_dir=None, preview=False):
         row = ret['new_registration']
 
         if orig_row is None:
-            print "New registration entry added:"
-            print pretty(row)
+            echo("New registration entry added:")
+            echo(pretty(row))
         elif orig_row == row:
-            print "Current registration unchanged:"
-            print pretty(row)
+            echo("Current registration unchanged:")
+            echo(pretty(row))
         else:
-            print "Updating current registration info:"
-            print pretty(row)
-            print "\nPrevious registration info:"
-            print pretty(orig_row)
+            echo("Updating current registration info:")
+            echo(pretty(row))
+            echo("\nPrevious registration info:")
+            echo(pretty(orig_row))
 
     if preview:
-        print "Preview changes only, not committing to origin."
+        echo("Preview changes only, not committing to origin.")
 
 
 def create_tenant_command(args):
@@ -690,11 +693,11 @@ def create_tenant_command(args):
         tenant = ts.get_table('tenant-names').get({'tenant_name': tenant_name})
         if tenant:
             if tenant['tier_name'] != tier_name:
-                print "Tenant '{}' is on tier '{}'. Exiting.".format(tenant_name, tenant['tier_name'])
+                echo("Tenant '{}' is on tier '{}'. Exiting.".format(tenant_name, tenant['tier_name']))
                 sys.exit(1)
 
-            print "Tenant '{}' already exists. Refreshing it for tier '{}'...".format(
-                tenant_name, tier_name)
+            echo("Tenant '{}' already exists. Refreshing it for tier '{}'...".format(
+                tenant_name, tier_name))
 
         result = define_tenant(
             ts=ts,
@@ -703,17 +706,17 @@ def create_tenant_command(args):
             tier_name=tier_name
         )
 
-    print "Tenant '{}' created/refreshed on tier '{}'.".format(tenant_name, tier_name)
-    print pretty(result)
+    echo("Tenant '{}' created/refreshed on tier '{}'.".format(tenant_name, tier_name))
+    echo(pretty(result))
     if args.preview:
-        print "\nPreview changes only, not committing to origin."
+        echo("\nPreview changes only, not committing to origin.")
         sys.exit(0)
 
 
 def refresh_tenant_command(args):
 
     tenant_name = vars(args)['tenant-name']
-    print "Refreshing '{}':".format(tenant_name)
+    echo("Refreshing '{}':".format(tenant_name))
     if args.config:
         os.environ['DRIFT_CONFIG_URL'] = args.config
 
@@ -724,7 +727,7 @@ def refresh_tenant_command(args):
     with TSTransaction(commit_to_origin=not args.preview) as ts:
         tenant_info = ts.get_table('tenant-names').get({'tenant_name': tenant_name})
         if not tenant_info:
-            print "Tenant '{}' not found!".format(tenant_name)
+            echo("Tenant '{}' not found!".format(tenant_name))
             sys.exit(1)
 
         result = define_tenant(
@@ -734,10 +737,10 @@ def refresh_tenant_command(args):
             tier_name=tenant_info['tier_name'],
         )
 
-    print "Result:"
-    print pretty(result)
+    echo("Result:")
+    echo(pretty(result))
     if args.preview:
-        print "\nPreview changes only, not committing to origin."
+        echo("\nPreview changes only, not committing to origin.")
         sys.exit(0)
 
 
@@ -746,7 +749,7 @@ def provision_tenant_command(args):
     tenant_name = vars(args)['tenant-name']
     deployable_name = vars(args)['deployable-name']
 
-    print "Provisioning '{}' for {}:".format(tenant_name, deployable_name)
+    echo("Provisioning '{}' for {}:".format(tenant_name, deployable_name))
     if deployable_name == 'all':
         deployable_name = None
 
@@ -760,7 +763,7 @@ def provision_tenant_command(args):
     with TSTransaction(commit_to_origin=not args.preview) as ts:
         tenant_info = ts.get_table('tenant-names').get({'tenant_name': tenant_name})
         if not tenant_info:
-            print "Tenant '{}' not found!".format(tenant_name)
+            echo("Tenant '{}' not found!".format(tenant_name))
             sys.exit(1)
 
         # Refresh for good measure
@@ -778,16 +781,16 @@ def provision_tenant_command(args):
             preview=args.preview
         )
 
-    print "Result:"
-    print pretty(report)
+    echo("Result:")
+    echo(pretty(report))
     if args.preview:
-        print "\nPreview changes only, not committing to origin."
+        echo("\nPreview changes only, not committing to origin.")
         sys.exit(0)
 
 
 def assign_tier_command(args):
     deployable_name = vars(args)['deployable-name']
-    print "Assigning '{}':".format(deployable_name)
+    echo("Assigning '{}':".format(deployable_name))
 
     if args.config:
         os.environ['DRIFT_CONFIG_URL'] = args.config
@@ -803,24 +806,24 @@ def assign_tier_command(args):
 
         names = [d['deployable_name'] for d in ts.get_table('deployable-names').find()]
         if not names:
-            print "No deployable registered. See 'drift-admin register' for more info."
+            echo("No deployable registered. See 'drift-admin register' for more info.")
             sys.exit(1)
 
         if deployable_name not in names:
-            print "Deployable '{}' not found. Select one of: {}.".format(
+            echo("Deployable '{}' not found. Select one of: {}.".format(
                 deployable_name,
                 ', '.join(names)
-            )
+            ))
             sys.exit(1)
 
         if not args.tiers:
             args.tiers = [tier['tier_name'] for tier in ts.get_table('tiers').find()]
 
         for tier_name in args.tiers:
-            print "Enable deployable on tier {s.BRIGHT}{}{s.NORMAL}:".format(tier_name, **styles)
+            echo("Enable deployable on tier {s.BRIGHT}{}{s.NORMAL}:".format(tier_name, **styles))
             tier = ts.get_table('tiers').get({'tier_name': tier_name})
             if not tier:
-                print "{f.RED}Tier '{}' not found! Exiting.".format(tier_name, **styles)
+                echo("{f.RED}Tier '{}' not found! Exiting.".format(tier_name, **styles))
                 sys.exit(1)
 
             ret = register_this_deployable_on_tier(
@@ -828,8 +831,8 @@ def assign_tier_command(args):
 
             if ret['new_registration']['is_active'] != is_active:
                 ret['new_registration']['is_active'] = is_active
-                print "Note: Marking this deployable as {} on tier '{}'.".format(
-                    "active" if is_active else "inactive", tier_name)
+                echo("Note: Marking this deployable as {} on tier '{}'.".format(
+                    "active" if is_active else "inactive", tier_name))
 
             # For convenience, register resource default values as well. This
             # is idempotent so it's fine to call it periodically.
@@ -848,24 +851,24 @@ def assign_tier_command(args):
                         # Let's prompt if and only if the value isn't already set.
                         attributes = config_resources.get(resource['module_name'], {})
                         if k not in attributes or attributes[k] == "<PLEASE FILL IN>":
-                            print "Enter value for {s.BRIGHT}{}.{}{s.NORMAL}:".format(
-                                resource['module_name'], k, **styles),
+                            echo("Enter value for {s.BRIGHT}{}.{}{s.NORMAL}: ".format(
+                                resource['module_name'], k, **styles), end="")
                             resource['default_attributes'][k] = raw_input()
 
-            print "\nDefault values for resources configured for this tier:"
-            print pretty(config_resources)
+            echo("\nDefault values for resources configured for this tier:")
+            echo(pretty(config_resources))
 
             register_tier_defaults(ts=ts, tier_name=tier_name, resources=resources)
 
-            print "\nRegistration values for this deployable on this tier:"
-            print pretty(ret['new_registration'])
-            print ""
+            echo("\nRegistration values for this deployable on this tier:")
+            echo(pretty(ret['new_registration']))
+            echo("")
 
         # Display the diff
         _diff_ts(ts, old_ts)
 
     if args.preview:
-        print "Preview changes only, not committing to origin."
+        echo("Preview changes only, not committing to origin.")
 
 
 def _diff_ts(ts1, ts2):
@@ -884,35 +887,35 @@ def _diff_ts(ts1, ts2):
     diff = diff_meta(m1, m2)
 
     if diff['identical']:
-        print title, "is clean."
+        echo(title + " is clean.")
     else:
-        print title, "are different:"
-        print "\tFirst checksum: ", diff['checksum']['first'][:7]
-        print "\tSecond checksum:", diff['checksum']['second'][:7]
+        echo(title + " are different:")
+        echo("\tFirst checksum:  " + diff['checksum']['first'][:7])
+        echo("\tSecond checksum: " + diff['checksum']['second'][:7])
         if diff['modified_diff']:
-            print "\tTime since pull: ", str(diff['modified_diff']).split('.')[0]
+            echo("\tTime since pull: " + str(diff['modified_diff']).split('.')[0])
 
-        print "\tNew tables:", diff['new_tables']
-        print "\tDeleted tables:", diff['deleted_tables']
-        print "\tModified tables:", diff['modified_tables']
+        echo("\tNew tables: " + diff['new_tables'])
+        echo("\tDeleted tables: " + diff['deleted_tables'])
+        echo("\tModified tables: " + diff['modified_tables'])
 
         try:
             import jsondiff
         except ImportError:
-            print "To get detailed diff do {s.BRIGHT}pip install jsondiff{s.NORMAL}".format(**styles)
+            echo("To get detailed diff do {s.BRIGHT}pip install jsondiff{s.NORMAL}".format(**styles))
         else:
             # Diff origin
             for table_name in diff['modified_tables']:
                 t1 = ts1.get_table(table_name)
                 t2 = ts2.get_table(table_name)
                 tablediff = diff_tables(t1, t2)
-                print "\nTable diff for {s.BRIGHT}{}{s.NORMAL}".format(table_name, **styles)
+                echo("\nTable diff for {s.BRIGHT}{}{s.NORMAL}".format(table_name, **styles))
 
                 for modified_row in tablediff['modified_rows']:
                     d = json.loads(jsondiff.diff(
                         modified_row['second'], modified_row['first'], dump=True)
                     )
-                    print pretty(d)
+                    echo(pretty(d))
 
 
 def run_command(args):
@@ -936,6 +939,9 @@ def main(as_module=False):
         import driftconfig.relib
         del driftconfig.relib.CHECK_INTEGRITY[:]
 
+    if not args.command:
+        parser.print_usage()
+        sys.exit(1)
     fn = globals()["{}_command".format(args.command.replace("-", "_"))]
     fn(args)
 
@@ -944,20 +950,17 @@ if __name__ == '__main__':
     main(as_module=True)
 
 
-import click
-
-
 def _header(ts):
     domain = ts.get_table('domain')
-    click.secho("Drift config DB ", nl=False)
-    click.secho(domain['domain_name'], bold=True, nl=False)
-    click.secho(" at origin ", nl=False)
-    click.secho(domain['origin'], bold=True)
+    secho("Drift config DB ", nl=False)
+    secho(domain['domain_name'], bold=True, nl=False)
+    secho(" at origin ", nl=False)
+    secho(domain['origin'], bold=True)
 
 
 def _epilogue(ts):
     name = ts.get_table('domain')['domain_name']
-    click.secho("Run \"driftconfig diff {} -d\" to see changes. Run \"driftconfig push {}\" to commit them.".format(name, name))
+    secho("Run \"driftconfig diff {} -d\" to see changes. Run \"driftconfig push {}\" to commit them.".format(name, name))
 
 
 class Globals(object):
@@ -1001,7 +1004,7 @@ def configs():
     """List out all Drift configuration DB's that are active on this machine."""
     domains = get_domains()
     if not domains:
-        click.secho(
+        secho(
             "No Drift configuration found on this machine. Run 'init' or 'create' command "
             "to remedy.")
     else:
@@ -1012,34 +1015,34 @@ def configs():
             domain = domain_info['table_store'].get_table('domain')
             is_default = domain['domain_name'] == ts.get_table('domain')['domain_name']
             if is_default:
-                click.secho(domain['domain_name'] + " [DEFAULT]:", bold=True, nl=False)
+                secho(domain['domain_name'] + " [DEFAULT]:", bold=True, nl=False)
                 got_default = True
             else:
-                click.secho(domain['domain_name'] + ":", bold=True, nl=False)
+                secho(domain['domain_name'] + ":", bold=True, nl=False)
 
-            click.secho(" \"{}\"".format(domain['display_name']), fg='green')
-            click.secho("\tOrigin: " + domain['origin'])
-            click.secho("\tLocal: " + domain_info['path'])
-            click.secho("")
+            secho(" \"{}\"".format(domain['display_name']), fg='green')
+            secho("\tOrigin: " + domain['origin'])
+            secho("\tLocal: " + domain_info['path'])
+            secho("")
 
         if got_default:
             if 'DRIFT_CONFIG_URL' in os.environ:
-                click.secho("The default config is specified using the 'DRIFT_CONFIG_URL' environment variable.")
+                secho("The default config is specified using the 'DRIFT_CONFIG_URL' environment variable.")
             else:
-                click.secho("The config above is the default one as it's the only one cached locally in ~/.drift/config.")
+                secho("The config above is the default one as it's the only one cached locally in ~/.drift/config.")
         else:
-            click.secho("Note: There is no default config specified!")
+            secho("Note: There is no default config specified!")
 
 
 @list.command()
 def deployables():
     """Display registration info for deployables."""
     ts = get_default_drift_config()
-    click.echo("List of Drift deployable plugins in ", nl=False)
+    echo("List of Drift deployable plugins in ", nl=False)
     _header(ts)
     deployables = ts.get_table('deployable-names')
 
-    click.secho("Deployables and api routes:\n", bold=True)
+    secho("Deployables and api routes:\n", bold=True)
 
     def join_tables(master_table, tables, search_criteria=None, cb=None):
         """
@@ -1091,11 +1094,11 @@ def tenants(tenant_name):
     else:
         tenant = conf.get_table('tenants').find({'tenant_name': tenant_name})
         if not tenant:
-            click.secho("No tenant named {} found.".format(tenant_name), fg='red', bold=True)
+            secho("No tenant named {} found.".format(tenant_name), fg='red', bold=True)
             sys.exit(1)
 
-        click.secho("Tenant {s.BRIGHT}{}{s.NORMAL}:".format(tenant_name, **styles))
-        click.echo(json.dumps(tenant, indent=4))
+        secho("Tenant {s.BRIGHT}{}{s.NORMAL}:".format(tenant_name, **styles))
+        echo(json.dumps(tenant, indent=4))
 
 
 @cli.command()
@@ -1123,9 +1126,9 @@ def developer(recreate, user, run):
     registered.
     """
     logging.basicConfig(level='INFO')
-    click.secho("----------------", bold=True)
-    click.secho("Drift Developer:", bold=True)
-    click.secho("----------------", bold=True)
+    secho("----------------", bold=True)
+    secho("Drift Developer:", bold=True)
+    secho("----------------", bold=True)
 
     domain_name = 'developer'
     tier_name = 'LOCALTIER'
@@ -1139,13 +1142,13 @@ def developer(recreate, user, run):
         if os.path.exists('.gitignore'):
             with open('.gitignore', 'r+') as f:
                 if origin_folder not in f.read():
-                    click.secho("Note! Adding {} to .gitignore".format(click.style(origin_folder, bold=True)))
+                    secho("Note! Adding {} to .gitignore".format(click.style(origin_folder, bold=True)))
                     f.seek(0, os.SEEK_END)  # Need this on Windows
                     f.write("\n# Drift config folder for local development\n{}\n".format(origin_folder))
 
     origin_folder = os.path.abspath(origin_folder)
-    click.secho("Origin of this developer config is at: ", nl=False)
-    click.secho(origin_folder, bold=True, fg='blue')
+    secho("Origin of this developer config is at: ", nl=False)
+    secho(origin_folder, bold=True, fg='blue')
     origin = 'file://{}'.format(origin_folder)
 
     # See if config already exists
@@ -1156,7 +1159,7 @@ def developer(recreate, user, run):
 
     if recreate or ts is None:
         if ts:
-            click.secho(
+            secho(
                 "Warning: Overriding existing configuration because of --recreate flag.",
                 fg='yellow'
                 )
@@ -1183,7 +1186,7 @@ def developer(recreate, user, run):
         domain['origin'] = origin
         domain['display_name'] = "Configuration for local development"
     else:
-        click.secho("Using existing developer config DB.")
+        secho("Using existing developer config DB.")
 
     project_dir = '.'
 
@@ -1191,7 +1194,7 @@ def developer(recreate, user, run):
     config_filename = os.path.join(project_dir, 'config', 'config.json')
     config_filename = os.path.expanduser(config_filename)
     if not os.path.exists(config_filename) or not os.path.exists('setup.py'):
-        click.secho("Error: Please run this command from a deployable root directory.",
+        secho("Error: Please run this command from a deployable root directory.",
             fg='red', bold=True)
         sys.exit(1)
 
@@ -1242,15 +1245,15 @@ def developer(recreate, user, run):
                     elif attrib_name == 'drift.core.resources.postgres.server':
                         value = 'localhost'
                     else:
-                        print "Enter value for {s.BRIGHT}{}{s.NORMAL}:".format(
-                            attrib_name, **styles),
+                        echo("Enter value for {s.BRIGHT}{}{s.NORMAL}: ".format(
+                            attrib_name, **styles), end="")
                         value = raw_input()
                     resource['default_attributes'][k] = value
 
     register_tier_defaults(ts=ts, tier_name='LOCALTIER', resources=resources)
 
-    click.secho("\nDefault values for resources configured for this tier:", bold=True)
-    click.secho(pretty(tier.get('resources', {})))
+    secho("\nDefault values for resources configured for this tier:", bold=True)
+    secho(pretty(tier.get('resources', {})))
 
     # Add the developer tenant
     result = define_tenant(
@@ -1270,19 +1273,19 @@ def developer(recreate, user, run):
         tenant_name=tenant_name,
     )
 
-    click.secho("Provisioned tenant", bold=True)
-    click.secho(pretty(report))
+    secho("Provisioned tenant", bold=True)
+    secho(pretty(report))
 
     # Save it locally
     domain_folder = config_dir(domain_name)
     local_store = create_backend('file://' + domain_folder)
     local_store.save_table_store(ts)
-    click.secho("New config for '{}' saved to {}.".format(domain_name, domain_folder))
+    secho("New config for '{}' saved to {}.".format(domain_name, domain_folder))
     result = push_to_origin(ts, _first=True)
     if not result['pushed']:
-        click.secho("Push failed. Reason:" + result['reason'], fg='red')
+        secho("Push failed. Reason:" + result['reason'], fg='red')
 
-    click.secho("\nTo enable local development:\n", bold=True)
+    secho("\nTo enable local development:\n", bold=True)
     sh = (""
         "# The following environment variables define full context for local development\n"
         "export DRIFT_CONFIG_URL={}\n"
@@ -1294,10 +1297,11 @@ def developer(recreate, user, run):
         "flask run\n\n"
         "".format(domain_name, tier_name)
         )
-    click.secho(pretty(sh, lexer='bash'))
+    secho(pretty(sh, lexer='bash'))
 
+    # TODO switch to colorama, used by click.secho
     if not got_pygments:
-        click.secho("\n\nFinal Note! All the blurb above would look much better with colors!.\n"
+        secho("\n\nFinal Note! All the blurb above would look much better with colors!.\n"
             "Plese Run the following command for the sake of rainbows and unicorns:\n"
             "pip install pygments\n\n"
             )
@@ -1337,7 +1341,7 @@ def edit(table_name):
     with open(path, 'r') as f:
         text = click.edit(f.read(), editor='nano')
     if text:
-        click.secho("Writing changes to " + path)
+        secho("Writing changes to " + path)
         with open(path, 'w') as f:
             f.write(text)
 
@@ -1357,16 +1361,16 @@ def info(tier_name):
     conf = get_default_drift_config()
     _header(conf)
     if tier_name is None:
-        click.echo("Tiers:")
+        echo("Tiers:")
         tabulate(['tier_name', 'state', 'is_live'], conf.get_table('tiers').find(), indent='  ')
     else:
         tier = conf.get_table('tiers').find({'tier_name': tier_name})
         if not tier:
-            click.secho("No tier named {} found.".format(tier_name), fg='red', bold=True)
+            secho("No tier named {} found.".format(tier_name), fg='red', bold=True)
             sys.exit(1)
         tier = tier[0]
-        click.echo("Tier {}:".format(tier['tier_name']))
-        click.echo(pretty(tier))
+        echo("Tier {}:".format(tier['tier_name']))
+        echo(pretty(tier))
 
 
 @tier.command()
@@ -1384,7 +1388,7 @@ def add(tier_name, is_live, edit):
             if edit:
                 entry = json.loads(edit)
         if tiers.find(entry):
-            click.secho("Tier {} already exists!".format(entry['tier_name']), fg='red', bold=True)
+            secho("Tier {} already exists!".format(entry['tier_name']), fg='red', bold=True)
             sys.exit(1)
         tiers.add(entry)
 
@@ -1399,7 +1403,7 @@ def edit(tier_name):
         tiers = ts.get_table('tiers')
         entry = tiers.get({'tier_name': tier_name})
         if not entry:
-            click.secho("tier {} not found!".format(tier_name))
+            secho("tier {} not found!".format(tier_name))
             sys.exit(1)
 
         edit = click.edit(json.dumps(entry, indent=4), editor='nano')
@@ -1433,11 +1437,11 @@ def info(organization_name):
         if not org:
             org = conf.get_table('organizations').find({'short_name': organization_name})
         if not org:
-            click.secho("No organization named {} found.".format(organization_name), fg='red', bold=True)
+            secho("No organization named {} found.".format(organization_name), fg='red', bold=True)
             sys.exit(1)
         org = org[0]
-        click.echo("Organization {}:".format(org['organization_name']))
-        click.echo(json.dumps(org, indent=4))
+        echo("Organization {}:".format(org['organization_name']))
+        echo(json.dumps(org, indent=4))
 
 
 @organization.command()
@@ -1463,7 +1467,7 @@ def add(organization_name, short_name, display_name, edit):
             if edit:
                 entry = json.loads(edit)
         if organizations.find(entry):
-            click.secho("Organization {} already exists!".format(entry['organization_name']), fg='red', bold=True)
+            secho("Organization {} already exists!".format(entry['organization_name']), fg='red', bold=True)
             sys.exit(1)
         organizations.add(entry)
 
@@ -1478,7 +1482,7 @@ def edit(organization_name):
         organizations = ts.get_table('organizations')
         entry = organizations.get({'organization_name': organization_name})
         if not entry:
-            click.secho("organization {} not found!".format(organization_name))
+            secho("organization {} not found!".format(organization_name))
             sys.exit(1)
 
         edit = click.edit(json.dumps(entry, indent=4), editor='nano')
@@ -1509,11 +1513,11 @@ def info(product_name):
     else:
         product = conf.get_table('products').find({'product_name': product_name})
         if not product:
-            click.secho("No product named {} found.".format(product_name), fg='red', bold=True)
+            secho("No product named {} found.".format(product_name), fg='red', bold=True)
             sys.exit(1)
         product = product[0]
-        click.secho("Product {s.BRIGHT}{}{s.NORMAL}:".format(product['product_name'], **styles))
-        click.echo(json.dumps(product, indent=4))
+        secho("Product {s.BRIGHT}{}{s.NORMAL}:".format(product['product_name'], **styles))
+        echo(json.dumps(product, indent=4))
 
 
 @product.command()
@@ -1525,7 +1529,7 @@ def add(product_name, edit):
     The product name must be prefixed with the organization short name and a dash.
     """
     if '-' not in product_name:
-        click.secho("Error: The product name must be prefixed with the organization "
+        secho("Error: The product name must be prefixed with the organization "
             "short name and a dash.", fg='red', bold=True)
         sys.exit(1)
 
@@ -1533,7 +1537,7 @@ def add(product_name, edit):
     conf = get_default_drift_config()
     org = conf.get_table('organizations').find({'short_name': short_name})
     if not org:
-        click.secho("No organization with short name {} found.".format(short_name), fg='red', bold=True)
+        secho("No organization with short name {} found.".format(short_name), fg='red', bold=True)
         sys.exit(1)
 
     organization_name = org[0]['organization_name']
@@ -1550,7 +1554,7 @@ def add(product_name, edit):
             if edit:
                 entry = json.loads(edit)
         if products.find(entry):
-            click.secho("Product {} already exists!".format(entry['product_name']), fg='red', bold=True)
+            secho("Product {} already exists!".format(entry['product_name']), fg='red', bold=True)
             sys.exit(1)
         products.add(entry)
 
@@ -1565,7 +1569,7 @@ def edit(product_name):
         products = ts.get_table('products')
         entry = products.get({'product_name': product_name})
         if not entry:
-            click.secho("product {} not found!".format(product_name))
+            secho("product {} not found!".format(product_name))
             sys.exit(1)
 
         edit = click.edit(json.dumps(entry, indent=4), editor='nano')
@@ -1591,15 +1595,15 @@ def tabulate(headers, rows, indent=None, col_padding=None):
     rows = sorted(rows, key=make_key)
 
     for row in [headers] + rows:
-        click.echo(indent, nl=False)
+        echo(indent, nl=False)
         for h, width in zip(headers, col_size):
             if row == headers:
                 h = h.replace('_', ' ').title()  # Make header name pretty
-                click.secho(h.ljust(width + col_padding), bold=True, nl=False)
+                secho(h.ljust(width + col_padding), bold=True, nl=False)
             else:
                 fg = 'black' if row.get('active', True) else 'white'
-                click.secho(str(row.get(h, '')).ljust(width + col_padding), nl=False, fg=fg)
-        click.echo()
+                secho(str(row.get(h, '')).ljust(width + col_padding), nl=False, fg=fg)
+        echo()
 
 
 PRETTY_FORMATTER = 'console256'
