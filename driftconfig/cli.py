@@ -1098,7 +1098,7 @@ def tenants(tenant_name):
 
 @cli.command()
 @click.option(
-    '--user', '-u',
+    '--shared', '-s',
     help="Use a shared configuration. The DB will be stored in user directory for your platform, "
     "typically ~/ (or %USERPROFILE% on Windows). The configuration can thus be shared between "
     "multiple projects.",
@@ -1114,7 +1114,7 @@ def tenants(tenant_name):
     help="Run a Flask server.",
     is_flag=True
 )
-def developer(recreate, user, run):
+def developer(recreate, shared, run):
     """Set up environment for local development.
 
     Creates or updates a Drift Configuration DB. The current deployable is automatically
@@ -1130,7 +1130,7 @@ def developer(recreate, user, run):
     tenant_name = 'developer'
     origin_folder = '.driftconfig-' + domain_name
 
-    if user:
+    if shared:
         origin_folder = os.path.join(os.path.expanduser('~'), origin_folder)
     else:
         # Make sure origin folder is ignored in git.
