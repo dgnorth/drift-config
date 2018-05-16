@@ -1227,6 +1227,7 @@ def developer(recreate, user, run):
     # is not already set in the config, is subject to prompting.
     tier = ts.get_table('tiers').get({'tier_name': 'LOCALTIER'})
     config_resources = tier.get('resources', {})
+    USE_EMPTY_AS_DEFAULT = True  # Just to slide through without interruptions.
 
     for resource in resources:
         for k, v in resource['default_attributes'].items():
@@ -1239,6 +1240,8 @@ def developer(recreate, user, run):
                         value = 'localhost'
                     elif attrib_name == 'drift.core.resources.postgres.server':
                         value = 'localhost'
+                    elif USE_EMPTY_AS_DEFAULT:
+                        value = ''
                     else:
                         print "Enter value for {s.BRIGHT}{}{s.NORMAL}:".format(
                             attrib_name, **styles),
