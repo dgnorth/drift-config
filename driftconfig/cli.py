@@ -1103,7 +1103,7 @@ def tenants(tenant_name):
 
 @cli.command()
 @click.option(
-    '--user', '-u',
+    '--shared', '-s',
     help="Use a shared configuration. The DB will be stored in user directory for your platform, "
     "typically ~/ (or %USERPROFILE% on Windows). The configuration can thus be shared between "
     "multiple projects.",
@@ -1119,7 +1119,7 @@ def tenants(tenant_name):
     help="Run a Flask server.",
     is_flag=True
 )
-def developer(recreate, user, run):
+def developer(recreate, shared, run):
     """Set up environment for local development.
 
     Creates or updates a Drift Configuration DB. The current deployable is automatically
@@ -1135,7 +1135,7 @@ def developer(recreate, user, run):
     tenant_name = 'developer'
     origin_folder = '.driftconfig-' + domain_name
 
-    if user:
+    if shared:
         origin_folder = os.path.join(os.path.expanduser('~'), origin_folder)
     else:
         # Make sure origin folder is ignored in git.
@@ -1232,6 +1232,7 @@ def developer(recreate, user, run):
     # is not already set in the config, is subject to prompting.
     tier = ts.get_table('tiers').get({'tier_name': 'LOCALTIER'})
     config_resources = tier.get('resources', {})
+    USE_EMPTY_AS_DEFAULT = True  # Just to slide through without interruptions.
 
     for resource in resources:
         for k, v in resource['default_attributes'].items():
@@ -1244,6 +1245,8 @@ def developer(recreate, user, run):
                         value = 'localhost'
                     elif attrib_name == 'drift.core.resources.postgres.server':
                         value = 'localhost'
+                    elif USE_EMPTY_AS_DEFAULT:
+                        value = ''
                     else:
                         echo("Enter value for {s.BRIGHT}{}{s.NORMAL}: ".format(
                             attrib_name, **styles), end="")
