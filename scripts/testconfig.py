@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 import logging
+from datetime import datetime
 
 import os.path
+from click import echo
 
 from driftconfig.relib import TableStore, create_backend
 from driftconfig.backends import FileBackend, S3Backend, RedisBackend
@@ -25,7 +27,7 @@ directivegames-borkbork
 
 logging.basicConfig(level='INFO')
 config_path = os.path.join(os.path.expanduser("~"), '.drift', 'config')
-print "config_path is", config_path
+echo("config_path is " + config_path)
 
 # Set up backends. One on local hard drive, one on S3 and one in Redis
 s3_store = S3Backend('relib-test', 'directive-games', 'eu-west-1')
@@ -37,11 +39,11 @@ ts = get_drift_table_store()
 
 if 0:
     s3_store.load(ts)
-    print "whee got all the config", ts
+    echo("whee got all the config " + ts)
     redis_store.save(ts)
-    print "now i have dumped all the s3 config into redis"
+    echo("now i have dumped all the s3 config into redis")
     local_store.save(ts)
-    print "its also on mny local disk hes"
+    echo("its also on mny local disk hes")
     config_path = os.path.join(os.path.expanduser("~"), '.drift', 'config2')
     FileBackend(config_path).save(ts)
     import sys
@@ -74,7 +76,6 @@ ts.get_table('deployables').add({'tier_name': 'LIVENORTH', 'deployable_name': 't
 
 
 # Configure LIVENORTH
-from datetime import datetime
 for tenant_name in [
     'superkaiju', 'superkaiju-test', 'loadout', 'loadout-test', 'default-livenorth',
     'themachines', 'themachines-test', 'themacines-test2', 'nonnib-livenorth',
@@ -92,9 +93,9 @@ for tenant_name in [
 
 # Store locally and cache in Redis
 domain_name = ts.get_table('domain')['domain_name']
-print "DOMAIN NAME IS", domain_name
+echo("DOMAIN NAME IS", domain_name)
 local_store = create_backend('file://./~/.drift/config/' + domain_name)
-print "LOCAL STORE BACKEND IS", local_store, local_store.get_url()
+echo("LOCAL STORE BACKEND IS %s %s" % (local_store, local_store.get_url()))
 
 
 local_store.save_table_store(ts)
@@ -103,7 +104,7 @@ s3_store.save_table_store(ts)
 #redis_store.save(ts)
 
 ts = local_store.load_table_store()
-print "whee got ts", ts
+echo("whee got ts " + ts)
 
 '''
 TODO: unit test failed testing:

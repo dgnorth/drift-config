@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 import sys
-import six.moves.urllib.parse import urlsplit
+from six.moves.urllib.parse import urlsplit
 from datetime import datetime
 import subprocess
 
 import boto3
 import click
+from click import echo, secho
 from jinja2 import Environment, PackageLoader
 from driftconfig.util import get_default_drift_config
 from driftconfig.config import push_to_origin, get_redis_cache_backend
@@ -42,16 +43,16 @@ def cli(ctx, config_urls, verbose, test):
         tier_name = tier['tier_name']
 
         if 'organization_name' not in tier:
-            click.secho("Note: Tier {} does not define 'organization_name'.".format(tier_name))
+            secho("Note: Tier {} does not define 'organization_name'.".format(tier_name))
 
         s3_origin_url = domain['origin']
 
         if tier_name in tiers:
-            click.secho("Error: Duplicate tier names found. Tier '{}' is "
+            secho("Error: Duplicate tier names found. Tier '{}' is "
                 "defined in both of the following configs:".format(tier_name), fg='red')
-            click.secho("Config A: {}".format(s3_origin_url))
-            click.secho("Config B: {}".format(tiers[tier_name]['s3_origin_url']))
-            click.secho("'{}' from config B will be skipped, but please fix!".format(tier_name))
+            secho("Config A: {}".format(s3_origin_url))
+            secho("Config B: {}".format(tiers[tier_name]['s3_origin_url']))
+            secho("'{}' from config B will be skipped, but please fix!".format(tier_name))
             continue
 
         if 'aws' not in tier or 'region' not in tier['aws']:
@@ -69,7 +70,7 @@ def cli(ctx, config_urls, verbose, test):
         # If 'get_bucket_location' returns None, it really means 'us-east-1'.
         s3_bucket_region = s3_bucket_region or 'us-east-1'
 
-        print "Connecting to AWS region {} to gather subnets and security group.".format(aws_region)
+        echo("Connecting to AWS region {} to gather subnets and security group.".format(aws_region))
         ec2 = boto3.resource('ec2', aws_region)
         filters = [
             {'Name': 'tag:tier', 'Values':[ tier_name]},
@@ -104,12 +105,12 @@ def cli(ctx, config_urls, verbose, test):
     template = env.get_template('zappa_settings.yml.jinja')
     zappa_settings_text = template.render(tiers=tiers.values())
 
-    print pretty(zappa_settings_text, 'yaml')
+    echo(pretty(zappa_settings_text, 'yaml'))
     filename = '{}.settings.yml'.format(domain['domain_name'])
     with open(filename, 'w') as f:
         f.write(zappa_settings_text)
 
-    click.secho("\n{} generated.\n".format(click.style(filename, bold=True)))
+    secho("\n{} generated.\n".format(click.style(filename, bold=True)))
 
     if test:
         _run_sanity_check(tiers)
@@ -117,47 +118,47 @@ def cli(ctx, config_urls, verbose, test):
 
     for tier_name in tiers.keys():
         cmd = ['zappa', 'update', '-s', filename, tier_name]
-        click.secho("Running command: {}".format(' '.join(cmd)))
+        echo("Running command: {}".format(' '.join(cmd)))
         ret = subprocess.call(cmd)
         if ret == 255:
             cmd = ['zappa', 'deploy', '-s', filename, tier_name]
-            click.secho("Running command: {}".format(' '.join(cmd)))
+            secho("Running command: {}".format(' '.join(cmd)))
             ret = subprocess.call(cmd)
 
 
 def _run_sanity_check(tiers):
     for tier_name, tier in tiers.items():
         ts = tier['_ts']
-        print "Testing {} from {}".format(tier_name, ts)
+        echo("Testing {} from {}".format(tier_name, ts))
 
         domain = ts.get_table('domain').get()
         domain['_dctest'] = datetime.utcnow().isoformat() + 'Z'
         result = push_to_origin(ts, force=False)
         if not result['pushed']:
-            click.secho("Couldn't run test on {} from {}: {}".format(
+            secho("Couldn't run test on {} from {}: {}".format(
                 tier_name, ts, result['reason']), fg='red', bold=True)
             continue
 
         b = get_redis_cache_backend(ts, tier_name)
         if not b:
-            print "Couldn't get cache backend on {} from {}.".format(tier_name, ts)
+            echo("Couldn't get cache backend on {} from {}.".format(tier_name, ts))
         else:
             try:
                 ts2 = b.load_table_store()
             except Exception as e:
                 if "Redis cache doesn't have" in str(e):
-                    click.secho("{}. Possible timeout?".format(e), fg='red', bold=True)
+                    secho("{}. Possible timeout?".format(e), fg='red', bold=True)
                     continue
 
                 if "Timeout" in str(e):
-                    click.secho("Cache check failed. Redis connection timeout.", fg='red', bold=True)
+                    secho("Cache check failed. Redis connection timeout.", fg='red', bold=True)
                     continue
 
                 raise
 
             domain2 = ts2.get_table('domain').get()
             if domain['_dctest'] != domain2.get('_dctest'):
-                print "Cache check failed while comparing {} to {}.".format(domain['_dctest'], domain2.get('_dctest'))
+                echo("Cache check failed while comparing {} to {}.".format(domain['_dctest'], domain2.get('_dctest')))
 
 
 if __name__ == '__main__':
