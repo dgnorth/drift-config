@@ -7,12 +7,12 @@ import time
 import json
 import logging
 import subprocess
+import textwrap
 
-import six
 import click
 from click import echo, secho
 
-# pygments is optional for now
+# pygments is optional for now, used for syntax highlighting
 try:
     got_pygments = True
     from pygments import highlight
@@ -157,7 +157,7 @@ def get_options(parser):
     )
     p.add_argument(
         'source_url',
-        action='store',  help="Source url, or . for default config url."
+        action='store', help="Source url, or . for default config url."
     )
     p.add_argument(
         'dest_url',
@@ -200,7 +200,6 @@ def get_options(parser):
         "--preview", help="Only preview the changes, do not commit to origin.", action="store_true"
     )
 
-
     # MIGRATED FROM drift-admin tenant command suite
     # The create command
     p = subparsers.add_parser(
@@ -223,7 +222,8 @@ def get_options(parser):
         action='store',
         help="Name of the tier.",
     )
-    p.add_argument('--config',
+    p.add_argument(
+        '--config',
         help="Specify which config source to use. Will override 'DRIFT_CONFIG_URL' environment variable."
     )
     p.add_argument(
@@ -242,7 +242,8 @@ def get_options(parser):
         help="Name of the tenant.",
         nargs='?',
     )
-    p.add_argument('--config',
+    p.add_argument(
+        '--config',
         help="Specify which config source to use. Will override 'DRIFT_CONFIG_URL' environment variable."
     )
     p.add_argument(
@@ -265,7 +266,8 @@ def get_options(parser):
         action='store',
         help="Name of the deployable. Specify 'all' to include all deployables.",
     )
-    p.add_argument('--config',
+    p.add_argument(
+        '--config',
         help="Specify which config source to use. Will override 'DRIFT_CONFIG_URL' environment variable."
     )
     p.add_argument(
@@ -339,7 +341,7 @@ def list_command(args):
     # Enumerate subfolders at drift/config and see what's there
     domains = get_domains(user_dir=args.user_dir)
     if not domains:
-        echo("No Drift configuration found at " +config_dir('', user_dir=args.user_dir))
+        echo("No Drift configuration found at " + config_dir('', user_dir=args.user_dir))
     else:
         for d in domains.values():
             echo(_format_domain_info(d))
@@ -418,7 +420,7 @@ def cache_command(args):
         from driftconfig.util import get_default_drift_config
         os.environ['DRIFT_CONFIG_URL'] = 'redis://redis.devnorth.dg-api.com/?prefix=dgnorth'
         t = time.time()
-        for i in six.moves.xrange(count):
+        for i in range(count):
             ts = get_default_drift_config()
         t = time.time() - t
         avg = t / count
@@ -971,13 +973,17 @@ pass_repo = click.make_pass_decorator(Globals)
 
 
 @click.group(context_settings={'help_option_names': ['-h', '--help']})
-@click.option('--config-url', '-u', envvar='DRIFT_CONFIG_URL', metavar='',
+@click.option(
+    '--config-url', '-u', envvar='DRIFT_CONFIG_URL', metavar='',
     help="Url to DB origin.")
-@click.option('--verbose', '-v', is_flag=True,
+@click.option(
+    '--verbose', '-v', is_flag=True,
     help='Enables verbose mode.')
-@click.option('--organization', '-o', is_flag=True,
+@click.option(
+    '--organization', '-o', is_flag=True,
     help='Specify organization name/short name.')
-@click.option('--product', '-p', is_flag=True,
+@click.option(
+    '--product', '-p', is_flag=True,
     help='Specify product name.')
 @click.version_option('1.0')
 @click.pass_context
@@ -1162,7 +1168,7 @@ def developer(recreate, shared, run):
             secho(
                 "Warning: Overriding existing configuration because of --recreate flag.",
                 fg='yellow'
-                )
+            )
 
         testhelpers.DOMAIN_NAME = domain_name
         testhelpers.ORG_NAME = 'localorg'
@@ -1194,7 +1200,8 @@ def developer(recreate, shared, run):
     config_filename = os.path.join(project_dir, 'config', 'config.json')
     config_filename = os.path.expanduser(config_filename)
     if not os.path.exists(config_filename) or not os.path.exists('setup.py'):
-        secho("Error: Please run this command from a deployable root directory.",
+        secho(
+            "Error: Please run this command from a deployable root directory.",
             fg='red', bold=True)
         sys.exit(1)
 
@@ -1212,7 +1219,7 @@ def developer(recreate, shared, run):
         resources=app_config.get("resources", []),
         resource_attributes=app_config.get("resource_attributes", {}),
     )
-    deployable_name=package_info['name']
+    deployable_name = package_info['name']
 
     # Make sure this deployable is associated with the current product
     product = ts.get_table('products').find()[0]
@@ -1289,25 +1296,28 @@ def developer(recreate, shared, run):
         secho("Push failed. Reason:" + result['reason'], fg='red')
 
     secho("\nTo enable local development:\n", bold=True)
-    sh = (""
-        "# The following environment variables define full context for local development\n"
-        "export DRIFT_CONFIG_URL={}\n"
-        "export DRIFT_TIER={}\n"
-        "export FLASK_APP=drift.devapp:app\n"
-        "export FLASK_ENV=development\n"
-        "\n"
-        "# To run a flask development server:\n"
-        "flask run\n\n"
-        "".format(domain_name, tier_name)
-        )
+    sh = textwrap.dedent("""\
+        # The following environment variables define full context for local development
+        export DRIFT_CONFIG_URL={}
+        export DRIFT_TIER={}
+        export FLASK_APP=drift.devapp:app
+        export FLASK_ENV=development
+
+        # To run a flask development server:
+        flask run
+        """).format(domain_name, tier_name)
     secho(pretty(sh, lexer='bash'))
 
-    # TODO switch to colorama, used by click.secho
+    # pygments is optionally used for syntax highlightling
     if not got_pygments:
-        secho("\n\nFinal Note! All the blurb above would look much better with colors!.\n"
-            "Plese Run the following command for the sake of rainbows and unicorns:\n"
-            "pip install pygments\n\n"
-            )
+        secho(textwrap.dedent("""\
+
+
+            Final Note! All the blurb above would look much better with colors!.
+            "Plese Run the following command for the sake of rainbows and unicorns:
+            "pip install pygments
+
+            """))
 
     if run:
         # Run a Flask development server
@@ -1422,7 +1432,8 @@ def organization(repo):
 
 
 @organization.command()
-@click.option('--name', '-n', 'organization_name', type=str,
+@click.option(
+    '--name', '-n', 'organization_name', type=str,
     help="Show full info for given organization. Specify name or short name.")
 def info(organization_name):
     """Show organization info."""
@@ -1532,7 +1543,8 @@ def add(product_name, edit):
     The product name must be prefixed with the organization short name and a dash.
     """
     if '-' not in product_name:
-        secho("Error: The product name must be prefixed with the organization "
+        secho(
+            "Error: The product name must be prefixed with the organization "
             "short name and a dash.", fg='red', bold=True)
         sys.exit(1)
 
@@ -1634,8 +1646,8 @@ def pretty(ob, lexer=None):
     if got_pygments:
         lexerob = get_lexer_by_name(lexer)
         formatter = get_formatter_by_name(PRETTY_FORMATTER, style=PRETTY_STYLE)
-        #from pygments.filters import *
-        #lexerob.add_filter(VisibleWhitespaceFilter())
+        # from pygments.filters import *
+        # lexerob.add_filter(VisibleWhitespaceFilter())
         ret = highlight(ob, lexerob, formatter)
     else:
         ret = ob
