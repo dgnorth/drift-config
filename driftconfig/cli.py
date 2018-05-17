@@ -852,7 +852,7 @@ def assign_tier_command(args):
                         attributes = config_resources.get(resource['module_name'], {})
                         if k not in attributes or attributes[k] == "<PLEASE FILL IN>":
                             echo("Enter value for {s.BRIGHT}{}.{}{s.NORMAL}: ".format(
-                                resource['module_name'], k, **styles), end="")
+                                resource['module_name'], k, **styles), nl=False)
                             resource['default_attributes'][k] = raw_input()
 
             echo("\nDefault values for resources configured for this tier:")
@@ -1249,7 +1249,7 @@ def developer(recreate, shared, run):
                         value = ''
                     else:
                         echo("Enter value for {s.BRIGHT}{}{s.NORMAL}: ".format(
-                            attrib_name, **styles), end="")
+                            attrib_name, **styles), nl=False)
                         value = raw_input()
                     resource['default_attributes'][k] = value
 
