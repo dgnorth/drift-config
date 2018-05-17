@@ -18,6 +18,8 @@ setup(
     packages=['driftconfig'],
     description='Drift Configuration Management.',
 
+    python_requires=">=2.7, !=3.0.*, !=3.1.*",
+
     # the conditional on i.req avoids the error:
     # distutils.errors.DistutilsError: Could not find suitable distribution for Requirement.parse('None')
     install_requires=[
