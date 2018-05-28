@@ -1311,8 +1311,12 @@ def developer(recreate, shared, run):
         env['FLASK_APP'] = 'drift.devapp:app'
         env['FLASK_ENV'] = 'development'
 
+        args = ['flask', 'run', '--host=0.0.0.0']
+        port = app_config.get('PORT')
+        if port is not None:
+            args.append('--port={}'.format(port))
         p = subprocess.Popen(
-            ['flask', 'run', '--host=0.0.0.0'],
+            args,
             cwd=project_dir,
             env=env
         )
