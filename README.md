@@ -20,9 +20,12 @@ pipenv run python -m unittest discover
 ### Python 2/3 compatibility
 Set up the virtualenv by adding `--three` or `--two` to the `pipenv install` command line.  The syntax to run the unittests for either version of python is the same.
 
-When switching between version, you need to remove the `Pipfile` that gets created from the `setup.py` file.
-
-
+When switching between version, you need to remove the `Pipfile` that gets created from the `setup.py` file since
+it contains the python version and isn't automatically owerwritten when a new environment is created.
+You may also need to remove `.pyc` files, e.g. with a command such as: 
+```bash 
+find . -name "*.pyc" --exec rm "{}" ";" 
+``` 
 
 ## Initialize from url
 
