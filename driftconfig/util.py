@@ -428,7 +428,16 @@ def provision_tenant_resources(ts, tenant_name, deployable_name=None, preview=Fa
             for resource_module in depl['resources']:
                 legacy_resource_name = resource_module.rsplit('.', 1)[1]
                 resource_attributes = tenant_config.setdefault(legacy_resource_name, {})
-                m = importlib.import_module(resource_module)
+                try:
+                    m = importlib.import_module(resource_module)
+                except Exception as e:
+                    result = [
+                        "Failed to provision resource '{}'.\nException: {}\nAttributes: {}".format(
+                        resource_module, repr(e), resource_attributes)
+                        ]
+                    depl_report['resources'][resource_module] = result
+                    continue
+
                 has_provision_method = hasattr(m, 'provision_resource')
 
                 if has_provision_method:
