@@ -27,6 +27,14 @@ You may also need to remove `.pyc` files, e.g. with a command such as:
 find . -name "*.pyc" --exec rm "{}" ";" 
 ``` 
 
+The steps to switch between python versions are encapsulated in the files `scripts/init_py2.sh` and
+`scripts/init_py3.sh`.  To switch between versions, _cd_ to the root folder and source the scripts.
+E.g.:
+```bash
+cd drift-config
+. scripts/init_py3.sh
+```
+
 ## Initialize from url
 
 If you already have a config db, initialize it for local development. Example:
