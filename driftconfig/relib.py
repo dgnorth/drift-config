@@ -172,7 +172,7 @@ class Table(object):
 
         rows = []
         search_criteria = search_criteria or {}
-        for row in six.itervalues(self._rows):
+        for row in self._rows.values():
             for k, v in search_criteria.items():
                 if k not in row or row[k] != v:
                     break
@@ -574,7 +574,7 @@ class SingleRowTable(Table):
 
     def get(self):
         if self._rows:
-            return next(six.itervalues(self._rows))
+            return next(r for r in self._rows.values())
 
     def __getitem__(self, key):
         """Convenience operator to access properties of a single row."""
@@ -721,7 +721,7 @@ class TableStore(object):
             for table_name in self._tableorder:
                 self._tables[table_name] = tables[table_name]
 
-        for table_name, table_data in six.iteritems(self._tables):
+        for table_name, table_data in self._tables.items():
             # TODO: Make this mapping dynamic instead of hardcoded.
             if table_data['class'] == 'Table':
                 cls = Table
