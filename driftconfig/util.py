@@ -322,8 +322,8 @@ def define_tenant(ts, tenant_name, product_name, tier_name):
                 inactive_deployables.append(deployable_name)
         else:
             raise RuntimeError(
-                "Deployable '{}' defined for product '{}' is not found in table 'deployables'.".format(
-                    deployable_name, product_name)
+                "Deployable '{}' defined for product '{}' is not found in table 'deployables' for tier {}.".format(
+                    deployable_name, product_name, tier_name)
             )
 
     tenants = ts.get_table('tenants')
@@ -425,14 +425,18 @@ def provision_tenant_resources(ts, tenant_name, deployable_name=None, preview=Fa
             for resource_module in depl['resources']:
                 legacy_resource_name = resource_module.rsplit('.', 1)[1]
                 resource_attributes = tenant_config.setdefault(legacy_resource_name, {})
+
+                def report_error():
+                    result = [
+                        "Failed to provision resource '{}'.\n{}: {}\nAttributes: {}".format(
+                        resource_module, e.__class__.__name__, e, resource_attributes)
+                        ]
+                    depl_report['resources'][resource_module] = result
+
                 try:
                     m = importlib.import_module(resource_module)
                 except Exception as e:
-                    result = [
-                        "Failed to provision resource '{}'.\nException: {}\nAttributes: {}".format(
-                        resource_module, repr(e), resource_attributes)
-                        ]
-                    depl_report['resources'][resource_module] = result
+                    report_error()
                     continue
 
                 has_provision_method = hasattr(m, 'provision_resource')
@@ -452,12 +456,9 @@ def provision_tenant_resources(ts, tenant_name, deployable_name=None, preview=Fa
                             tenant_config=tenant_config,
                             attributes=resource_attributes,
                         )
+                        depl_report['resources'][resource_module] = result
                     except Exception as e:
-                        result = [
-                            "Failed to provision resource '{}'.\nException: {}\nAttributes: {}".format(
-                            resource_module, repr(e), resource_attributes)
-                        ]
-                    depl_report['resources'][resource_module] = result
+                        report_error()
                 else:
                     depl_report['resources'][resource_module] = resource_attributes
 
