@@ -9,18 +9,22 @@ TODO:
 '''
 import logging
 import json
+try:
+    import ujson
+except ImportError:
+    ujson = json
 import re
 import collections
 import copy
-from urlparse import urlparse, parse_qs
+from six.moves.urllib.parse import urlparse, parse_qs
 import hashlib
 from datetime import datetime
-try:
-    import cPickle as pickle
-except ImportError:
-    import pickle
 
-from schemautil import check_schema
+import six
+import six.moves.cPickle as pickle
+
+
+from .schemautil import check_schema
 
 log = logging.getLogger(__name__)
 
@@ -105,7 +109,7 @@ class Table(object):
             raise TableError("For table '{}', can't make primary key. Need {} but got {}.".format(
                 self._table_name, fields, primary_key.keys()))
 
-        if len(fields) == 1 and isinstance(primary_key[fields[0]], (int, long, float)):
+        if len(fields) == 1 and isinstance(primary_key[fields[0]], (six.integer_types, float)):
             canonicalized = primary_key[fields[0]]
         else:
             for k in fields:
@@ -164,11 +168,11 @@ class Table(object):
         """
         if search_criteria is None:
             # Special case, return all rows
-            return self._rows.values()
+            return list(self._rows.values())
 
         rows = []
         search_criteria = search_criteria or {}
-        for row in self._rows.itervalues():
+        for row in self._rows.values():
             for k, v in search_criteria.items():
                 if k not in row or row[k] != v:
                     break
@@ -461,7 +465,7 @@ class Table(object):
         checksum = hashlib.sha256()
 
         def save_data_check(filename, data):
-            checksum.update(data)
+            checksum.update(data.encode("ascii"))
             return save_data(filename, data)
 
         if self._group_by_fields:
@@ -540,7 +544,7 @@ class Table(object):
 
         d = copy.deepcopy(self._default_values)
         for k, v in d.items():
-            if isinstance(v, basestring) and v.startswith('@@'):
+            if isinstance(v, six.string_types) and v.startswith('@@'):
                 if v == '@@utcnow':
                     d[k] = datetime.utcnow().isoformat() + 'Z'
                 elif v == '@@identity':
@@ -570,7 +574,7 @@ class SingleRowTable(Table):
 
     def get(self):
         if self._rows:
-            return self._rows.values()[0]
+            return next(r for r in self._rows.values())
 
     def __getitem__(self, key):
         """Convenience operator to access properties of a single row."""
@@ -607,7 +611,7 @@ class SingleRowTable(Table):
         save_data(self.get_filename(), data)
 
         checksum = hashlib.sha256()
-        checksum.update(data)
+        checksum.update(data.encode('ascii'))
         return checksum.hexdigest()
 
     def _load_table_data(self, fetch_from_storage):
@@ -696,7 +700,7 @@ class TableStore(object):
         Returns the definition of this table store as well as all its tables as a Json
         doc.
         """
-        self._tableorder = self._tables.keys()
+        self._tableorder = list(self._tables.keys())
         return json.dumps(self, indent=4, cls=TableStoreEncoder, sort_keys=True)
 
     def init_from_definition(self, definition):
@@ -717,7 +721,7 @@ class TableStore(object):
             for table_name in self._tableorder:
                 self._tables[table_name] = tables[table_name]
 
-        for table_name, table_data in self._tables.iteritems():
+        for table_name, table_data in self._tables.items():
             # TODO: Make this mapping dynamic instead of hardcoded.
             if table_data['class'] == 'Table':
                 cls = Table
@@ -771,7 +775,7 @@ class TableStore(object):
         checksum = hashlib.sha256()
         for table in user_tables:
             md5 = self.get_table_metadata(table.name)['md5']
-            checksum.update(md5)
+            checksum.update(md5.encode("ascii"))
         self.meta.get()['checksum'] = checksum.hexdigest()
 
         for table in system_tables:
@@ -1024,7 +1028,7 @@ def jsonloads(json_text, filename):
     is generated.
     """
     try:
-        return json.loads(json_text)
+        return ujson.loads(json_text)
     except Exception:
         log.error("Error parsing json file %s", filename)
         raise

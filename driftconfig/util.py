@@ -8,6 +8,8 @@ import os.path
 import getpass
 import importlib
 
+from click import echo
+
 from driftconfig.relib import get_store_from_url, create_backend
 
 log = logging.getLogger(__name__)
@@ -132,7 +134,7 @@ def get_default_drift_config_and_source():
                 "'DRIFT_CONFIG_URL' environment variable.\n"
                 "Configurations available on local disk: %s."
                 "" % domain_names)
-        domain = domains.values()[0]
+        domain = next(d for d in domains.values())
         return domain['table_store'], 'file://' + domain['path']
 
 
@@ -510,7 +512,7 @@ def refresh_tenants(ts, tenant_name=None, tier_name=None):
 
 # NOTE THIS IS DEPRECATED FUNCTION AND NEEDS TO BE UPGRADED TO NU STYLE SUMTHIN
 def get_parameters(config, args, required_keys, resource_name):
-    print "ROUESR IDC NOAME IS", resource_name
+    echo("ROUESR IDC NOAME IS " + resource_name)
     bork
     defaults = config.tier.get('resource_defaults', [])
 

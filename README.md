@@ -9,8 +9,31 @@ pipenv install --dev -e ".[s3-backend,redis-backend,trigger]"
 ```
 This installs *drift-config* in editable mode with S3 and Redis backend support and lambda trigger support.
 
-##### Note! To use this library make sure you have your virtualenv activated: `pipenv shell`
+### Using the library
+To use this library in this form, make sure you have your virtualenv activated: `pipenv shell`
 
+### Running unittests
+```bash
+pipenv run python -m unittest discover
+```
+
+### Python 2/3 compatibility
+Set up the virtualenv by adding `--three` or `--two` to the `pipenv install` command line.  The syntax to run the unittests for either version of python is the same.
+
+When switching between version, you need to remove the `Pipfile` that gets created from the `setup.py` file since
+it contains the python version and isn't automatically owerwritten when a new environment is created.
+You may also need to remove `.pyc` files, e.g. with a command such as: 
+```bash 
+find . -name "*.pyc" --exec rm "{}" ";" 
+``` 
+
+The steps to switch between python versions are encapsulated in the files `scripts/init_py2.sh` and
+`scripts/init_py3.sh`.  To switch between versions, _cd_ to the root folder and source the scripts.
+E.g.:
+```bash
+cd drift-config
+. scripts/init_py3.sh
+```
 
 ## Initialize from url
 

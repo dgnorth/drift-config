@@ -4,8 +4,8 @@ ReLib Backends
 '''
 import logging
 import os
-from StringIO import StringIO
-from urlparse import urlparse
+from six.moves import cStringIO as StringIO
+from six.moves.urllib.parse import urlparse
 import zipfile
 
 from .relib import Backend, BackendError, register

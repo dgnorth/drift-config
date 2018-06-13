@@ -145,7 +145,7 @@ class TestRelib(unittest.TestCase):
             'processes_per_machine': 4,
             'command_line': '-gr0ndal',
             })
-        self.assertEquals(row['gameserver_instance_id'], 5001)
+        self.assertEqual(row['gameserver_instance_id'], 5001)
 
     def test_users(self):
 

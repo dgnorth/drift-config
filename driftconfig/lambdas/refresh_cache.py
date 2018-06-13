@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 '''
 AWS lambda functions to keep drift config cached in Redis.
+use python 3 print functions for consistency
 '''
+from __future__ import print_function
 import os
 import os.path
 
@@ -19,8 +21,8 @@ def on_config_update(event, context):
     path, filename = os.path.split(key)
 
     if filename != 'table-store.pickle':
-        print "Drift config cache trigger ignoring file: ", key
-        print "Only 'table-store.pickle' files trigger cache updates."
+        print("Drift config cache trigger ignoring file: " + key)
+        print("Only 'table-store.pickle' files trigger cache updates.")
     else:
         # We don't care if it's this config in particular that got pushed,
         # it's harmless to push the config to cache.
@@ -34,10 +36,10 @@ def do_update_cache(event, context):
 
 def _push_to_cache(origin, tier_name):
     """Push config  with origin 'origin' to its designated Redis cache."""
-    print "Get config store from url:", origin
+    print("Get config store from url: " + origin)
     ts = get_store_from_url(origin)
     redis_backend = update_cache(ts, tier_name)
-    print "Config {} saved to {}".format(ts, redis_backend)
+    print("Config {} saved to {}".format(ts, redis_backend))
 
 
 '''
@@ -50,8 +52,8 @@ def _push_to_cache(origin, tier_name):
             ts  = get_store_from_url(cache_url)
             domain = ts.get_table('domain').get()
             if domain != prev_domain:
-                print "Table domain in config changed:"
-                print json.dumps(domain, indent=4)
+                print("Table domain in config changed:")
+                print(json.dumps(domain, indent=4))
                 prev_domain = domain
             time.sleep(0.2)
 

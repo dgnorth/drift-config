@@ -8,7 +8,8 @@ import logging
 
 import jsonschema
 from json import dumps
-from StringIO import StringIO
+from six.moves import cStringIO as StringIO
+from click import echo
 
 log = logging.getLogger(__name__)
 
@@ -53,7 +54,8 @@ def _generate_validation_error_report(e, json_object):
     try:
         orig, o[e.path[0]] = o[e.path[0]], marker
     except:
-        print "Error setting marker in schemachecker!"
+        # TODO: report the error
+        echo("Error setting marker in schemachecker!")
 
     # Pretty print the object and search for the marker
     json_error = dumps(json_object, indent=4)

@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 import os
-
-from string import maketrans
+import six
+if six.PY2:
+    from string import maketrans
+else:
+    maketrans = str.maketrans
 
 from driftconfig.config import get_drift_table_store
 from driftconfig.util import (
@@ -30,7 +33,7 @@ def _add(fn, ts, name, config_size, count, **kw):
     if count == 1:
         fn(ts, name, config_size, **kw)
     else:
-        for i in xrange(count):
+        for i in six.moves.range(count):
             fn(ts, '{}{}'.format(name, i), config_size, **kw)
 
 
