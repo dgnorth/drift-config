@@ -1093,7 +1093,7 @@ def tenants(tenant_name):
 
     if tenant_name is None:
         tabulate(
-            ['organization_name', 'product_name', 'tenant_name', 'reserved_at', 'reserved_by'],
+            ['organization_name', 'product_name', 'tier_name', 'tenant_name', 'reserved_at', 'reserved_by'],
             conf.get_table('tenant-names').find(),
             indent='  ',
         )
@@ -1331,6 +1331,14 @@ def developer(recreate, shared, run):
         port = app_config.get('PORT')
         if port is not None:
             args.append('--port={}'.format(port))
+
+        secho(
+
+            "*" * 60 + "\n"
+            "* Running on http://0.0.0.0:{}/ (Press CTRL+C to quit)  *\n".format(port or 5000) +
+            "*" * 60 + "\n",
+            bold=True, fg='red')
+
         p = subprocess.Popen(
             args,
             cwd=project_dir,
