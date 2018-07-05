@@ -576,9 +576,9 @@ def diff_command(args):
             if diff['modified_diff']:
                 echo("\tTime since pull: " + str(diff['modified_diff']).split('.')[0])
 
-            echo("\tNew tables: " + diff['new_tables'])
-            echo("\tDeleted tables: " + diff['deleted_tables'])
-            echo("\tModified tables: " + diff['modified_tables'])
+            echo("\tNew tables: " + str(diff['new_tables']))
+            echo("\tDeleted tables: " + str(diff['deleted_tables']))
+            echo("\tModified tables: " + str(diff['modified_tables']))
 
             if details:
                 # Diff origin
