@@ -574,9 +574,9 @@ def diff_command(args):
             echo("\tFirst checksum:  " + diff['checksum']['first'][:7])
             echo("\tSecond checksum: " + diff['checksum']['second'][:7])
             if diff['modified_diff']:
-                echo("\tTime since pull: ", str(diff['modified_diff']).split('.')[0])
+                echo("\tTime since pull: " + str(diff['modified_diff']).split('.')[0])
 
-            echo("\tNew tables: ", + diff['new_tables'])
+            echo("\tNew tables: " + diff['new_tables'])
             echo("\tDeleted tables: " + diff['deleted_tables'])
             echo("\tModified tables: " + diff['modified_tables'])
 
