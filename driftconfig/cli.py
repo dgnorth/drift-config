@@ -11,6 +11,7 @@ import textwrap
 
 import click
 from click import echo, secho
+import six
 
 # pygments is optional for now, used for syntax highlighting
 try:
@@ -618,6 +619,8 @@ def _get_package_info(project_dir):
         cwd=project_dir
     )
     out, err = p.communicate()
+    if six.PY3:
+        out, err = (s.decode("utf-8") for s in (out, err))
     if p.returncode != 0:
         raise RuntimeError(
             "Can't get '{}' of this deployable. Error: {} - {}".format(classifier, p.returncode, err)
@@ -1344,8 +1347,9 @@ def developer(recreate, shared, run):
             cwd=project_dir,
             env=env
         )
-
         out, err = p.communicate()
+        if six.PY3:
+            out, err = (s.decode("utf-8") for s in (out, err))
         if p.returncode != 0:
             raise RuntimeError(
                 "Flask run failed: {} - {}".format(p.returncode, err)
