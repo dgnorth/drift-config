@@ -612,9 +612,10 @@ def _get_package_info(project_dir):
         'author-email',
         'license'
     ]
-
+    classifier = None
+    cmd = ['python', 'setup.py'] + ['--' + classifier for classifier in _package_classifiers]
     p = subprocess.Popen(
-        ['python', 'setup.py'] + ['--' + classifier for classifier in _package_classifiers],
+        cmd,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         cwd=project_dir
     )
