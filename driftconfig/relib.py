@@ -473,7 +473,8 @@ class Table(object):
 
             if row_per_file:
                 for row in rows:
-                    save_data_check(self.get_filename(row), json.dumps(row, indent=4, sort_keys=True))
+                    save_data_check(self.get_filename(row),
+                                    json.dumps(row, indent=4, sort_keys=True, default=str))
             else:
                 # Group one or more rows together for each file.
                 group = {}
@@ -482,16 +483,19 @@ class Table(object):
                     group.setdefault(key, []).append(row)
 
                 for rowset in group.values():
-                    save_data_check(self.get_filename(rowset[0]), json.dumps(rowset, indent=4, sort_keys=True))
+                    save_data_check(self.get_filename(rowset[0]),
+                                    json.dumps(rowset, indent=4, sort_keys=True, default=str))
 
             # Add index so we can read it back in automatically
             index = [{k: row[k] for k in self._pk_fields} for row in rows]
-            save_data_check(self.get_filename(is_index_file=True), json.dumps(index, indent=4, sort_keys=True))
+            save_data_check(self.get_filename(is_index_file=True),
+                            json.dumps(index, indent=4, sort_keys=True, default=str))
 
         else:
             # Write out all rows as a list
             rows = [row for row in rows]
-            save_data_check(self.get_filename(), json.dumps(rows, indent=4, sort_keys=True))
+            save_data_check(self.get_filename(), 
+                            json.dumps(rows, indent=4, sort_keys=True, default=str))
 
         cs = checksum.hexdigest()
         return cs
