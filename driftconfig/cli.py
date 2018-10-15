@@ -613,7 +613,7 @@ def _get_package_info(project_dir):
     ]
 
     p = subprocess.Popen(
-        ['python', 'setup.py'] + ['--' + classifier for classifier in _package_classifiers],
+        [sys.executable, 'setup.py'] + ['--' + classifier for classifier in _package_classifiers],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         cwd=project_dir
     )
