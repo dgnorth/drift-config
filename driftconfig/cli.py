@@ -11,6 +11,7 @@ import textwrap
 
 import click
 from click import echo, secho
+import six
 
 # pygments is optional for now, used for syntax highlighting
 try:
@@ -574,11 +575,11 @@ def diff_command(args):
             echo("\tFirst checksum:  " + diff['checksum']['first'][:7])
             echo("\tSecond checksum: " + diff['checksum']['second'][:7])
             if diff['modified_diff']:
-                echo("\tTime since pull: ", str(diff['modified_diff']).split('.')[0])
+                echo("\tTime since pull: " + str(diff['modified_diff']).split('.')[0])
 
-            echo("\tNew tables: ", + diff['new_tables'])
-            echo("\tDeleted tables: " + diff['deleted_tables'])
-            echo("\tModified tables: " + diff['modified_tables'])
+            echo("\tNew tables: " + str(diff['new_tables']))
+            echo("\tDeleted tables: " + str(diff['deleted_tables']))
+            echo("\tModified tables: " + str(diff['modified_tables']))
 
             if details:
                 # Diff origin
@@ -611,13 +612,16 @@ def _get_package_info(project_dir):
         'author-email',
         'license'
     ]
-
+    classifier = None
+    cmd = [sys.executable, 'setup.py'] + ['--' + classifier for classifier in _package_classifiers]
     p = subprocess.Popen(
-        [sys.executable, 'setup.py'] + ['--' + classifier for classifier in _package_classifiers],
+        cmd,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         cwd=project_dir
     )
     out, err = p.communicate()
+    if six.PY3:
+        out, err = (s.decode("utf-8") for s in (out, err))
     if p.returncode != 0:
         raise RuntimeError(
             "Can't get '{}' of this deployable. Error: {} - {}".format(classifier, p.returncode, err)
@@ -1344,8 +1348,9 @@ def developer(recreate, shared, run):
             cwd=project_dir,
             env=env
         )
-
         out, err = p.communicate()
+        if six.PY3:
+            out, err = (s.decode("utf-8") for s in (out, err))
         if p.returncode != 0:
             raise RuntimeError(
                 "Flask run failed: {} - {}".format(p.returncode, err)
@@ -1647,7 +1652,7 @@ def pretty(ob, lexer=None):
     Command line switches can be used to control highlighting and style.
     """
     if lexer is None:
-        if isinstance(ob, basestring):
+        if isinstance(ob, six.string_types):
             lexer = 'text'
         else:
             lexer = 'json'
