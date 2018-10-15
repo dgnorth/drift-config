@@ -4,11 +4,12 @@ ReLib Backends
 '''
 import logging
 import os
+import six
 from six.moves import cStringIO as StringIO
 from six.moves.urllib.parse import urlparse
 import zipfile
 
-from .relib import Backend, BackendError, register
+from .relib import Backend, BackendError, BackendFileNotFound, register
 
 log = logging.getLogger(__name__)
 
@@ -76,10 +77,19 @@ class S3Backend(Backend):
                 raise
 
     def load_data(self, file_name):
+        from botocore.client import ClientError
         key_name = self.get_key_name(file_name)
         log.debug("Downloading s3://%s/%s", self.bucket_name, key_name)
-        f = StringIO()
-        self.s3_client.download_fileobj(self.bucket_name, key_name, f)
+        if six.PY3:
+            import io
+            f = io.BytesIO()
+        else:
+            f = StringIO()
+        try:
+            self.s3_client.download_fileobj(self.bucket_name, key_name, f)
+        except ClientError as e:
+            if '404' in str(e):
+                raise BackendFileNotFound
         return f.getvalue()
 
 
@@ -145,7 +155,8 @@ class RedisBackend(Backend):
         log.debug("Reading from Redis:%s", key_name)
         data = self.conn.get(key_name)
         if data is None:
-            raise BackendError("Redis cache doesn't have '{}'. (Is it expired?)".format(key_name))
+            log.warning("Redis cache doesn't have '{}'. (Is it expired?)".format(key_name))
+            raise BackendFileNotFound
         return data
 
 
@@ -204,6 +215,11 @@ class FileBackend(Backend):
     def load_data(self, file_name):
         path_name = self.get_filename(file_name)
         log.debug("Reading from %s", path_name)
+
+        import os.path
+        if not os.path.exists(path_name):
+            raise BackendFileNotFound
+
         with open(path_name, 'r') as f:
             return f.read()
 
@@ -235,6 +251,8 @@ class MemoryBackend(Backend):
         MemoryBackend.archive[self.folder_name][file_name] = data
 
     def load_data(self, file_name):
+        if file_name not in MemoryBackend.archive[self.folder_name]:
+            raise BackendFileNotFound
         return MemoryBackend.archive[self.folder_name][file_name]
 
 

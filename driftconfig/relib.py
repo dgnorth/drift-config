@@ -50,6 +50,10 @@ class BackendError(RelibError):
     pass
 
 
+class BackendFileNotFound(BackendError):
+    pass
+
+
 class Table(object):
 
     TABLENAME_REGEX = re.compile(r"^([a-z\d.-]){1,50}$")
@@ -494,7 +498,7 @@ class Table(object):
         else:
             # Write out all rows as a list
             rows = [row for row in rows]
-            save_data_check(self.get_filename(), 
+            save_data_check(self.get_filename(),
                             json.dumps(rows, indent=4, sort_keys=True, default=str))
 
         cs = checksum.hexdigest()
@@ -884,7 +888,7 @@ class Backend(object):
             self.start_loading()
             blob = self.load_data(self.pickle_filename)
             self.done_loading()
-        except Exception as e:
+        except BackendFileNotFound:
             log.info("%s does not contain pickle: %s. Assuming json source.", self, self.pickle_filename)
         if blob:
             ts = pickle.loads(blob)
@@ -893,8 +897,8 @@ class Backend(object):
             ts = TableStore()
             try:
                 ts._load_from_backend(self)
-            except Exception as e:
-                raise e
+            except BackendFileNotFound:
+                raise RuntimeError("{} does not contain pickle nor json source: {}.".format(self, self.pickle_filename))
         return ts
 
     def save_table_store(self, ts, run_integrity_check=True, file_format=None):
