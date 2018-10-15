@@ -80,11 +80,7 @@ class S3Backend(Backend):
         from botocore.client import ClientError
         key_name = self.get_key_name(file_name)
         log.debug("Downloading s3://%s/%s", self.bucket_name, key_name)
-        if six.PY3:
-            import io
-            f = io.BytesIO()
-        else:
-            f = StringIO()
+        f = six.BytesIO()
         try:
             self.s3_client.download_fileobj(self.bucket_name, key_name, f)
         except ClientError as e:
