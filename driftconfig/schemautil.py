@@ -8,7 +8,7 @@ import logging
 
 import jsonschema
 from json import dumps
-from six.moves import cStringIO as StringIO
+from six import StringIO
 from click import echo
 
 log = logging.getLogger(__name__)
