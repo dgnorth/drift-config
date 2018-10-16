@@ -301,7 +301,7 @@ class TestRelib(unittest.TestCase):
         # Also, make sure the check is run before serializing out.
         with self.assertRaises(ConstraintError) as context:
             DictBackend().save_table_store(ts)
-        self.assertIn("foreign key record in 'continents' not found", str(context.exception))
+            self.assertIn("foreign key record in 'continents' not found", str(context.exception))
 
     def test_find_references(self):
 
