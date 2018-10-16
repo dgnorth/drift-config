@@ -621,14 +621,14 @@ def _get_package_info(project_dir):
         cwd=project_dir
     )
     out, err = p.communicate()
-    if six.PY3:
-        out, err = (s.decode("utf-8") for s in (out, err))
     if p.returncode != 0:
+        if six.PY3 and err:
+            err = err.decode("utf-8")
         raise RuntimeError(
             "Can't get '{}' of this deployable. Error: {} - {}".format(classifier, p.returncode, err)
         )
 
-    info = dict(zip(_package_classifiers, out.splitlines()))
+    info = dict(zip(_package_classifiers, out.decode().splitlines()))
     return info
 
 
@@ -1350,9 +1350,9 @@ def developer(recreate, shared, run):
             env=env
         )
         out, err = p.communicate()
-        if six.PY3:
-            out, err = (s.decode("utf-8") for s in (out, err))
         if p.returncode != 0:
+            if six.PY3 and err:
+                err = err.decode("utf-8")
             raise RuntimeError(
                 "Flask run failed: {} - {}".format(p.returncode, err)
             )
