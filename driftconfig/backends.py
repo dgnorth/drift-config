@@ -56,7 +56,7 @@ class S3Backend(Backend):
 
     def _save_data_with_bucket_logic(self, file_name, data, try_create_bucket):
         from botocore.client import ClientError
-        f = StringIO(data)
+        f = six.BytesIO(data)
         key_name = self.get_key_name(file_name)
         log.debug("Uploading %s bytes to s3://%s/%s", len(data), self.bucket_name, key_name)
         try:
