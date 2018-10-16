@@ -5,7 +5,7 @@ ReLib Backends
 import logging
 import os
 import six
-from six import BytesIO
+from six.moves import cStringIO as StringIO
 from six.moves.urllib.parse import urlparse
 import zipfile
 
@@ -52,12 +52,11 @@ class S3Backend(Backend):
         return '{}/{}'.format(self.folder_name, file_name)
 
     def save_data(self, file_name, data):
-        # data is a string, json data with only ascii characters
         return self._save_data_with_bucket_logic(file_name, data, try_create_bucket=True)
 
     def _save_data_with_bucket_logic(self, file_name, data, try_create_bucket):
         from botocore.client import ClientError
-        f = BytesIO(data.encode())  # the data is json in the ascii range
+        f = StringIO(data)
         key_name = self.get_key_name(file_name)
         log.debug("Uploading %s bytes to s3://%s/%s", len(data), self.bucket_name, key_name)
         try:
@@ -87,7 +86,7 @@ class S3Backend(Backend):
         except ClientError as e:
             if '404' in str(e):
                 raise BackendFileNotFound
-        return f.getvalue().decode()
+        return f.getvalue()
 
 
 @register
@@ -140,7 +139,6 @@ class RedisBackend(Backend):
         return 'relib:drift-config:{}:{}'.format(self.prefix, file_name)
 
     def save_data(self, file_name, data):
-        # redis api deals with encoding and decoding data
         key_name = self.get_key_name(file_name)
         log.debug("Adding %s bytes to Redis:%s with expiry:%s", len(data), key_name, self.expire_sec)
         self.conn.set(key_name, data)
@@ -206,9 +204,9 @@ class FileBackend(Backend):
         if not os.path.exists(dir_name):
             os.makedirs(dir_name)
 
-        with open(path_name, 'wb') as f:
+        with open(path_name, 'w') as f:
             log.debug("Writing %s bytes to %s", len(data), path_name)
-            f.write(data.encode())
+            f.write(data)
 
     def load_data(self, file_name):
         path_name = self.get_filename(file_name)
@@ -218,8 +216,8 @@ class FileBackend(Backend):
         if not os.path.exists(path_name):
             raise BackendFileNotFound
 
-        with open(path_name, 'rb') as f:
-            return f.read().decode()
+        with open(path_name, 'r') as f:
+            return f.read()
 
 
 @register
@@ -260,21 +258,23 @@ class ZipEncoded(Backend):
         self.aggregate = aggregate
 
     def start_saving(self):
-        self._fp = BytesIO()
+        self._fp = StringIO()
         self._zipfile = zipfile.ZipFile(self._fp, mode='w', compression=zipfile.ZIP_DEFLATED)
 
     def done_saving(self):
         self.aggregate.save_data("_zipped.zip", self._fp.getvalue())
 
     def start_loading(self):
-        self._fp = BytesIO(self.aggregate.load_data("_zipped.zip"))
+        self._fp = StringIO()
+        self._fp.write(self.aggregate.load_data("_zipped.zip"))
+        self._fp.seek(0)
         self._zipfile = zipfile.ZipFile(self._fp)
 
     def done_loading(self):
         pass
 
     def save_data(self, file_name, data):
-        self._zipfile.writestr(file_name, data.encode())
+        self._zipfile.writestr(file_name, data)
 
     def load_data(self, file_name):
-        self._zipfile.read(file_name).decode()
+        self._zipfile.read(file_name)
