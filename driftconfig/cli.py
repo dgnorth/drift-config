@@ -12,6 +12,7 @@ import textwrap
 import click
 from click import echo, secho
 import six
+from six.moves import input
 
 # pygments is optional for now, used for syntax highlighting
 try:
@@ -859,7 +860,7 @@ def assign_tier_command(args):
                         if k not in attributes or attributes[k] == "<PLEASE FILL IN>":
                             echo("Enter value for {s.BRIGHT}{}.{}{s.NORMAL}: ".format(
                                 resource['module_name'], k, **styles), nl=False)
-                            resource['default_attributes'][k] = raw_input()
+                            resource['default_attributes'][k] = input()
 
             echo("\nDefault values for resources configured for this tier:")
             echo(pretty(config_resources))
@@ -1261,7 +1262,7 @@ def developer(recreate, shared, run):
                     else:
                         echo("Enter value for {s.BRIGHT}{}{s.NORMAL}: ".format(
                             attrib_name, **styles), nl=False)
-                        value = raw_input()
+                        value = input()
                     resource['default_attributes'][k] = value
 
     register_tier_defaults(ts=ts, tier_name='LOCALTIER', resources=resources)
