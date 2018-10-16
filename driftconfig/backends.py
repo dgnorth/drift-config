@@ -139,6 +139,7 @@ class RedisBackend(Backend):
         return 'relib:drift-config:{}:{}'.format(self.prefix, file_name)
 
     def save_data(self, file_name, data):
+        # data is bytes.  redis will do no encoding
         key_name = self.get_key_name(file_name)
         log.debug("Adding %s bytes to Redis:%s with expiry:%s", len(data), key_name, self.expire_sec)
         self.conn.set(key_name, data)
@@ -147,6 +148,7 @@ class RedisBackend(Backend):
         self.conn.set
 
     def load_data(self, file_name):
+        # since the client is not created with "decode_responses", the result here is bytes
         key_name = self.get_key_name(file_name)
         log.debug("Reading from Redis:%s", key_name)
         data = self.conn.get(key_name)
@@ -196,6 +198,7 @@ class FileBackend(Backend):
         file_name = file_name.replace('/', os.sep)  # Adjust to Windows platform mainly
         return os.path.join(self.folder_name, file_name)
 
+    # save and load bytes data
     def save_data(self, file_name, data):
         path_name = self.get_filename(file_name)
 
@@ -204,7 +207,7 @@ class FileBackend(Backend):
         if not os.path.exists(dir_name):
             os.makedirs(dir_name)
 
-        with open(path_name, 'w') as f:
+        with open(path_name, 'wb') as f:
             log.debug("Writing %s bytes to %s", len(data), path_name)
             f.write(data)
 
@@ -216,7 +219,7 @@ class FileBackend(Backend):
         if not os.path.exists(path_name):
             raise BackendFileNotFound
 
-        with open(path_name, 'r') as f:
+        with open(path_name, 'rb') as f:
             return f.read()
 
 
@@ -243,6 +246,7 @@ class MemoryBackend(Backend):
     def __str__(self):
         return "MemoryBackend'{}'".format(self.folder_name)
 
+    # save and load whatever data is provided.  It shoud be bytes
     def save_data(self, file_name, data):
         MemoryBackend.archive[self.folder_name][file_name] = data
 

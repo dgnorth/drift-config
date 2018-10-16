@@ -469,8 +469,10 @@ class Table(object):
         checksum = hashlib.sha256()
 
         def save_data_check(filename, data):
-            checksum.update(data.encode("ascii"))
-            return save_data(filename, data)
+            # convert json to bytes and call the backend save function
+            raw_data = data.encode("ascii")
+            checksum.update(raw_data)
+            return save_data(filename, raw_data)
 
         if self._group_by_fields:
             row_per_file = self._group_by_fields == self._pk_fields
@@ -513,7 +515,7 @@ class Table(object):
         returns the data pointed to by 'file_name'.
         """
         if not self._group_by_fields:
-            data = fetch_from_storage(self.get_filename())
+            data = fetch_from_storage(self.get_filename()).decode("ascii")
             rows = jsonloads(data, self.get_filename())
             for row in rows:
                 self.add(row)
@@ -521,13 +523,13 @@ class Table(object):
             # Get index
             row_per_file = self._group_by_fields == self._pk_fields
             index_file_name = self.get_filename(is_index_file=True)
-            index = fetch_from_storage(index_file_name)
+            index = fetch_from_storage(index_file_name).decode("ascii")
             index = jsonloads(index, index_file_name)
 
             if row_per_file:
                 for primary_key in index:
                     file_name = self.get_filename(row=primary_key)
-                    data = fetch_from_storage(file_name)
+                    data = fetch_from_storage(file_name).decode("ascii")
                     row = jsonloads(data, file_name)
                     self.add(row)
             else:
@@ -539,7 +541,7 @@ class Table(object):
 
                 for group_key in key_groups.values():
                     file_name = self.get_filename(row=group_key)
-                    data = fetch_from_storage(file_name)
+                    data = fetch_from_storage(file_name).decode("ascii")
                     rows = jsonloads(data, file_name)
                     for row in rows:
                         self.add(row)
@@ -626,7 +628,7 @@ class SingleRowTable(Table):
         """
         Load document data.
         """
-        data = fetch_from_storage(self.get_filename())
+        data = fetch_from_storage(self.get_filename()).decode("ascii")
         doc = jsonloads(data, self.get_filename())
         self.add(doc)
 
@@ -929,6 +931,8 @@ class Backend(object):
     def done_loading(self):
         pass
 
+    # for load_data / save_data, "data" is a bytes object.
+    # it is up to the caller to make sure that appropriate encoding/decoding takes place.
     def save_data(self, file_name, data):
         pass
 
