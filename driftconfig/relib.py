@@ -617,11 +617,11 @@ class SingleRowTable(Table):
         Save document.
         """
         doc = self.get() or {}
-        data = json.dumps(doc, indent=4, sort_keys=True)
+        data = json.dumps(doc, indent=4, sort_keys=True).encode("ascii")
         save_data(self.get_filename(), data)
 
         checksum = hashlib.sha256()
-        checksum.update(data.encode('ascii'))
+        checksum.update(data)
         return checksum.hexdigest()
 
     def _load_table_data(self, fetch_from_storage):
@@ -772,7 +772,7 @@ class TableStore(object):
             self.check_integrity()
 
         backend.start_saving()
-        backend.save_data(self.TS_DEF_FILENAME, self.get_definition())
+        backend.save_data(self.TS_DEF_FILENAME, self.get_definition().encode())
 
         user_tables = [table for table in self._tables.values() if not table._is_system_table]
         system_tables = [table for table in self._tables.values() if table._is_system_table]
@@ -804,7 +804,7 @@ class TableStore(object):
         """
         backend.start_loading()
         if not skip_definition:
-            definition = backend.load_data(self.TS_DEF_FILENAME)
+            definition = backend.load_data(self.TS_DEF_FILENAME).decode()
             self.init_from_definition(definition)
         self._origin = str(backend)
 
@@ -908,7 +908,7 @@ class Backend(object):
 
         if file_format == 'json':
             ts._save_to_backend(self, run_integrity_check=run_integrity_check)
-            self.save_data(self.pickle_filename, '')  # An empty pickle file indicates json format.
+            self.save_data(self.pickle_filename, b'')  # An empty pickle file indicates json format.
         elif file_format == 'pickle':
             if run_integrity_check:
                 ts.check_integrity()
