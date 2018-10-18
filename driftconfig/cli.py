@@ -24,7 +24,7 @@ except ImportError:
     got_pygments = False
 
 from driftconfig.relib import create_backend, get_store_from_url, diff_meta, diff_tables, CHECK_INTEGRITY, copy_table_store
-from driftconfig.config import get_drift_table_store, push_to_origin, pull_from_origin, TSTransaction, TSLocal
+from driftconfig.config import get_drift_table_store, get_redis_cache_backend, push_to_origin, pull_from_origin, TSTransaction, TSLocal
 from driftconfig.config import update_cache
 from driftconfig.backends import FileBackend
 from driftconfig.util import (
@@ -1019,11 +1019,11 @@ def configs():
             "No Drift configuration found on this machine. Run 'init' or 'create' command "
             "to remedy.")
     else:
-        ts, source = get_default_drift_config_and_source()
         got_default = False
 
         for domain_info in domains.values():
-            domain = domain_info['table_store'].get_table('domain')
+            ts = domain_info['table_store']
+            domain = ts.get_table('domain')
             is_default = domain['domain_name'] == ts.get_table('domain')['domain_name']
             if is_default:
                 secho(domain['domain_name'] + " [DEFAULT]:", bold=True, nl=False)
@@ -1034,6 +1034,10 @@ def configs():
             secho(" \"{}\"".format(domain['display_name']), fg='green')
             secho("\tOrigin: " + domain['origin'])
             secho("\tLocal: " + domain_info['path'])
+            for tier in ts.get_table('tiers').find():
+                b = get_redis_cache_backend(ts, tier['tier_name'])
+                if b:
+                    secho("\tCache [{}]: {}".format(tier['tier_name'], b.get_url()))
             secho("")
 
         if got_default:

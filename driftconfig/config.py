@@ -1059,12 +1059,16 @@ def get_redis_cache_backend(ts, tier_name):
     # connection information for a Redis server. We make good use of that here,
     # but it does mean that this piece of code below is now coupled with
     # aforementioned module.
+    # Returns None if no cache is defined for the tier and none can be assumed from
+    # redis config.
     # TODO: Fix bad coupling as described above.
     domain = ts.get_table('domain').get()
     tier = ts.get_table('tiers').get({'tier_name': tier_name})
     if 'cache' in tier:
         b = create_backend(tier['cache'])
     else:
+        if 'resources' not in tier or 'drift.core.resources.redis' not in tier['resources']:
+            return None
         redis_info = tier['resources']['drift.core.resources.redis']
         b = RedisBackend.create_from_server_info(
             host=redis_info['host'],
