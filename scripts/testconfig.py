@@ -5,7 +5,7 @@ from datetime import datetime
 import os.path
 from click import echo
 
-from driftconfig.relib import TableStore, create_backend
+from driftconfig.relib import create_backend
 from driftconfig.backends import FileBackend, S3Backend, RedisBackend
 from driftconfig.config import get_drift_table_store
 
@@ -23,8 +23,8 @@ directivegames-borkbork
 
 '''
 
-def main():
 
+def main():
 
     logging.basicConfig(level='INFO')
     config_path = os.path.join(os.path.expanduser("~"), '.drift', 'config')
@@ -43,7 +43,7 @@ def main():
         echo("whee got all the config " + ts)
         redis_store.save(ts)
         echo("now i have dumped all the s3 config into redis")
-        local_store.save(ts)
+        # local_store.save(ts)
         echo("its also on mny local disk hes")
         config_path = os.path.join(os.path.expanduser("~"), '.drift', 'config2')
         FileBackend(config_path).save(ts)
@@ -51,8 +51,8 @@ def main():
         sys.exit(1)
 
     # Load from S3
-    #s3_store.load(ts)
-    #s3_store.save(ts)
+    # s3_store.load(ts)
+    # s3_store.save(ts)
 
     # Chuck in some data
     ts.get_table('domain').add({'domain_name': 'dgnorth', 'display_name': 'Directive Games North', 'origin': 's3://relib-test/directive-games-v2?region=eu-west-1'})
@@ -75,7 +75,6 @@ def main():
     ts.get_table('deployables').add({'tier_name': 'LIVENORTH', 'deployable_name': 'drift-base', 'is_active': True, })
     ts.get_table('deployables').add({'tier_name': 'LIVENORTH', 'deployable_name': 'themachines-backend', 'is_active': True, })
 
-
     # Configure LIVENORTH
     for tenant_name in [
         'superkaiju', 'superkaiju-test', 'loadout', 'loadout-test', 'default-livenorth',
@@ -88,9 +87,9 @@ def main():
             'reserved_by': 'prezidentbongo',
 
         })
-        ts.get_table('tenants').add({'tier_name': 'LIVENORTH', 'deployable_name': 'drift-base', 'tenant_name': tenant_name,})
-        ts.get_table('tenants').add({'tier_name': 'LIVENORTH', 'deployable_name': 'themachines-backend', 'tenant_name': tenant_name,})
-        ts.get_table('tenants').add({'tier_name': 'DEVNORTH', 'deployable_name': 'drift-base', 'tenant_name': tenant_name,})
+        ts.get_table('tenants').add({'tier_name': 'LIVENORTH', 'deployable_name': 'drift-base', 'tenant_name': tenant_name, })
+        ts.get_table('tenants').add({'tier_name': 'LIVENORTH', 'deployable_name': 'themachines-backend', 'tenant_name': tenant_name, })
+        ts.get_table('tenants').add({'tier_name': 'DEVNORTH', 'deployable_name': 'drift-base', 'tenant_name': tenant_name, })
 
     # Store locally and cache in Redis
     domain_name = ts.get_table('domain')['domain_name']
@@ -98,11 +97,10 @@ def main():
     local_store = create_backend('file://./~/.drift/config/' + domain_name)
     echo("LOCAL STORE BACKEND IS %s %s" % (local_store, local_store.get_url()))
 
-
     local_store.save_table_store(ts)
 
     s3_store.save_table_store(ts)
-    #redis_store.save(ts)
+    # redis_store.save(ts)
 
     ts = local_store.load_table_store()
     echo("whee got ts " + ts)
@@ -114,6 +112,7 @@ def main():
      - backend url functionality not tested.
      -
     '''
+
 
 if __name__ == "__main__":
     main()

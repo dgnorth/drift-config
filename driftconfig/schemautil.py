@@ -18,13 +18,14 @@ def check_schema(json_object, schema, title=None):
     """Do json schema check on object and abort with 400 error if it fails."""
     try:
         jsonschema.validate(json_object, schema, format_checker=jsonschema.FormatChecker())
-        ###jsonschema.validate(json_object, schema)
+        # jsonschema.validate(json_object, schema)
     except jsonschema.ValidationError as e:
         report = _generate_validation_error_report(e, json_object)
         if title:
             report = "Schema check failed: %s\n%s" % (title, report)
         e.message = report
         raise
+
 
 def _generate_validation_error_report(e, json_object):
     """Generate a detailed report of a schema validation error."""
@@ -53,7 +54,7 @@ def _generate_validation_error_report(e, json_object):
         o = o[entry]
     try:
         orig, o[e.path[0]] = o[e.path[0]], marker
-    except:
+    except Exception:
         # TODO: report the error
         echo("Error setting marker in schemachecker!")
 

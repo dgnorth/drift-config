@@ -614,7 +614,7 @@ def _get_package_info(project_dir):
         'license'
     ]
     classifier = None
-    cmd = [sys.executable, 'setup.py'] + ['--' + classifier for classifier in _package_classifiers]
+    cmd = [sys.executable, 'setup.py'] + ['--' + c for c in _package_classifiers]
     p = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -1222,7 +1222,7 @@ def developer(recreate, shared, run):
 
     sys.path.insert(0, '.')  # Make project_dir importable.
 
-    ret = register_this_deployable(
+    register_this_deployable(
         ts=ts,
         package_info=package_info,
         resources=app_config.get("resources", []),
@@ -1235,7 +1235,7 @@ def developer(recreate, shared, run):
     if deployable_name not in product['deployables']:
         product['deployables'].append(deployable_name)
 
-    ret = register_this_deployable_on_tier(
+    register_this_deployable_on_tier(
         ts, tier_name='LOCALTIER', deployable_name=deployable_name)
 
     # For convenience, register resource default values as well. This
@@ -1389,9 +1389,9 @@ def tier(repo):
     """Manage tier related entries in the configuration database."""
 
 
-@tier.command()
+@tier.command("info")
 @click.option('--tier-name', '-t', type=str, default=None)
-def info(tier_name):
+def tier_info(tier_name):
     """Show tier info."""
     conf = get_default_drift_config()
     _header(conf)
@@ -1408,11 +1408,11 @@ def info(tier_name):
         echo(pretty(tier))
 
 
-@tier.command()
+@tier.command("add")
 @click.argument('tier-name', type=str)
 @click.option('--is-live/--is-dev', help="Flag tier for 'live' or 'development' purposes. Default is 'live'.")
 @click.option('--edit', '-e', help="Use editor to modify the entry.", is_flag=True)
-def add(tier_name, is_live, edit):
+def tier_add(tier_name, is_live, edit):
     """Add a new tier.\n
     TIER_NAME is a 3-20 character long upper case string containing only the letters A-Z."""
     with TSLocal() as ts:
@@ -1430,9 +1430,9 @@ def add(tier_name, is_live, edit):
         _epilogue(ts)
 
 
-@tier.command()
+@tier.command("edit")
 @click.argument('tier-name', type=str)
-def edit(tier_name):
+def tier_edit(tier_name):
     """Edit a tier."""
     with TSLocal() as ts:
         tiers = ts.get_table('tiers')
@@ -1453,11 +1453,11 @@ def organization(repo):
     """Manage organizations in the configuration database."""
 
 
-@organization.command()
+@organization.command("info")
 @click.option(
     '--name', '-n', 'organization_name', type=str,
     help="Show full info for given organization. Specify name or short name.")
-def info(organization_name):
+def org_info(organization_name):
     """Show organization info."""
     conf = get_default_drift_config()
     _header(conf)
@@ -1480,12 +1480,12 @@ def info(organization_name):
         echo(json.dumps(org, indent=4))
 
 
-@organization.command()
+@organization.command("add")
 @click.argument('organization-name', type=str)
 @click.argument('short-name', type=str)
 @click.option('--display-name', '-d', help="Display name.", type=str)
 @click.option('--edit', '-e', help="Use editor to modify the entry.", is_flag=True)
-def add(organization_name, short_name, display_name, edit):
+def org_add(organization_name, short_name, display_name, edit):
     """Add a new organization.\n
     ORGANIZATION_NAME is a 2-20 character long string containing only lower case letters and digits.\n
     SHORT_NAME is a 2-20 character long string containing only lower case letters and digits."""
@@ -1510,9 +1510,9 @@ def add(organization_name, short_name, display_name, edit):
         _epilogue(ts)
 
 
-@organization.command()
+@organization.command("edit")
 @click.argument('organization-name', type=str)
-def edit(organization_name):
+def org_edit(organization_name):
     """Edit a organization."""
     with TSLocal() as ts:
         organizations = ts.get_table('organizations')
@@ -1533,9 +1533,9 @@ def product(repo):
     """Manage products in the configuration database."""
 
 
-@product.command()
+@product.command("info")
 @click.option('-name', '-n', 'product_name', type=str, help="Show full info for given product.")
-def info(product_name):
+def product_info(product_name):
     """Show product info."""
     conf = get_default_drift_config()
     _header(conf)
@@ -1556,10 +1556,10 @@ def info(product_name):
         echo(json.dumps(product, indent=4))
 
 
-@product.command()
+@product.command("add")
 @click.argument('product-name', type=str)
 @click.option('--edit', '-e', help="Use editor to modify the entry.", is_flag=True)
-def add(product_name, edit):
+def product_add(product_name, edit):
     """Add a new product.\n
     PRODUCT_NAME is a 3-35 character long string containing only lower case letters digits and dashes.
     The product name must be prefixed with the organization short name and a dash.
@@ -1598,9 +1598,9 @@ def add(product_name, edit):
         _epilogue(ts)
 
 
-@product.command()
+@product.command("edit")
 @click.argument('product-name', type=str)
-def edit(product_name):
+def product_edit(product_name):
     """Edit a product."""
     with TSLocal() as ts:
         products = ts.get_table('products')

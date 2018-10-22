@@ -1,10 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
 import six
-if six.PY2:
-    from string import maketrans
-else:
-    maketrans = str.maketrans
 
 from driftconfig.config import get_drift_table_store
 from driftconfig.util import (
@@ -16,6 +12,10 @@ from driftconfig.util import (
     define_tenant,
     provision_tenant_resources,
 )
+if six.PY2:
+    from string import maketrans
+else:
+    maketrans = str.maketrans
 
 DOMAIN_NAME = 'testdomain'
 ORG_NAME = 'acme'

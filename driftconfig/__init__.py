@@ -3,4 +3,4 @@
 __version__ = '0.2.0'
 
 
-from . import backends
+from . import backends  # noqa: F401

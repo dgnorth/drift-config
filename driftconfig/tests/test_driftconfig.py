@@ -9,7 +9,7 @@ from driftconfig.config import get_drift_table_store, TSTransaction
 
 def create_basic_domain():
     ts = get_drift_table_store()
-    domain = ts.get_table('domain').add({
+    ts.get_table('domain').add({
         'domain_name': 'unit_test_domain',
         'display_name': "Unit Test Domain",
         'origin': ''
@@ -87,7 +87,6 @@ class TestRelib(unittest.TestCase):
             'rule_type': 'pass',
             'response_header': {'message-from-mum': "Put your sweater on!"},
             })
-
 
     def test_ue4_gameservers_rules(self):
         """
@@ -172,7 +171,7 @@ class TestRelib(unittest.TestCase):
             'password': 'x'
         })
 
-        ##print "USER", json.dumps(service_user, indent=4)
+        # print "USER", json.dumps(service_user, indent=4)
 
         """
         local developer running ue4 server locally

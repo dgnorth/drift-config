@@ -361,7 +361,7 @@ aws commands extend service/deployable:
 import logging
 from datetime import datetime
 
-from driftconfig.relib import TableStore, copy_table_store, create_backend
+from driftconfig.relib import TableStore, create_backend
 import driftconfig.relib
 from driftconfig.util import get_default_drift_config_and_source
 from driftconfig.backends import RedisBackend
@@ -611,7 +611,6 @@ def get_drift_table_store():
             'access_key': {'type': 'string'},
             'is_service': {'type': 'boolean'},
             'is_role_admin': {'type': 'boolean'},
-            'access_key': {'type': 'string'},
         },
         'required': ['create_date', 'is_active', 'is_service', 'is_role_admin'],
     })
@@ -619,7 +618,6 @@ def get_drift_table_store():
         'create_date': '@@utcnow', 'is_active': True,
         'is_service': False, 'is_role_admin': False
     })
-
 
     '''
     # dynamically populated by deployables during "init" phase
@@ -640,7 +638,6 @@ def get_drift_table_store():
         'required': ['deployable_name'],
     })
 
-
     '''
     users-acl:
         organization_name   string, pk, fk->organizations, required
@@ -655,7 +652,6 @@ def get_drift_table_store():
     users_acl.add_foreign_key('user_name', 'users')
     users_acl.add_foreign_key('role_name', 'access-roles')
     users_acl.add_foreign_key('tenant_name', 'tenant-names')
-
 
     # RELEASE MANAGEMENT - THIS SHOULDN'T REALLY BE IN THIS FILE HERE, or what?
     '''
@@ -683,7 +679,6 @@ def get_drift_table_store():
         }},
         'release_version': {'type': 'string'},
     }})
-
 
     # API ROUTER STUFF - THIS SHOULDN'T REALLY BE IN THIS FILE HERE
     '''
@@ -731,7 +726,6 @@ def get_drift_table_store():
 
     '''
 
-
     '''
     routing:
         deployable_name         string, pk, fk->deployables
@@ -751,7 +745,6 @@ def get_drift_table_store():
         'required': ['requires_api_key'],
     })
     routing.add_default_values({'requires_api_key': True})
-
 
     '''
     api-keys:
@@ -778,7 +771,6 @@ def get_drift_table_store():
         'required': ['in_use', 'key_type'],
     })
     keys.add_default_values({'in_use': True, 'create_date': '@@utcnow', 'key_type': 'product'})
-
 
     '''
     api-key-rules:
@@ -824,7 +816,6 @@ def get_drift_table_store():
     })
     keyrules.add_default_values({'is_active': True, 'rule_type': 'pass'})
 
-
     '''
     ue4-gameservers/
 
@@ -851,7 +842,6 @@ def get_drift_table_store():
             },
         },
     })
-
 
     '''
     ue4-build-artifacts
@@ -909,7 +899,6 @@ def get_drift_table_store():
         },
     })
 
-
     '''
     gameservers-instances:
         gameserver_instance_id  string, pk, default=@@identity
@@ -925,7 +914,7 @@ def get_drift_table_store():
     gameservers_instances.set_subfolder_name('ue4-gameservers')
     gameservers_instances.add_primary_key('gameserver_instance_id')
     gameservers_instances.add_foreign_key('product_name', 'products')
-    #gameservers_instances.add_foreign_key('group_name,region', 'gameservers-machines')
+    # gameservers_instances.add_foreign_key('group_name,region', 'gameservers-machines')
     gameservers_instances.add_foreign_key('tenant_name', 'tenant-names')
     gameservers_instances.add_schema({
         'type': 'object',
@@ -938,8 +927,6 @@ def get_drift_table_store():
         'required': ['product_name', 'group_name', 'region', 'tenant_name', 'ref', 'processes_per_machine'],
     })
     gameservers_instances.add_default_values({'gameserver_instance_id': '@@identity'})
-
-
 
     '''
     metrics:
@@ -1015,8 +1002,8 @@ def push_to_origin(local_ts, force=False, _first=False, _origin_crc=None):
             'local_meta': local_ts.meta.get(),
             'origin_meta': origin_ts.meta.get(),
             'expected_crc': expected_crc,
-            #'local_ts': local_ts,
-            #'origin_ts': origin_ts,
+            # 'local_ts': local_ts,
+            # 'origin_ts': origin_ts,
         }
 
     old, new = local_ts.refresh_metadata()
@@ -1170,6 +1157,3 @@ if __name__ == '__main__':
 
     with TSTransaction('file://~/.drift/config/dgnorth') as ts:
         ts.get_table('domain').get()['display_name'] += ' bluuu!'
-
-
-

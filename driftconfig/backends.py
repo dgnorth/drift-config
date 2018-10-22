@@ -6,10 +6,9 @@ import logging
 import os
 import six
 from six.moves import cStringIO as StringIO
-from six.moves.urllib.parse import urlparse
 import zipfile
 
-from .relib import Backend, BackendError, BackendFileNotFound, register
+from .relib import Backend, BackendFileNotFound, register
 
 log = logging.getLogger(__name__)
 
@@ -103,7 +102,6 @@ class RedisBackend(Backend):
         self.prefix = prefix or ''
         self.expire_sec = expire_sec
 
-
         self.conn = redis.StrictRedis(
             host=host,
             port=port,
@@ -156,7 +154,6 @@ class RedisBackend(Backend):
             log.warning("Redis cache doesn't have '{}'. (Is it expired?)".format(key_name))
             raise BackendFileNotFound
         return data
-
 
     def get_url(self):
         return "redis://{}:{}/{}?prefix={}".format(self.host, self.port, self.db, self.prefix)

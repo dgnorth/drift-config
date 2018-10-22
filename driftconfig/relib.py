@@ -337,7 +337,8 @@ class Table(object):
         if group_by:
             self._group_by_fields = group_by.split(',')
             if not set(self._group_by_fields).issubset(set(self._pk_fields)):
-                raise TableError("In table '{}', group_by fields {} must be part of "
+                raise TableError(
+                    "In table '{}', group_by fields {} must be part of "
                     "primary key fields {}.".format(self.name, self._group_by_fields, self._pk_fields))
         else:
             self._group_by_fields = self._pk_fields
@@ -356,7 +357,8 @@ class Table(object):
         If 'is_index_file' is True, the file name is for the table index file.
         """
         if self._group_by_fields and (row is None and not is_index_file):
-            raise TableError("Need 'row' to generate a file name because rows in table '{}' are "
+            raise TableError(
+                "Need 'row' to generate a file name because rows in table '{}' are "
                 " serialized separately.".format(self._table_name)
                 )
         if row and self._group_by_fields is None:
@@ -505,7 +507,6 @@ class Table(object):
 
         cs = checksum.hexdigest()
         return cs
-
 
     def _load_table_data(self, fetch_from_storage):
         """
@@ -748,7 +749,7 @@ class TableStore(object):
 
         b = DictBackend()
         b.save_table_store(self, run_integrity_check=False)
-        ##self.save_to_backend(b, run_integrity_check=False)
+        # self.save_to_backend(b, run_integrity_check=False)
         # Serializing in a table store will in fact run all the integrity checks.
         b.load_table_store()  # This will trigger any constraint or schema violations.
 
@@ -865,7 +866,7 @@ class TableStore(object):
                     },
                 }},
             },
-            #'required': ['domain_name', 'origin'],
+            # 'required': ['domain_name', 'origin'],
         })
         meta.add_default_values({
             'created_on': '@@utcnow',

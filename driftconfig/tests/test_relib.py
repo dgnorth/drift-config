@@ -9,7 +9,7 @@ import six
 
 import jsonschema
 
-from driftconfig.relib import TableStore, Table, TableError, ConstraintError, Backend, DictBackend
+from driftconfig.relib import TableStore, Table, TableError, ConstraintError, DictBackend
 from driftconfig.backends import FileBackend
 
 
@@ -207,10 +207,9 @@ class TestRelib(unittest.TestCase):
 
         self.assertIn("foreign key record in 'table3' not found", str(context.exception))
 
-
         # Test all cases with a single row table
         single = ts.add_table('single', single_row=True)
-        #single.add_primary_key('pk_field1,pk_field2')
+        # single.add_primary_key('pk_field1,pk_field2')
         single.add_unique_constraint('unique_field1,unique_field2')
 
         # Test foreign key relationship on own table, and with different ordered field names.
@@ -280,11 +279,11 @@ class TestRelib(unittest.TestCase):
             },
             'required': ['a_pattern'],
         })
-        doc = single.add({'a_string': 'aaa', 'a_pattern': 'abc'})
+        single.add({'a_string': 'aaa', 'a_pattern': 'abc'})
 
         # Check 'pattern' rule.
         with self.assertRaises(jsonschema.ValidationError) as context:
-            doc = single.add({'a_pattern': 'not conforming'})
+            single.add({'a_pattern': 'not conforming'})
 
         self.assertIn("Schema check failed", str(context.exception))
 
@@ -319,8 +318,8 @@ class TestRelib(unittest.TestCase):
         t1 = ts.add_table('master')
         t1.add_primary_key('master_id1,master_id2')
         t1r1 = t1.add({'master_id1': 1, 'master_id2': 'a'})  # Has two 'middle' rows referencing it.
-        t1r2 = t1.add({'master_id1': 2, 'master_id2': 'b'})  # Has one 'middle' row references to it.
-        t1r3 = t1.add({'master_id1': 3, 'master_id2': 'c'})  # Has no foreign references to it.
+        t1.add({'master_id1': 2, 'master_id2': 'b'})  # Has one 'middle' row references to it.
+        t1.add({'master_id1': 3, 'master_id2': 'c'})  # Has no foreign references to it.
 
         t2 = ts.add_table('middle')
         t2.add_primary_key('middle_id')
@@ -477,16 +476,14 @@ class TestRelib(unittest.TestCase):
 
         # Note, can't compare the objects wholesale like this because for some reason all dict key fields
         # get type coerced from str to unicode.
-        #self.maxDiff = 100000
-        #self.assertDictEqual(ts.get_table('continents').__dict__, new_ts.get_table('continents').__dict__)
+        # self.maxDiff = 100000
+        # self.assertDictEqual(ts.get_table('continents').__dict__, new_ts.get_table('continents').__dict__)
 
     def test_single_row_table(self):
         ts = make_store(populate=True)
         srt = ts.add_table('doc-test', single_row=True)
         doc = srt.add({'field1': 'something'})
         doc['field1']
-
-
 
     def run_backend_test(self, backend, show_progress=False):
 
@@ -536,4 +533,3 @@ class TestRelib(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

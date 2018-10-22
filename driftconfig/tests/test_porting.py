@@ -2,14 +2,16 @@
 import sys
 import unittest
 import os.path
-
+import importlib
 
 """
 Test the import of various top level modules to make sure they compile
 """
+
+
 class ImportTestCase(unittest.TestCase):
     def test_driftconfig(self):
-        import driftconfig
+        importlib.import_module("driftconfig")
 
 
 class ScriptImportTestCase(unittest.TestCase):
@@ -17,11 +19,12 @@ class ScriptImportTestCase(unittest.TestCase):
 
     def setUp(self):
         sys.path.append(self.script_dir)
+
     def tearDown(self):
         sys.path.pop()
 
     def test_testconfig(self):
-        import testconfig
+        importlib.import_module("testconfig")
 
     def test_update_trigger(self):
         # must use this because the module contains a dash

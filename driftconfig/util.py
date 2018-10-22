@@ -129,7 +129,8 @@ def get_default_drift_config_and_source():
             )
         elif len(domains) != 1:
             domain_names = ", ".join(domains.keys())
-            raise ConfigNotFound("Multiple Drift configurations found in ~/.drift/config.\n"
+            raise ConfigNotFound(
+                "Multiple Drift configurations found in ~/.drift/config.\n"
                 "Specify which configuration to use by referencing it in the "
                 "'DRIFT_CONFIG_URL' environment variable.\n"
                 "Configurations available on local disk: %s."
@@ -431,7 +432,7 @@ def provision_tenant_resources(ts, tenant_name, deployable_name=None, preview=Fa
                 def report_error():
                     result = [
                         "Failed to provision resource '{}'.\n{}: {}\nAttributes: {}".format(
-                        resource_module, e.__class__.__name__, e, resource_attributes)
+                            resource_module, e.__class__.__name__, e, resource_attributes)
                         ]
                     depl_report['resources'][resource_module] = result
 
@@ -512,8 +513,8 @@ def refresh_tenants(ts, tenant_name=None, tier_name=None):
 
 # NOTE THIS IS DEPRECATED FUNCTION AND NEEDS TO BE UPGRADED TO NU STYLE SUMTHIN
 def get_parameters(config, args, required_keys, resource_name):
+    raise NotImplementedError()
     echo("ROUESR IDC NOAME IS " + resource_name)
-    bork
     defaults = config.tier.get('resource_defaults', [])
 
     # gather default parameters from tier
@@ -684,4 +685,3 @@ def register_tier_defaults(ts, tier_name, resources=None):
                 tier=tier,
                 attributes=attributes,
             )
-
