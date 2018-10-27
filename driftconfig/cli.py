@@ -1334,7 +1334,8 @@ def developer(recreate, shared, run):
         env['DRIFT_CONFIG_URL'] = domain_name
         env['DRIFT_TIER'] = tier_name
         env['FLASK_APP'] = 'drift.devapp:app'
-        env['FLASK_ENV'] = 'development'
+        # allow the user to override the environment, otherwise default to a development env.
+        env['FLASK_ENV'] = os.environ.get('FLASK_ENV') or 'development'
 
         args = ['flask', 'run', '--host=0.0.0.0']
         port = app_config.get('PORT')
