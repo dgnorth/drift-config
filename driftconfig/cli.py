@@ -902,9 +902,9 @@ def _diff_ts(ts1, ts2):
         if diff['modified_diff']:
             echo("\tTime since pull: " + str(diff['modified_diff']).split('.')[0])
 
-        echo("\tNew tables: " + diff['new_tables'])
-        echo("\tDeleted tables: " + diff['deleted_tables'])
-        echo("\tModified tables: " + diff['modified_tables'])
+        echo("\tNew tables: {}".format(diff['new_tables']))
+        echo("\tDeleted tables: {}".format(diff['deleted_tables']))
+        echo("\tModified tables: {}".format(diff['modified_tables']))
 
         try:
             import jsondiff
