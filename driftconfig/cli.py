@@ -1616,6 +1616,23 @@ def product_edit(product_name):
             products.update(entry)
 
 
+@cli.command(help="View contents of tables. Specify 'all' to view all tables.")
+@click.argument('table-name', default='')
+def view(table_name):
+    c = get_default_drift_config()
+    if not table_name:
+        secho("Specify one the following table names to view, or 'all' for all tables.")
+        for table in c.tables:
+            secho("\t{}".format(table))
+    else:
+        if table_name == 'all':
+            d = {table.name: table.find() for table in c.tables.values()}
+        else:
+            d = c.get_table(table_name).find()
+
+        echo(pretty(d))
+
+
 def tabulate(headers, rows, indent=None, col_padding=None):
     """Pretty print tabular data."""
     indent = indent or ''
