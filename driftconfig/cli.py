@@ -1618,17 +1618,31 @@ def product_edit(product_name):
 
 @cli.command(help="View contents of tables. Specify 'all' to view all tables.")
 @click.argument('table-name', default='')
-def view(table_name):
+@click.option('--tier-name', '-t', 'tier_name', type=str, help="Filter tier.")
+@click.option('--tenant-name', '-n', 'tenant_name', type=str, help="Filter tenant.")
+@click.option('--deployable-name', '-d', 'deployable_name', type=str, help="Filter deployable.")
+def view(table_name, tier_name, tenant_name, deployable_name):
     c = get_default_drift_config()
     if not table_name:
         secho("Specify one the following table names to view, or 'all' for all tables.")
         for table in c.tables:
             secho("\t{}".format(table))
     else:
+        def filter(table):
+            f = {}
+            if tier_name and 'tier_name' in table._pk_fields:
+                f['tier_name'] = tier_name
+            if tenant_name and 'tenant_name' in table._pk_fields:
+                f['tenant_name'] = tenant_name
+            if deployable_name and 'deployable_name' in table._pk_fields:
+                f['deployable_name'] = deployable_name
+            return f
+
         if table_name == 'all':
-            d = {table.name: table.find() for table in c.tables.values()}
+            d = {table.name: table.find(filter(table)) for table in c.tables.values()}
         else:
-            d = c.get_table(table_name).find()
+            table = c.get_table(table_name)
+            d = table.find(filter(table))
 
         echo(pretty(d))
 
