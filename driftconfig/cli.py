@@ -8,6 +8,7 @@ import json
 import logging
 import subprocess
 import textwrap
+import collections
 
 import click
 from click import echo, secho
@@ -1647,7 +1648,7 @@ def view(table_name, tier_name, tenant_name, deployable_name):
         echo(pretty(d))
 
 
-@cli.command(help="Set a custom value. Specify either key=value or a single key json doc.")
+@cli.command(help="Set a custom value. Specify either key=value or a json doc.")
 @click.argument('key-value')
 @click.option('--location', '-l', 'location', type=str, help="Location of entry.\n"
     "If not set the custom value is stored in 'domain' table.\n"
@@ -1655,12 +1656,13 @@ def view(table_name, tier_name, tenant_name, deployable_name):
     "For 'tenants' table specify <tenant name>\n"
     "For 'deployables' table specify <tier name>.<deployable name>\n"
     )
+@click.option('--raw', '-r', is_flag=True, help="Insert value straight into row.")
 @click.option('--preview', '-p', is_flag=True, help="Do not commit changes to config.")
-def set_custom_value(key_value, location, preview):
+def set_custom_value(key_value, location, raw, preview):
     try:
         kv = json.loads(key_value)
-        if not isinstance(kv, dict) or (isinstance(kv, dict) and len(kv) != 1):
-            secho("Specify either key=value or a single key json doc.", fg='red')
+        if not isinstance(kv, dict):
+            secho("Specify either key=value or a json doc.", fg='red')
             sys.exit(1)
     except Exception as e:
         if "=" in key_value:
@@ -1696,8 +1698,27 @@ def set_custom_value(key_value, location, preview):
             table = ts.get_table('domain')
             row = table.get()
 
-        row.setdefault('custom_values', {}).update(kv)
+        if not raw:
+            row = row.setdefault('custom_values', {})
 
+        # From https://gist.github.com/angstwad/bf22d1822c38a92ec0a9
+        def dict_merge(dct, merge_dct):
+            """ Recursive dict merge. Inspired by :meth:``dict.update()``, instead of
+            updating only top-level keys, dict_merge recurses down into dicts nested
+            to an arbitrary depth, updating keys. The ``merge_dct`` is merged into
+            ``dct``.
+            :param dct: dict onto which the merge is executed
+            :param merge_dct: dct merged into dct
+            :return: None
+            """
+            for k, v in merge_dct.items():
+                if (k in dct and isinstance(dct[k], dict)
+                        and isinstance(merge_dct[k], collections.Mapping)):
+                    dict_merge(dct[k], merge_dct[k])
+                else:
+                    dct[k] = merge_dct[k]
+
+        dict_merge(row, kv)
         secho("Adding custom value to table '{}':".format(table.name))
         echo(pretty(row))
         if not preview:
