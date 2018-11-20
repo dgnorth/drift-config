@@ -1647,6 +1647,68 @@ def view(table_name, tier_name, tenant_name, deployable_name):
         echo(pretty(d))
 
 
+@cli.command(help="Set a custom value. Specify either key=value or a single key json doc.")
+@click.argument('key-value')
+@click.option('--location', '-l', 'location', type=str, help="Location of entry.\n"
+    "If not set the custom value is stored in 'domain' table.\n"
+    "For 'tiers' table specify <tier name>\n"
+    "For 'tenants' table specify <tenant name>\n"
+    "For 'deployables' table specify <tier name>.<deployable name>\n"
+    )
+@click.option('--preview', '-p', is_flag=True, help="Do not commit changes to config.")
+def set_custom_value(key_value, location, preview):
+    try:
+        kv = json.loads(key_value)
+        if not isinstance(kv, dict) or (isinstance(kv, dict) and len(kv) != 1):
+            secho("Specify either key=value or a single key json doc.", fg='red')
+            sys.exit(1)
+    except Exception as e:
+        if "=" in key_value:
+            key, val = key_value.split('=', 1)
+            kv = {key: val}
+        else:
+            secho("Error: {}".format(e), fg='red')
+            sys.exit(1)
+
+    with TSTransaction(commit_to_origin=not preview) as ts:
+        if location:
+            # Is it tiers?
+            table = ts.get_table('tiers')
+            row = table.get({'tier_name': location})
+
+            if not row:
+                # Is it tenants?
+                table = ts.get_table('tenants')
+                rows = table.find({'tenant_name': location})
+                if rows:
+                    row = rows[0]  # We exploit the fact that the tenant name is unique here.
+
+            if not row and '.' in location:
+                # Is it deployables?
+                table = ts.get_table('deployables')
+                tier_name, deployable_name = location.split('.', 1)
+                row = table.get({'tier_name': tier_name, 'deployable_name': deployable_name})
+
+            if not row:
+                secho("Location '{}' not found!".format(location), fg='red')
+                sys.exit(1)
+        else:
+            table = ts.get_table('domain')
+            row = table.get()
+
+        row.setdefault('custom_values', {}).update(kv)
+
+        secho("Adding custom value to table '{}':".format(table.name))
+        echo(pretty(row))
+        if not preview:
+            secho("Committing changes to origin...")
+
+    if preview:
+        secho("This is only a preview! No changes made.")
+    else:
+        secho("Changes committed to origin!", fg='green')
+
+
 def tabulate(headers, rows, indent=None, col_padding=None):
     """Pretty print tabular data."""
     indent = indent or ''
