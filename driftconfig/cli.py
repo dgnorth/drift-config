@@ -1655,10 +1655,11 @@ def view(table_name, tier_name, tenant_name, deployable_name):
     "For 'tiers' table specify <tier name>\n"
     "For 'tenants' table specify <tenant name>\n"
     "For 'deployables' table specify <tier name>.<deployable name>\n"
+    "For any other table specify <table name>[.<pk value 1>.<pk value 2>...]"
     )
 @click.option('--raw', '-r', is_flag=True, help="Insert value straight into row.")
 @click.option('--preview', '-p', is_flag=True, help="Do not commit changes to config.")
-def set_custom_value(key_value, location, raw, preview):
+def set_value(key_value, location, raw, preview):
     try:
         kv = json.loads(key_value)
         if not isinstance(kv, dict):
@@ -1692,14 +1693,33 @@ def set_custom_value(key_value, location, raw, preview):
                 row = table.get({'tier_name': tier_name, 'deployable_name': deployable_name})
 
             if not row:
+                # Is it name of a table?
+                if '.' in location:
+                    location, filters = location.split('.', 1)
+                    filters = filters.split('.')
+                else:
+                    filters = []
+                if location in ts.tables:
+                    table = ts.get_table(location)
+                    if len(table._pk_fields) != len(filters) :
+                        secho("Table '{}' primary keys: {}".format(table.name, ', '.join(table._pk_fields)))
+                        secho("No primary key specified, exiting...")
+                        sys.exit(0)
+                    row = table.get(dict(zip(table._pk_fields, filters)))
+                    print("GOT HOWR ORWO", row)
+            if not row:
                 secho("Location '{}' not found!".format(location), fg='red')
+                secho("Run 'dconf view' to get a list of available tables.")
                 sys.exit(1)
         else:
             table = ts.get_table('domain')
             row = table.get()
 
         if not raw:
+            master_row = row
             row = row.setdefault('custom_values', {})
+        else:
+            master_row = row
 
         # From https://gist.github.com/angstwad/bf22d1822c38a92ec0a9
         def dict_merge(dct, merge_dct):
@@ -1720,7 +1740,7 @@ def set_custom_value(key_value, location, raw, preview):
 
         dict_merge(row, kv)
         secho("Adding custom value to table '{}':".format(table.name))
-        echo(pretty(row))
+        echo(pretty(master_row))
         if not preview:
             secho("Committing changes to origin...")
 
