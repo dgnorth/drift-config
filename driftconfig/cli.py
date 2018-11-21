@@ -1706,7 +1706,6 @@ def set_value(key_value, location, raw, preview):
                         secho("No primary key specified, exiting...")
                         sys.exit(0)
                     row = table.get(dict(zip(table._pk_fields, filters)))
-                    print("GOT HOWR ORWO", row)
             if not row:
                 secho("Location '{}' not found!".format(location), fg='red')
                 secho("Run 'dconf view' to get a list of available tables.")
