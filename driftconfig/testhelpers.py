@@ -64,6 +64,9 @@ def create_test_domain(config_size=None, resources=None, resource_attributes=Non
         'origin': ''
     })
 
+    # Always assume local servers
+    os.environ['DRIFT_USE_LOCAL_SERVERS'] = '1'
+
     # First add all the tiers
     # Next, add all the deployables and associate with every tier
     # Then, "customes" can be added, organizations, products and tenants.
@@ -76,8 +79,6 @@ def create_test_domain(config_size=None, resources=None, resource_attributes=Non
     set_sticky_config(ts)
 
     if resources:
-        # Always assume local servers
-        os.environ['DRIFT_USE_LOCAL_SERVERS'] = '1'
         for tenant in ts.get_table('tenant-names').find():
             provision_tenant_resources(ts=ts, tenant_name=tenant['tenant_name'])
 
