@@ -1659,7 +1659,7 @@ def view(table_name, tier_name, tenant_name, deployable_name):
     )
 @click.option('--raw', '-r', is_flag=True, help="Insert value straight into row.")
 @click.option('--preview', '-p', is_flag=True, help="Do not commit changes to config.")
-def set_value(key_value, location, raw, preview):
+def set(key_value, location, raw, preview):
     try:
         kv = json.loads(key_value)
         if not isinstance(kv, dict):
