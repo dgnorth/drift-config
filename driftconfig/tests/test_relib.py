@@ -430,7 +430,12 @@ class TestRelib(unittest.TestCase):
             ts = make_store(populate=True, row_as_file=row_as_file)
             storage = {}
             DictBackend(storage).save_table_store(ts)
-            storage = json.loads(json.dumps(storage))  # Do a quick json "leakage" check.
+
+            # Do a quick json "leakage" check.
+            storage = {k: v.decode("ascii") for k, v in storage.items()}
+            storage = json.loads(json.dumps(storage))
+            storage = {k: v.encode("ascii") for k, v in storage.items()}
+
             ts_check = make_store(populate=False, row_as_file=row_as_file)
             ts_check._load_from_backend(DictBackend(storage))
 
