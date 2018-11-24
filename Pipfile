@@ -1,0 +1,20 @@
+[[source]]
+
+url = "https://pypi.python.org/simple"
+verify_ssl = true
+name = "pypi"
+
+
+[packages]
+
+"e1839a8" = {path = ".", extras = ["redis-backend", "trigger", "s3-backend"], editable = true}
+
+
+[dev-packages]
+pygments = "*"
+pytest = "*"
+codecov = "*"
+
+
+[requires]
+python_version = "3.6"

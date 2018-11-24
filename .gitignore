@@ -12,10 +12,6 @@ __pycache__/
 # C extensions
 *.so
 
-# Ignore pipenv files for this project
-Pipfile
-Pipfile.lock
-
 # Distribution / packaging
 .Python
 env/
