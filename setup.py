@@ -41,6 +41,11 @@ setup(
             'redis',
             'zappa',
         ],
+        'testing': [
+            'pytest',
+            'codecov',
+            'pytest-cov',
+        ]
     },
 
     classifiers=[

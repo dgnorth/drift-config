@@ -5,7 +5,7 @@ python:
 
 install:
   - pip install pipenv
-  - pipenv install --dev --deploy
+  - pipenv install --dev -e ".[s3-backend,redis-backend,trigger,testing]"
 
 script:
   - pytest --cov

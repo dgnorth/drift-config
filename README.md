@@ -5,7 +5,7 @@ For developer setup [pipenv](https://docs.pipenv.org/) is used to set up virtual
 
 ```bash
 pip install --user pipenv
-pipenv install --dev
+pipenv install --dev -e ".[s3-backend,redis-backend,trigger]"
 ```
 This installs *drift-config* in editable mode with S3 and Redis backend support and lambda trigger support.
 
