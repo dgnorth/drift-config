@@ -13,7 +13,8 @@ name = "pypi"
 [dev-packages]
 pygments = "*"
 pytest = "*"
-codecov = "*"
+pytest-cov = "*"
+codecov="*"
 
 
 [requires]
