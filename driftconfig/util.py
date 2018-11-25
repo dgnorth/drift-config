@@ -667,7 +667,11 @@ def register_tier_defaults(ts, tier_name, resources=None):
     # Enumerate all resource modules from all registered deployables on this tier,
     # configure default vaules and call hooks for tier registration info.
     tier = ts.get_table('tiers').get({'tier_name': tier_name})
-    module_resources = resources or get_tier_resource_modules(ts=ts, tier_name=tier_name)
+    if resources is None:
+        module_resources = get_tier_resource_modules(ts=ts, tier_name=tier_name)
+    else:
+        module_resources = resources
+
     config_resources = tier.setdefault('resources', {})
 
     for resource in module_resources:
