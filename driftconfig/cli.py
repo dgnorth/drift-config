@@ -1151,6 +1151,9 @@ def developer(recreate, shared, run):
     tenant_name = 'developer'
     origin_folder = '.driftconfig-' + domain_name
 
+    # This here makes sure no external resources are referenced, like AWS services.
+    os.environ['DRIFT_USE_LOCAL_SERVERS'] = '1'
+
     if shared:
         origin_folder = os.path.join(os.path.expanduser('~'), origin_folder)
     else:
