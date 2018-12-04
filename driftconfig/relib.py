@@ -1043,5 +1043,5 @@ def jsonloads(json_text, filename):
     try:
         return ujson.loads(json_text)
     except Exception:
-        log.error("Error parsing json file %s", filename)
+        log.error("Error parsing json file %s:a\n%s", filename, json_text)
         raise

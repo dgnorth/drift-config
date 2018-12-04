@@ -85,6 +85,7 @@ class S3Backend(Backend):
         except ClientError as e:
             if '404' in str(e):
                 raise BackendFileNotFound
+            raise
         return f.getvalue()
 
 
