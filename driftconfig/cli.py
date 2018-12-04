@@ -323,15 +323,15 @@ def get_options(parser):
 
 
 def init_command(args):
-    echo("Initializing config from " + args.source)
+    echo("Initializing config from {}".format(args.source))
     if args.ignore_errors:
         del CHECK_INTEGRITY[:]
     ts = create_backend(args.source).load_table_store()
     domain_name = ts.get_table('domain')['domain_name']
-    echo("Config domain name: " + domain_name)
+    echo("Config domain name: {}".format(domain_name))
     local_store = create_backend('file://' + config_dir(domain_name, user_dir=args.user_dir))
     local_store.save_table_store(ts)
-    echo("Config stored at: " + local_store)
+    echo("Config stored at: {}".format(local_store))
 
 
 def _format_domain_info(domain_info):
@@ -1148,7 +1148,7 @@ def developer(recreate, shared, run):
 
     domain_name = 'developer'
     tier_name = 'LOCALTIER'
-    tenant_name = 'developer'
+    tenant_name = 'developer' if shared else 'localdev'
     origin_folder = '.driftconfig-' + domain_name
 
     # This here makes sure no external resources are referenced, like AWS services.
