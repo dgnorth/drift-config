@@ -1313,12 +1313,13 @@ def developer(recreate, shared, run):
         # The following environment variables define full context for local development
         export DRIFT_CONFIG_URL={}
         export DRIFT_TIER={}
+        export DRIFT_DEFAULT_TENANT={}
         export FLASK_APP=drift.devapp:app
         export FLASK_ENV=development
 
         # To run a flask development server:
         flask run
-        """).format(domain_name, tier_name)
+        """).format(domain_name, tier_name, tenant_name)
     secho(pretty(sh, lexer='bash'))
 
     # pygments is optionally used for syntax highlightling
@@ -1337,6 +1338,7 @@ def developer(recreate, shared, run):
         env = os.environ.copy()
         env['DRIFT_CONFIG_URL'] = domain_name
         env['DRIFT_TIER'] = tier_name
+        env['DRIFT_DEFAULT_TENANT'] = tenant_name
         env['FLASK_APP'] = 'drift.devapp:app'
         # allow the user to override the environment, otherwise default to a development env.
         env['FLASK_ENV'] = os.environ.get('FLASK_ENV') or 'development'
