@@ -7,12 +7,20 @@ import os
 import os.path
 import getpass
 import importlib
+from cachetools import cached, TTLCache
 
 from click import echo
 
 from driftconfig.relib import get_store_from_url, create_backend
 
 log = logging.getLogger(__name__)
+
+
+config_source_cache = TTLCache(maxsize=1024, ttl=0.5)
+
+
+def clear_cache():
+    config_source_cache.clear()
 
 
 class ConfigNotFound(RuntimeError):
@@ -97,6 +105,9 @@ def get_default_drift_config():
     return ts
 
 
+
+
+@cached(cache=config_source_cache)
 def get_default_drift_config_and_source():
     """
     Same as get_default_drift_config but returns a tuple of table store and the

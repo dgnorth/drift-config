@@ -27,6 +27,7 @@ setup(
         'jsonschema',
         'jinja2',
         'six',
+        'cachetools',
     ],
 
     extras_require={
