@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 
 config_source_cache = TTLCache(maxsize=10, ttl=3.0)
 cache_hits = 0
-cache_misses  =0
+cache_misses =0
 
 
 def set_cache_ttl(ttl):
@@ -115,14 +115,18 @@ def get_default_drift_config_and_source():
     Same as get_default_drift_config but returns a tuple of table store and the
     source of where it was loaded from.
     """
+    global cache_hits
+    global cache_misses
+
     if _sticky_ts:
         return _sticky_ts, 'memory://_dummy'
 
     url = os.environ.get('DRIFT_CONFIG_URL')
     if url:
-        if url in config_source_cache:
+        ts = config_source_cache.get(url)
+        if ts:
             cache_hits += 1
-            return config_source_cache['url'], url
+            return ts, url
 
         # Enable domain shorthand
         if ':' not in url:
