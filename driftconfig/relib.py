@@ -884,6 +884,7 @@ class Backend(object):
     schemes = {}  # Backend registry using url scheme as key.
     pickle_filename = 'table-store.pickle'
     default_format = 'json'  # Default table store file format for the backend.
+    is_cache = False  # If backend is cache rather than source.
 
     def load_table_store(self):
         blob = None

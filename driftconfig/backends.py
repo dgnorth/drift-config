@@ -94,6 +94,7 @@ class RedisBackend(Backend):
 
     __scheme__ = 'redis'
     default_format = 'pickle'
+    is_cache = True
 
     def __init__(self, host=None, port=None, db=None, prefix=None, expire_sec=None):
         import redis

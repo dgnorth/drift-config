@@ -16,11 +16,16 @@ from driftconfig.relib import get_store_from_url, create_backend
 log = logging.getLogger(__name__)
 
 
-config_source_cache = TTLCache(maxsize=1024, ttl=0.5)
+config_source_cache = TTLCache(maxsize=10, ttl=3.0)
+cache_hits = 0
+cache_misses  =0
 
 
-def clear_cache():
+def set_cache_ttl(ttl):
+    """Set a different timeout for config source cache."""
+    global config_source_cache
     config_source_cache.clear()
+    config_source_cache = TTLCache(maxsize=10, ttl=ttl)
 
 
 class ConfigNotFound(RuntimeError):
@@ -105,9 +110,6 @@ def get_default_drift_config():
     return ts
 
 
-
-
-@cached(cache=config_source_cache)
 def get_default_drift_config_and_source():
     """
     Same as get_default_drift_config but returns a tuple of table store and the
@@ -118,6 +120,10 @@ def get_default_drift_config_and_source():
 
     url = os.environ.get('DRIFT_CONFIG_URL')
     if url:
+        if url in config_source_cache:
+            cache_hits += 1
+            return config_source_cache['url'], url
+
         # Enable domain shorthand
         if ':' not in url:
             domains = get_domains()
@@ -129,7 +135,11 @@ def get_default_drift_config_and_source():
                     url, ", ".join(domains.keys())))
 
         b = create_backend(url)
-        return b.load_table_store(), url
+        ts = b.load_table_store()
+        if b.is_cache:
+            cache_misses += 1
+            config_source_cache[url] = ts
+        return ts, url
     else:
         domains = get_domains()
         if len(domains) == 0:
