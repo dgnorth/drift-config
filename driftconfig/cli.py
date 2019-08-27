@@ -1381,7 +1381,7 @@ def edit(table_name):
     backend = create_backend(source)
     path = backend.get_filename(table.get_filename())
     with open(path, 'r') as f:
-        text = click.edit(f.read(), editor='nano')
+        text = click.edit(f.read())
     if text:
         secho("Writing changes to " + path)
         with open(path, 'w') as f:
@@ -1426,7 +1426,7 @@ def tier_add(tier_name, is_live, edit):
         tiers = ts.get_table('tiers')
         entry = {'tier_name': tier_name, 'is_live': is_live}
         if edit:
-            edit = click.edit(json.dumps(entry, indent=4), editor='nano')
+            edit = click.edit(json.dumps(entry, indent=4))
             if edit:
                 entry = json.loads(edit)
         if tiers.find(entry):
@@ -1448,7 +1448,7 @@ def tier_edit(tier_name):
             secho("tier {} not found!".format(tier_name))
             sys.exit(1)
 
-        edit = click.edit(json.dumps(entry, indent=4), editor='nano')
+        edit = click.edit(json.dumps(entry, indent=4))
         if edit:
             entry = json.loads(edit)
             tiers.update(entry)
@@ -1506,7 +1506,7 @@ def org_add(organization_name, short_name, display_name, edit):
             entry['display_name'] = display_name
 
         if edit:
-            edit = click.edit(json.dumps(entry, indent=4), editor='nano')
+            edit = click.edit(json.dumps(entry, indent=4))
             if edit:
                 entry = json.loads(edit)
         if organizations.find(entry):
@@ -1528,7 +1528,7 @@ def org_edit(organization_name):
             secho("organization {} not found!".format(organization_name))
             sys.exit(1)
 
-        edit = click.edit(json.dumps(entry, indent=4), editor='nano')
+        edit = click.edit(json.dumps(entry, indent=4))
         if edit:
             entry = json.loads(edit)
             organizations.update(entry)
@@ -1594,7 +1594,7 @@ def product_add(product_name, edit):
         }
 
         if edit:
-            edit = click.edit(json.dumps(entry, indent=4), editor='nano')
+            edit = click.edit(json.dumps(entry, indent=4))
             if edit:
                 entry = json.loads(edit)
         if products.find(entry):
@@ -1616,7 +1616,7 @@ def product_edit(product_name):
             secho("product {} not found!".format(product_name))
             sys.exit(1)
 
-        edit = click.edit(json.dumps(entry, indent=4), editor='nano')
+        edit = click.edit(json.dumps(entry, indent=4))
         if edit:
             entry = json.loads(edit)
             products.update(entry)
@@ -1777,7 +1777,7 @@ def tabulate(headers, rows, indent=None, col_padding=None):
                 h = h.replace('_', ' ').title()  # Make header name pretty
                 secho(h.ljust(width + col_padding), bold=True, nl=False)
             else:
-                fg = 'black' if row.get('active', True) else 'white'
+                fg = 'white' ##fg = 'black' if row.get('active', True) else 'white'
                 secho(str(row.get(h, '')).ljust(width + col_padding), nl=False, fg=fg)
         echo()
 
