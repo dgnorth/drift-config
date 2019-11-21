@@ -19,7 +19,7 @@ else:
 
 DOMAIN_NAME = 'testdomain'
 ORG_NAME = 'acme'
-TIER_NAME = 'TIER'
+TIER_NAME = 'LOCALTIER'
 DEPL_NAME = 'svc'
 PROD_NAME = 'prod'
 TENANT_NAME = 'test'
