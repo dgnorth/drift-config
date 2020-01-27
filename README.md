@@ -64,7 +64,90 @@ dconf view tiers
 ...more coming soon.
 
 ### Using the library
-To use this library in this form, make sure you have your virtualenv activated: `pipenv shell`
+
+The config can be accessed directly from S3 or Redis cache but for this tutorial we will pull the config and store it on a local hard drive. (Note that the following S3 url only worksfor members of Directive Games organization):
+
+```bash
+pipenv shell
+driftconfig init s3://relib-test/directive-games
+
+# To get future updates of the config just run following command:
+driftconfig pull dgnorth
+```
+
+Now the config DB is stored locally. Run the following command and note the **Local** file path:
+
+```bash
+dconf list configs
+```
+
+To use the Python library start an interpreter:
+
+```bash
+pipenv run python
+```
+
+First let's list out some fun stuff. Run only one command at a time otherwise you will just get a big wall of text with no context.
+
+```python
+# Specify which Drift config to use. Only needed if there are more than one stored locally.
+# Note that this environment variable is always set on EC2 instances during launch and typically
+# points to a Redis cache.
+import os
+os.environ["DRIFT_CONFIG_URL"] = "dgnorth"
+
+# Now grab the config DB in its entirety
+from driftconfig.util import get_default_drift_config
+c = get_default_drift_config()
+
+# Show list of table names
+c.tables.keys()
+
+# A table has a get() and find() function to fetch a row specifying the primary key and to select
+# multiple rows based on a search criteria respectively.
+tiers = c.get_table("tiers")
+tiers.find()  # No search criteria returns all rows.
+
+# Get the row for DEVNORTH
+tiers.get({"tier_name": "DEVNORTH"})
+
+# Now let's get some tenant info. This here will return config for all deployables associated with
+# the tenant 'dg-oasis' on DEVNORTH:
+tenants = c.get_table("tenants")
+tenants.find({"tier_name": "DEVNORTH", "tenant_name": "dg-oasis"})
+
+# It's possible to cheat a little bit and do some introspection. Here we can find the primary key
+# definition for tenants:
+tenants._pk_fields
+
+# The primary in 'tenants' table is composed of three fields: tier_name, deployable_name and tenant_name.
+# We can thus get a specific record using all three fields:
+tenants.get({"tier_name": "DEVNORTH", "tenant_name": "dg-oasis", "deployable_name": "drift-base"})
+
+# Every bit of info in Drift Config DB should be easily queryable using simple commands as shows above. There
+# is however also another helper function that goes one step further.
+from driftconfig.util import get_drift_config
+c = get_drift_config(tier_name="DEVNORTH")  # We must specify the tier here, usually found in DRIFT_TIER env var.
+
+# str-ifying 'c' yields a lot of info:
+c
+
+# Normally this function is used in conjunction with a specific tenant and a deployable/app. A request comes
+# through some endpoint and we need the configuration context for it:
+c = get_drift_config(tier_name="DEVNORTH", deployable_name="drift-base", tenant_name="dg-oasis")
+
+# Now we have everything at our fingertips using a dot-notation syntax:
+c.tier
+c.deployable
+c.tenant
+c.product
+c.organization
+c.domain.get()
+c.source
+```
+
+That's all!
+
 
 ### Running unittests
 ```bash
