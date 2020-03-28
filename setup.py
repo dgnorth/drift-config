@@ -41,7 +41,7 @@ setup(
             'zappa',
         ],
         'test': [
-            'pytest',
+            'pytest>=5.0',
             'pytest-cov',
         ]
     },
