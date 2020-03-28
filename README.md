@@ -1,3 +1,8 @@
+[![Build Status](https://travis-ci.org/dgnorth/drift-config.svg?branch=develop)](https://travis-ci.org/dgnorth/drift-config)
+[![codecov](https://codecov.io/github/dgnorth/drift-config/branches/develop/graph/badge.svg)](https://codecov.io/github/dgnorth/drift-config/branches/develop)
+[![Latest version on
+PyPi](https://badge.fury.io/py/python-driftconfig.svg)](https://badge.fury.io/py/python-driftconfig)
+
 # Drift Config
 
 Drift Multi-Tenant Configuration Database - Drift-MTC.
