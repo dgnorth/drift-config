@@ -9,12 +9,14 @@ with open(version_file) as f:
 
 setup(
     name='python-driftconfig',
-    author='Directive Games',
     version=version,
-    url='https://github.com/dgnorth/drift-config',
+    license='MIT',
+    author='Directive Games',
     author_email='info@directivegames.com',
-    packages=['driftconfig'],
     description='Drift Configuration Management.',
+    packages=['driftconfig'],
+    url='https://github.com/dgnorth/drift-config',
+    include_package_data=True,
 
     python_requires=">=3.6",
 
