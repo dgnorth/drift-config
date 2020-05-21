@@ -155,5 +155,25 @@ python scripts/update-trigger.py
 ```
 
 
+## Releasing drift-config
+Drift-Config is a Pypi package which is released here: https://pypi.org/project/python-driftconfig/
+
+To create a new release simply add a git tag with a semantic version. The Travis-CI process will create a new build and upload it to Pypi.
+
+The following command will tag the latest commit on the current branch and create a new pypi package.
+
+```bash
+git tag 1.0.1
+git push --tags
+```
+
+After a few minutes the package should be built and uploaded. You can now run the following command in services which depend on drift-config:
+
+```bash
+pipenv update
+```
+This will update the python-drift-config package to the latest version in that service. You can verify that this was successful by checking the `Pipfile.lock` file in the project folder.
+
+
 
 
