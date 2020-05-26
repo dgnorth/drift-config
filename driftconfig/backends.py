@@ -78,11 +78,13 @@ class S3Backend(Backend):
     def load_data(self, file_name):
         from botocore.client import ClientError
         key_name = self.get_key_name(file_name)
-        log.debug("Downloading s3://%s/%s", self.bucket_name, key_name)
+        s3_url = "s3://%s/%s" % (self.bucket_name, key_name)
+        log.debug("Downloading %s", s3_url)
         f = six.BytesIO()
         try:
             self.s3_client.download_fileobj(self.bucket_name, key_name, f)
         except ClientError as e:
+            log.error("Error downloading %s", s3_url)
             if '404' in str(e):
                 raise BackendFileNotFound
             raise

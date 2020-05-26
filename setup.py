@@ -1,24 +1,24 @@
-import re
-import ast
+import os
 from setuptools import setup
 
-_version_re = re.compile(r'__version__\s+=\s+(.*)')
+version_file = os.path.abspath(os.path.join("driftconfig", "VERSION"))
 
-
-with open('driftconfig/__init__.py', 'rb') as f:
-    version = str(ast.literal_eval(_version_re.search(
-        f.read().decode('utf-8')).group(1)))
+with open(version_file) as f:
+    version = f.readlines()[0].strip()
 
 
 setup(
-    name='driftconfig',
-    author='Directive Games North',
+    name='python-driftconfig',
     version=version,
-    url='https://github.com/dgnorth/drift-config',
-    packages=['driftconfig'],
+    license='MIT',
+    author='Directive Games',
+    author_email='info@directivegames.com',
     description='Drift Configuration Management.',
+    packages=['driftconfig'],
+    url='https://github.com/dgnorth/drift-config',
+    include_package_data=True,
 
-    python_requires=">=2.7, !=3.0.*, !=3.1.*",
+    python_requires=">=3.6",
 
     # the conditional on i.req avoids the error:
     # distutils.errors.DistutilsError: Could not find suitable distribution for Requirement.parse('None')
@@ -42,20 +42,31 @@ setup(
             'redis',
             'zappa',
         ],
-        'testing': [
-            'pytest',
-            'codecov',
+        'test': [
+            'pytest>=5.0',
             'pytest-cov',
         ]
     },
-
-    classifiers=[
-        'License :: OSI Approved :: MIT License',
-        'Programming Language :: Python',
-    ],
     entry_points='''
         [console_scripts]
         driftconfig=driftconfig.cli:main
         dconf=driftconfig.cli:cli
-    '''
+    ''',
+    classifiers=[
+        'Development Status :: 4 - Beta',
+        'Environment :: Web Environment',
+        'Framework :: Flask',
+        'Intended Audience :: Developers',
+        'License :: OSI Approved :: MIT License',
+        'Operating System :: OS Independent',
+        'Programming Language :: Python',
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
+        'Topic :: Internet :: WWW/HTTP',
+        'Topic :: Internet :: WWW/HTTP :: Dynamic Content',
+        'Topic :: Software Development :: Libraries :: Application Frameworks',
+        'Topic :: Software Development :: Libraries :: Python Modules',
+    ],
 )
