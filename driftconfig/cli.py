@@ -1314,7 +1314,7 @@ def developer(recreate, shared, run):
         export DRIFT_CONFIG_URL={}
         export DRIFT_TIER={}
         export DRIFT_DEFAULT_TENANT={}
-        export FLASK_APP=drift.devapp:app
+        export FLASK_APP=drift.contrib.flask.devapp:app
         export FLASK_ENV=development
 
         # To run a flask development server:
@@ -1339,7 +1339,7 @@ def developer(recreate, shared, run):
         env['DRIFT_CONFIG_URL'] = domain_name
         env['DRIFT_TIER'] = tier_name
         env['DRIFT_DEFAULT_TENANT'] = tenant_name
-        env['FLASK_APP'] = 'drift.devapp:app'
+        env['FLASK_APP'] = 'drift.contrib.flask.devapp:app'
         # allow the user to override the environment, otherwise default to a development env.
         env['FLASK_ENV'] = os.environ.get('FLASK_ENV') or 'development'
 
