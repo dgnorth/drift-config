@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/dgnorth/drift-config.svg?branch=develop)](https://travis-ci.org/dgnorth/drift-config)
+[![Build Status](https://github.com/dgnorth/drift-config/workflows/Build%20and%20Test/badge.svg)](https://github.com/dgnorth/drift-config)
 [![codecov](https://codecov.io/github/dgnorth/drift-config/branches/develop/graph/badge.svg)](https://codecov.io/github/dgnorth/drift-config/branches/develop)
 [![Latest version on
 PyPi](https://badge.fury.io/py/python-driftconfig.svg)](https://badge.fury.io/py/python-driftconfig)
@@ -158,7 +158,7 @@ python scripts/update-trigger.py
 ## Releasing drift-config
 Drift-Config is a Pypi package which is released here: https://pypi.org/project/python-driftconfig/
 
-To create a new release simply add a git tag with a semantic version. The Travis-CI process will create a new build and upload it to Pypi.
+To create a new release simply add a git tag with a semantic version. The GitHub Actions process will create a new build and upload it to Pypi.
 
 The following command will tag the latest commit on the current branch and create a new pypi package.
 
