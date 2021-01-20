@@ -11,3 +11,48 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.7
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install wheel
+          pip install -e ".[s3-backend,redis-backend,test]"
+      - name: Stamp version
+        run: |
+          echo $(git describe --abbrev=0 --tags) > driftconfig/VERSION
+      - name: Run PyTest
+        run: pytest .
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.7
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install setuptools wheel twine
+          pip install -e ".[s3-backend,redis-backend,test]"
+      - name: Stamp version
+        run: |
+          echo $(git describe --abbrev=0 --tags) > driftconfig/VERSION
+      - name: Publish to PyPi
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          python setup.py sdist bdist_wheel
+          twine check dist/*
+          twine upload dist/*
