@@ -583,41 +583,72 @@ def get_drift_table_store():
 
     '''
     users:
-        organization_name   string, pk, fk->organizations, required
         user_name           string, pk, required
+        tenant_name         string, pk, fk->tenants
         create_date         datetime, required, default=@@utcnow
-        valid_until         datetime
         is_active           boolean, required, default=true
-        password            string
-        access_key          string
-        is_service          boolean, required, default=false
-        is_role_admin       boolean, required, default=false
-
         meta
             subfolder_name=authentication
     '''
     users = ts.add_table('users')
     users.set_row_as_file(subfolder_name='authentication')
-    users.add_primary_key('organization_name,user_name')
-    users.add_foreign_key('organization_name', 'organizations')
+    users.add_primary_key('tenant_name,user_name')
+    users.add_foreign_key('tenant_name', 'tenants')
     users.add_schema({
         'type': 'object',
         'properties': {
             'user_name': {'pattern': r'^([a-z0-9_]){2,30}$'},
             'create_date': {'format': 'date-time'},
-            'valid_until': {'format': 'date-time'},
             'is_active': {'type': 'boolean'},
-            'password': {'type': 'string'},
-            'access_key': {'type': 'string'},
-            'is_service': {'type': 'boolean'},
-            'is_role_admin': {'type': 'boolean'},
         },
-        'required': ['create_date', 'is_active', 'is_service', 'is_role_admin'],
+        'required': ['create_date', 'is_active'],
     })
     users.add_default_values({
-        'create_date': '@@utcnow', 'is_active': True,
-        'is_service': False, 'is_role_admin': False
+        'create_date': '@@utcnow', 'is_active': True
     })
+
+    '''
+    access-keys:
+        user_name           string pk, fk->users, required
+        tenant_name         string pk, fk->users, required
+        issue_date          datetime, required, default=@@utcnow
+        access_key          string, required
+    '''
+    access_keys = ts.add_table('access-keys')
+    access_keys.set_row_as_file(subfolder_name='authentication')
+    access_keys.add_foreign_key('user_name,tenant_name', 'users')
+    access_keys.add_schema({
+        'type': 'object',
+        'properties': {
+            'issue_date': {'format': 'date-time'},
+            'is_active': {'type': 'boolean'},
+        },
+        'required': ['issue_date', 'is_active'],
+    })
+    access_keys.add_default_values({
+        'issue_date': '@@utcnow', 'is_active': True
+    })
+
+    '''
+    client-credentials:
+        user_name           string pk, fk->users, required
+        tenant_name         string pk, fk-users, required
+        create_date         datetime, required, default=@@utcnow
+        client_id           string, required
+        client_secret       string, required
+    '''
+    client_credentials = ts.add_table('client-credentials')
+    client_credentials.set_row_as_file(subfolder_name='authentication')
+    client_credentials.add_foreign_key('user_name, tenant_name', 'users')
+    client_credentials.add_schema({
+        'type': 'object',
+        'properties': {
+            'client_id': {'type': 'string'},
+            'client_secret': {'type': 'string'},
+        }
+    })
+
+    # The remaining two tables are currently not in use
 
     '''
     # dynamically populated by deployables during "init" phase

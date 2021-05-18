@@ -1,58 +1,66 @@
 # -*- coding: utf-8 -*-
 import unittest
+import string
 
 from driftconfig.config import get_drift_table_store, TSTransaction
+from ..relib import ConstraintError
 
 # TODO:
 # - test 'check_only' in Table.add().
 
+DOMAIN = "unit_test_domain"
+ORGANIZATION = "directivegames"
+TIER = "UNITTEST"
+DEPLOYABLE = "drift-base"
+PRODUCT = "dg-unittest-product"
+TENANT = "dg-unittest-product"
 
 def create_basic_domain():
     ts = get_drift_table_store()
     ts.get_table('domain').add({
-        'domain_name': 'unit_test_domain',
-        'display_name': "Unit Test Domain",
+        'domain_name': DOMAIN,
+        'display_name': string.capwords(DOMAIN.replace("_", " ")),
         'origin': ''
     })
 
     ts.get_table('organizations').add({
-        'organization_name': 'directivegames',
+        'organization_name': ORGANIZATION,
         'short_name': 'dg',
         'display_name': 'Directive Games',
         })
 
     ts.get_table('tiers').add({
-        'tier_name': 'UNITTEST',
+        'tier_name': TIER,
         'is_live': True,
         })
 
     ts.get_table('deployable-names').add({
-        'deployable_name': 'drift-base',
+        'deployable_name': DEPLOYABLE,
         'display_name': "Drift Base Services",
         })
 
     ts.get_table('deployables').add({
-        'tier_name': 'UNITTEST',
-        'deployable_name': 'drift-base',
+        'tier_name': TIER,
+        'deployable_name': DEPLOYABLE,
         'is_active': True,
         })
 
     ts.get_table('products').add({
-        'product_name': 'dg-unittest-product',
+        'product_name': PRODUCT,
         'organization_name': 'directivegames',
         })
 
     ts.get_table('tenant-names').add({
-        'tenant_name': 'dg-unittest-product',
-        'product_name': 'dg-unittest-product',
-        'tier_name': 'UNITTEST',
-        'organization_name': 'directivegames',
+        'tenant_name': TENANT,
+        'product_name': PRODUCT,
+        'tier_name': TIER,
+        'organization_name': ORGANIZATION,
         })
 
     ts.get_table('tenants').add({
-        'tier_name': 'UNITTEST',
-        'deployable_name': 'drift-base',
-        'tenant_name': 'dg-unittest-product',
+        'tier_name': TIER,
+        'deployable_name': DEPLOYABLE,
+        'tenant_name': TENANT,
         'state': 'active',
         })
 
@@ -146,29 +154,58 @@ class TestRelib(unittest.TestCase):
             })
         self.assertEqual(row['gameserver_instance_id'], 5001)
 
-    def test_users(self):
-
+    def test_service_users(self):
         ts = create_basic_domain()
-
-        user = ts.get_table('users').add({
-            'organization_name': 'directivegames',
-            'user_name': 'test_user',
+        user_name = 'test_user'
+        with self.assertRaises(ConstraintError):
+            ts.get_table('users').add({
+                'user_name': user_name,
+                'tenant_name': 'bleh'
+            })
+        ts.get_table('users').add({
+            'user_name': user_name,
+            'tenant_name': TENANT
         })
 
         # Create service user with a secret access key
-        ts.get_table('users').add({
-            'organization_name': 'directivegames',
-            'user_name': 'ue4server',
-            'is_service': True,
+        with self.assertRaises(ConstraintError):
+            ts.get_table('access-keys').add({
+                'user_name': user_name + 'junk',
+                'tenant_name': TENANT,
+                'access_key': "53cretKey"
+            })
+        with self.assertRaises(ConstraintError):
+            ts.get_table('access-keys').add({
+                'user_name': user_name,
+                'tenant_name': TENANT+ 'junk',
+                'access_key': "53cretKey"
+            })
+        ts.get_table('access-keys').add({
+            'user_name': user_name,
+            'tenant_name': TENANT,
+            'access_key': "53cretKey"
         })
 
-        ts.get_table('users').add({
-            'organization_name': 'directivegames',
-            'user_name': 'alice',
-            'is_role_admin': True,
-            'access_key': '123',
-            'secret_key': 'x',
-            'password': 'x'
+        # Create service credentials with client_id and client_secret
+        with self.assertRaises(ConstraintError):
+            ts.get_table('client-credentials').add({
+                'user_name': user_name+'junk',
+                'tenant_name': TENANT,
+                'client_id': '1a2b3c4d5e6f',
+                'client_secret': '8ig5ecret'
+            })
+        with self.assertRaises(ConstraintError):
+            ts.get_table('client-credentials').add({
+                'user_name': user_name,
+                'tenant_name': TENANT+'junk',
+                'client_id': '1a2b3c4d5e6f',
+                'client_secret': '8ig5ecret'
+            })
+        ts.get_table('client-credentials').add({
+            'user_name': user_name,
+            'tenant_name': TENANT,
+            'client_id': '1a2b3c4d5e6f',
+            'client_secret': '8ig5ecret'
         })
 
         # print "USER", json.dumps(service_user, indent=4)
@@ -200,33 +237,7 @@ class TestRelib(unittest.TestCase):
 
         -> identity: "drift:dg.ue4server"
         -> identity: "drift:dg.alice"
-
         """
-
-        role_service = ts.get_table('access-roles').add({
-            'role_name': 'service',
-            'deployable_name': 'drift-base',
-            'description': "Full access to all API's",
-        })
-
-        role_client = ts.get_table('access-roles').add({
-            'role_name': 'client',
-            'deployable_name': 'drift-base',
-            'description': "Full access to all API's",
-        })
-
-        ts.get_table('users-acl').add({
-            'organization_name': 'directivegames',
-            'user_name': user['user_name'],
-            'role_name': role_service['role_name'],
-        })
-
-        ts.get_table('users-acl').add({
-            'organization_name': 'directivegames',
-            'user_name': user['user_name'],
-            'role_name': role_client['role_name'],
-            'tenant_name': 'dg-unittest-product',
-        })
 
 
 class TestPushPull(unittest.TestCase):

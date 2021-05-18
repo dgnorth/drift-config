@@ -273,9 +273,9 @@ class Table(object):
         alias_key_fields = alias_key_fields or foreign_key_fields
         c = {
             'type': 'foreign_key',
-            'foreign_key_fields': sorted(foreign_key_fields.split(',')),
+            'foreign_key_fields': sorted(s.strip() for s in foreign_key_fields.split(',')),
             'table': table_name,
-            'alias_key_fields': sorted(alias_key_fields.split(',')),
+            'alias_key_fields': sorted(s.strip() for s in alias_key_fields.split(',')),
         }
 
         # Make sure the fields in the other table exist and are either
