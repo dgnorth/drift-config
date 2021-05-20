@@ -32,7 +32,7 @@ from driftconfig.util import (
     config_dir, get_domains, get_default_drift_config, get_default_drift_config_and_source,
     define_tenant, prepare_tenant_name, provision_tenant_resources,
     get_tier_resource_modules, register_tier_defaults, register_this_deployable_on_tier,
-    register_this_deployable
+    register_this_deployable, register_this_deployable_for_product
 )
 from driftconfig import testhelpers
 
@@ -293,6 +293,28 @@ def get_options(parser):
     )
     p.add_argument(
         "--inactive", help="Mark the deployable inactive. By default the deployable will be marked as active.", action="store_true"
+    )
+    p.add_argument(
+        '--config',
+        help="Specify which config source to use. Will override 'DRIFT_CONFIG_URL' environment variable."
+    )
+    p.add_argument(
+        "--preview", help="Only preview the changes, do not commit to origin.", action="store_true"
+    )
+
+    # The assign-product command
+    p = subparsers.add_parser(
+        'assign-product',
+        help="Assign a deployable to a product.",
+    )
+    p.add_argument(
+        'deployable-name',
+        action='store',
+        help="Name of the deployable.",
+    )
+    p.add_argument(
+        "--products", help="List of products for which to enable the deployable.",
+        nargs='*',
     )
     p.add_argument(
         '--config',
@@ -871,6 +893,84 @@ def assign_tier_command(args):
             echo("\nRegistration values for this deployable on this tier:")
             echo(pretty(ret['new_registration']))
             echo("")
+
+        # Display the diff
+        _diff_ts(ts, old_ts)
+
+    if args.preview:
+        echo("Preview changes only, not committing to origin.")
+
+
+def assign_product_command(args):
+    deployable_name = vars(args)['deployable-name']
+    echo("Assigning '{}':".format(deployable_name))
+
+    if args.config:
+        os.environ['DRIFT_CONFIG_URL'] = args.config
+
+    # Out of convenience, add current dir to sys.path so the local project can
+    # be found during imports.
+    sys.path.insert(0, '.')
+
+    with TSTransaction(commit_to_origin=not args.preview) as ts:
+        old_ts = copy_table_store(ts)
+
+        names = [d['deployable_name'] for d in ts.get_table('deployable-names').find()]
+        if not names:
+            echo("No deployable registered. See 'drift-admin register' for more info.")
+            sys.exit(1)
+
+        if deployable_name not in names:
+            echo("Deployable '{}' not found. Select one of: {}.".format(
+                deployable_name,
+                ', '.join(names)
+            ))
+            sys.exit(1)
+
+        if not args.products:
+            echo("No product selected. Select one of: {}".format(
+                ', '.join([product['product_name'] for product in ts.get_table('products').find()])
+            ))
+
+        for product_name in args.products:
+            echo("Enable deployable for product {s.BRIGHT}{}{s.NORMAL}:".format(product_name, **styles))
+            product = ts.get_table('products').get({'product_name': product_name})
+            if not product:
+                echo("{f.RED}Product '{}' not found! Exiting.".format(product_name, **styles))
+                sys.exit(1)
+
+            ret = register_this_deployable_for_product(
+                ts, product_name=product_name, deployable_name=deployable_name)
+
+            # # For convenience, register resource default values as well. This
+            # # is idempotent so it's fine to call it periodically.
+            # resources = get_tier_resource_modules(
+            #     ts=ts, tier_name=product_name, skip_loading=False, ignore_import_errors=True)
+            #
+            # # See if there is any attribute that needs prompting,
+            # # Any default parameter from a resource module that is marked as <PLEASE FILL IN> and
+            # # is not already set in the config, is subject to prompting.
+            # product = ts.get_table('tiers').get({'tier_name': product_name})
+            # config_resources = product.get('resources', {})
+            #
+            # for resource in resources:
+            #     for k, v in resource['default_attributes'].items():
+            #         if v == "<PLEASE FILL IN>":
+            #             # Let's prompt if and only if the value isn't already set.
+            #             attributes = config_resources.get(resource['module_name'], {})
+            #             if k not in attributes or attributes[k] == "<PLEASE FILL IN>":
+            #                 echo("Enter value for {s.BRIGHT}{}.{}{s.NORMAL}: ".format(
+            #                     resource['module_name'], k, **styles), nl=False)
+            #                 resource['default_attributes'][k] = input()
+            #
+            # echo("\nDefault values for resources configured for this tier:")
+            # echo(pretty(config_resources))
+            #
+            # register_tier_defaults(ts=ts, tier_name=product_name, resources=resources)
+            #
+            # echo("\nRegistration values for this deployable on this tier:")
+            # echo(pretty(ret['new_registration']))
+            # echo("")
 
         # Display the diff
         _diff_ts(ts, old_ts)

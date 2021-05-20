@@ -648,6 +648,21 @@ def register_this_deployable_on_tier(ts, tier_name, deployable_name):
     return {'old_registration': orig_row, 'new_registration': row}
 
 
+def register_this_deployable_for_product(ts, product_name, deployable_name):
+    tbl = ts.get_table('products')
+    pk = {'product_name': product_name}
+    orig_row = tbl.get(pk)
+    if orig_row:
+        row, orig_row = orig_row, orig_row.copy()
+    else:
+        row = tbl.add(pk)
+
+    if not deployable_name in row['deployables']:
+        row['deployables'].append(deployable_name)
+
+    return {'old_registration': orig_row, 'new_registration': row}
+
+
 def get_tier_resource_modules(ts, tier_name, skip_loading=False, ignore_import_errors=False):
     """
     Returns a list of all resource modules registered on 'tier_name'.
@@ -690,7 +705,7 @@ def register_tier_defaults(ts, tier_name, resources=None):
     give the option of modifying values in 'default_attributes'.
     """
     # Enumerate all resource modules from all registered deployables on this tier,
-    # configure default vaules and call hooks for tier registration info.
+    # configure default values and call hooks for tier registration info.
     tier = ts.get_table('tiers').get({'tier_name': tier_name})
     if resources is None:
         module_resources = get_tier_resource_modules(ts=ts, tier_name=tier_name)
