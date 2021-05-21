@@ -279,32 +279,6 @@ users:
     is_role_admin       boolean, required, default=false
 
 
-user-acl-roles:
-    organization_name   string, pk, fk->organizations, required
-    user_name           string, pk, fk->users, required
-    role_name           string, pk, fk->user-roles, required
-    tenant_name         string, fk->tenants
-
-
-# dynamically populated by deployables during "init" phase
-access-roles:
-    role_name               string, pk
-    deployable_name         string, fk->deployables
-    description             string
-
-
-use case:
-
-tenant: superkaiju
-login: directivegames.matti
-pass:  bobo
-
--> lookup in user-acl:
-    no record -> if 'superuser' in  org.role:
-        assign ['admin'] to roles
-
-
-
 application specific tables:
 
 
@@ -649,42 +623,6 @@ def get_drift_table_store():
             'client_secret': {'type': 'string'},
         }
     })
-
-    # The remaining two tables are currently not in use
-
-    '''
-    # dynamically populated by deployables during "init" phase
-    access-roles:
-        role_name               string, pk
-        deployable_name         string, fk->deployables, required
-        description             string
-    '''
-    access_roles = ts.add_table('access-roles')
-    access_roles.set_row_as_file(subfolder_name='authentication')
-    access_roles.add_primary_key('role_name')
-    platforms.add_foreign_key('deployable_name', 'deployable-names')
-    access_roles.add_schema({
-        'type': 'object',
-        'properties': {
-            'description': {'type': 'string'},
-        },
-        'required': ['deployable_name'],
-    })
-
-    '''
-    users-acl:
-        organization_name   string, pk, fk->organizations, required
-        user_name           string, pk, fk->users, required
-        role_name           string, pk, fk->user-roles, required
-        tenant_name         string, fk->tenants
-    '''
-    users_acl = ts.add_table('users-acl')
-    users_acl.set_row_as_file(subfolder_name='authentication')
-    users_acl.add_primary_key('organization_name,user_name,role_name')
-    users_acl.add_foreign_key('organization_name', 'organizations')
-    users_acl.add_foreign_key('user_name', 'users')
-    users_acl.add_foreign_key('role_name', 'access-roles')
-    users_acl.add_foreign_key('tenant_name', 'tenant-names')
 
     # RELEASE MANAGEMENT - THIS SHOULDN'T REALLY BE IN THIS FILE HERE, or what?
     '''
