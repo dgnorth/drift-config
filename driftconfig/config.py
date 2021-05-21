@@ -264,6 +264,8 @@ authentication:
         provider_name       string
         provider_details    dict
 
+TODO: Update this to match the code, or just remove it to avoid duplication
+
 users:
     # replacing the global 'service_user'
     organization_name   string, pk, fk->organizations, required
