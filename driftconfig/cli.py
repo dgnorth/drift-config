@@ -11,6 +11,7 @@ import textwrap
 import collections
 
 import click
+import uuid
 from click import echo, secho
 import six
 from six.moves import input
@@ -1720,6 +1721,106 @@ def product_edit(product_name):
         if edit:
             entry = json.loads(edit)
             products.update(entry)
+
+
+@cli.group()
+@pass_repo
+def user(repo):
+    """Manage users in the configuration database."""
+
+
+@user.command("add")
+@click.option(
+    '--name', '-n', 'user_name', type=str,
+    help="Add a user to the organization.")
+@click.option(
+    '--tenant', '-t', 'tenant_name', type=str,
+    help="Add a user to the tenant.")
+def user_add(user_name, tenant_name):
+    """Add user."""
+    conf = get_default_drift_config()
+
+    with TSLocal() as ts:
+        users = ts.get_table('users')
+        entry = {'user_name': user_name, 'tenant_name': tenant_name}
+        user = users.get(entry)
+        if user:
+            secho("user {} already exists".format(user_name))
+            sys.exit(1)
+
+        users.add(entry)
+
+        _epilogue(ts)
+
+
+@cli.group()
+@pass_repo
+def accesskey(repo):
+    """Manage access_keys in the configuration database."""
+
+
+@accesskey.command("add")
+@click.option(
+    '--name', '-n', 'user_name', type=str,
+    help="User for this key.")
+@click.option(
+    '--tenant', '-t', 'tenant_name', type=str,
+    help="Tenant for this key.")
+def accesskey_add(user_name, tenant_name):
+    """Add access key."""
+    conf = get_default_drift_config()
+
+    with TSLocal() as ts:
+        keys = ts.get_table('access-keys')
+        entry = {'user_name': user_name, 'tenant_name': tenant_name}
+        key = keys.get(entry)
+        if key:
+            secho("user {} already has a key for tenant {}".format(user_name, tenant_name))
+            sys.exit(1)
+
+        entry['access_key'] = str(uuid.uuid4())
+        keys.add(entry)
+
+        _epilogue(ts)
+
+
+@cli.group()
+@pass_repo
+def clientcredential(repo):
+    """Manage client credentials in the configuration database."""
+
+
+@clientcredential.command("add")
+@click.option(
+    '--name', '-n', 'user_name', type=str,
+    help="User for this key.")
+@click.option(
+    '--tenant', '-t', 'tenant_name', type=str,
+    help="Tenant for this key.")
+@click.option(
+    '--client-id', '-c', 'client_id', type=str,
+    help="Client_id for this key.")
+def clientcredential_add(user_name, tenant_name, client_id):
+    """Add client credentials."""
+    conf = get_default_drift_config()
+
+    with TSLocal() as ts:
+        keys = ts.get_table('client-credentials')
+        entry = {'user_name': user_name, 'tenant_name': tenant_name}
+        key = keys.get(entry)
+        if key:
+            secho("user {} already has a key for tenant {}".format(user_name, tenant_name))
+            sys.exit(1)
+
+        entry['client_id'] = client_id
+        secret = str(uuid.uuid4())
+        # TODO: Hash the secret
+        hashed_secret = secret
+        secho("client_secret: {} - write it down, it cannot be retrieved".format(secret))
+        entry['client_secret'] = hashed_secret
+        keys.add(entry)
+
+        _epilogue(ts)
 
 
 @cli.command(help="View contents of tables. Specify 'all' to view all tables.")

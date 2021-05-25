@@ -587,41 +587,50 @@ def get_drift_table_store():
     access-keys:
         user_name           string pk, fk->users, required
         tenant_name         string pk, fk->users, required
-        issue_date          datetime, required, default=@@utcnow
+        create_date         datetime, required, default=@@utcnow
         access_key          string, required
     '''
     access_keys = ts.add_table('access-keys')
     access_keys.set_row_as_file(subfolder_name='authentication')
-    access_keys.add_foreign_key('user_name,tenant_name', 'users')
+    access_keys.add_primary_key('user_name,tenant_name')
+    access_keys.add_foreign_key('user_name', 'users')
+    access_keys.add_foreign_key('tenant_name', 'tenants')
     access_keys.add_schema({
         'type': 'object',
         'properties': {
-            'issue_date': {'format': 'date-time'},
+            'create_date': {'format': 'date-time'},
             'is_active': {'type': 'boolean'},
         },
-        'required': ['issue_date', 'is_active'],
+        'required': ['create_date', 'is_active'],
     })
     access_keys.add_default_values({
-        'issue_date': '@@utcnow', 'is_active': True
+        'create_date': '@@utcnow', 'is_active': True
     })
 
     '''
     client-credentials:
-        user_name           string pk, fk->users, required
-        tenant_name         string pk, fk-users, required
+        app_name            string pk, required
+        tenant_name         string pk, fk->tenants, required
         create_date         datetime, required, default=@@utcnow
-        client_id           string, required
+        client_id           string pk, required
         client_secret       string, required
     '''
     client_credentials = ts.add_table('client-credentials')
     client_credentials.set_row_as_file(subfolder_name='authentication')
-    client_credentials.add_foreign_key('user_name, tenant_name', 'users')
+    client_credentials.add_primary_key('app_name,tenant_name,client_id')
+    client_credentials.add_foreign_key('tenant_name', 'tenants')
     client_credentials.add_schema({
         'type': 'object',
         'properties': {
+            'app_name': {'type': 'string'},
+            'tenant_name': {'type': 'string'},
             'client_id': {'type': 'string'},
             'client_secret': {'type': 'string'},
-        }
+        },
+        'required': ['app_name', 'tenant_name', 'client_id', 'client_secret', 'create_date']
+    })
+    client_credentials.add_default_values({
+        'create_date': '@@utcnow', 'is_active': True
     })
 
     # RELEASE MANAGEMENT - THIS SHOULDN'T REALLY BE IN THIS FILE HERE, or what?
